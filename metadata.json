@@ -1,0 +1,8 @@
+{
+  "name": "Bønes IL Sofascore",
+  "description": "Sofascore for alle Bønes IL sine 16 fotballag med livescore, lagoppstillinger, kampstatistikk, tabeller, toppscorere og BT Lokalfotball-sammendrag.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

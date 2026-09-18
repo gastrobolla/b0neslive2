@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <!-- Text paths for circular text -->
+    <path id="topTextArc" d="M 80,250 A 170,170 0 0,1 420,250" fill="none" />
+    <path id="bottomTextArc" d="M 420,250 A 170,170 0 0,1 80,250" fill="none" />
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="3" dy="4" stdDeviation="3" flood-color="#000000" flood-opacity="0.4" />
+    </filter>
+    <clipPath id="innerCircleClip">
+      <circle cx="250" cy="250" r="148" />
+    </clipPath>
+  </defs>
+
+  <!-- Outer Ring Blue -->
+  <circle cx="250" cy="250" r="235" fill="#1C5FA8" stroke="#164D88" stroke-width="8" />
+  
+  <!-- Outer thin white accent border -->
+  <circle cx="250" cy="250" r="222" fill="none" stroke="#FFFFFF" stroke-width="3.5" />
+
+  <!-- Inner circle divider border -->
+  <circle cx="250" cy="250" r="148" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="3" />
+
+  <!-- Circular text: BØNES IDRETTSLAG -->
+  <text font-family="'Plus Jakarta Sans', Arial, sans-serif" font-weight="900" font-size="34" fill="#FFFFFF" letter-spacing="4.5">
+    <textPath href="#topTextArc" startOffset="50%" text-anchor="middle">
+      BØNES IDRETTSLAG
+    </textPath>
+  </text>
+
+  <!-- Circular text: STIFTET 1995 -->
+  <text font-family="'Plus Jakarta Sans', Arial, sans-serif" font-weight="800" font-size="30" fill="#FFFFFF" letter-spacing="4">
+    <textPath href="#bottomTextArc" startOffset="50%" text-anchor="middle">
+      STIFTET 1995
+    </textPath>
+  </text>
+
+  <!-- Inner Landscape Clipped -->
+  <g clip-path="url(#innerCircleClip)">
+    <!-- Sky background -->
+    <rect x="90" y="90" width="320" height="320" fill="#75AADB" />
+
+    <!-- Mountain white peak -->
+    <path d="M 120,240 Q 250,110 380,240 Z" fill="#FFFFFF" />
+
+    <!-- Green hillside -->
+    <path d="M 90,260 Q 180,165 290,195 Q 360,215 410,245 L 410,360 L 90,360 Z" fill="#4B9638" />
+
+    <!-- Lake / Nordåsvannet Water blue -->
+    <rect x="90" y="320" width="320" height="90" fill="#1E67AF" />
+    <path d="M 90,320 Q 250,305 410,320 L 410,410 L 90,410 Z" fill="#1C5FA8" />
+  </g>
+
+  <!-- Center "BIL" Monogram with Shadow -->
+  <!-- Shadow of BIL -->
+  <g fill="#1A1A1A" opacity="0.45" transform="translate(4, 5)">
+    <!-- B -->
+    <text x="142" y="328" font-family="'Times New Roman', serif" font-weight="900" font-size="140" letter-spacing="-6">B</text>
+    <!-- I (vertical bar) -->
+    <rect x="238" y="178" width="24" height="154" rx="2" />
+    <!-- L -->
+    <text x="272" y="328" font-family="'Times New Roman', serif" font-weight="900" font-size="140" letter-spacing="-4">L</text>
+  </g>
+
+  <!-- White BIL Monogram -->
+  <g fill="#FFFFFF">
+    <!-- B -->
+    <text x="140" y="325" font-family="'Times New Roman', serif" font-weight="900" font-size="140" letter-spacing="-6">B</text>
+    <!-- I -->
+    <rect x="236" y="175" width="26" height="154" rx="2" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="1.5" />
+    <!-- Inner line for I like the emblem -->
+    <rect x="247" y="180" width="4" height="144" fill="#1A1A1A" />
+    <!-- L -->
+    <text x="270" y="325" font-family="'Times New Roman', serif" font-weight="900" font-size="140" letter-spacing="-4">L</text>
+  </g>
+</svg>
