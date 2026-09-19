@@ -187,6 +187,18 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                   <span className="font-semibold text-blue-200">{player.teamName}</span>
                   <span>•</span>
                   <span>{player.division}</span>
+                  {player.fiksUrl && (
+                    <a
+                      href={player.fiksUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-1 text-xs text-blue-300 hover:text-white bg-white/10 hover:bg-white/20 px-2 py-0.5 rounded transition-colors font-mono"
+                      title="Åpne offisiell spillerprofil på fotball.no"
+                    >
+                      <span>NFF FIKS #{player.fiksId}</span>
+                      <ArrowUpRight className="w-3 h-3" />
+                    </a>
+                  )}
                   {onSelectTeam && (
                     <button
                       onClick={() => {

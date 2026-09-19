@@ -146,9 +146,9 @@ export type PlayerPosition = 'Keeper' | 'Forsvar' | 'Midtbane' | 'Angrep';
 export interface Player {
   id: string;
   name: string;
-  teamId: string;
-  teamName: string;
-  jerseyNumber: number;
+  teamId?: string;
+  teamName?: string;
+  jerseyNumber?: number;
   number?: number;
   position: PlayerPosition;
   fiksId?: number;
@@ -173,16 +173,26 @@ export interface MatchLineup {
 export type MatchStatus = 'upcoming' | 'live' | 'finished';
 export type QuickCategoryFilter = 'all' | 'gutter' | 'jenter' | 'senior';
 
+export type MatchEventType = 'goal' | 'yellow_card' | 'red_card' | 'sub' | 'whistle' | 'comment';
+export type MatchEventSource = 'NFF' | 'lagleder' | 'official' | 'system';
+
 export interface MatchEvent {
-  id: string;
+  id: string; // Deterministic ID: e.g. "${matchId}_m${minute}_${type}_${playerId}_${team}"
+  matchId: string;
   minute: number;
-  type: 'goal' | 'yellow_card' | 'red_card' | 'sub' | 'whistle';
-  player?: string;
-  assistPlayer?: string;
-  team: string;
+  type: MatchEventType;
+  playerId?: string; // FIKS ID (e.g. "fiks-123456") or legacy fallback (e.g. "legacy_sander_fjellstad")
+  fiksId?: number; // Numeric FIKS person ID if available
+  player?: string; // Display name
+  assistPlayerId?: string;
+  assistFiksId?: number;
+  assistPlayer?: string; // Display name
+  team: string; // Display team name
+  teamId?: string; // Identifier for team if known
   description: string;
-  source?: 'NFF' | 'lagleder' | 'official';
+  source?: MatchEventSource;
   reportedBy?: string;
+  createdAt?: string; // ISO UTC string
 }
 
 export interface MatchStats {
@@ -228,6 +238,7 @@ export interface Match {
   lineup?: MatchLineup;
   homeLineup?: MatchLineup;
   awayLineup?: MatchLineup;
+  isOfficialFiks?: boolean;
 }
 
 export interface ScanLog {
@@ -269,7 +280,7 @@ export interface FeedItem {
   score?: string;
   minute?: number;
   player?: string;
-  source?: 'NFF' | 'lagleder' | 'bonesil_news' | 'system';
+  source?: 'NFF' | 'lagleder' | 'bonesil_news' | 'system' | 'official';
   reportedBy?: string;
   impact?: {
     type: 'topscorer' | 'card_warning' | 'table_rank' | 'fixture';
@@ -306,13 +317,22 @@ export interface BonesClubData {
   lastDiskSaved?: string;
 }
 
+export interface DatabaseSchemaV2 extends BonesClubData {
+  dataVersion: 2;
+  schemaVersion: '2.0';
+  migratedAt?: string;
+  processedEventIds: string[];
+}
+
 export interface LaglederReportRequest {
   matchId: string;
   reporterName: string;
-  action: 'goal' | 'card' | 'sub' | 'status_change' | 'score_adjust';
+  action: 'sub' | 'comment' | 'assist_comment' | 'status_change' | 'goal' | 'card' | 'score_adjust';
   team: string;
   minute: number;
   player?: string;
+  playerId?: string;
+  fiksId?: number;
   cardType?: 'yellow' | 'red';
   matchStatus?: 'upcoming' | 'live' | 'finished';
   homeScore?: number;

@@ -261,9 +261,16 @@ async function scrapeTeamMatches(fiksId: number, teamId: string, teamName: strin
         let awayScore: number | null = null;
         let currentMinute: number | undefined = undefined;
 
-        if (endResult) {
+        // More flexible endResult matching (handles varied attributes, spacing, tags)
+        const flexibleEndResult = endResult ||
+          raw.match(/class="[^"]*endResult[^"]*"[^>]*>\s*([^<]+)\s*<\/div>/i) ||
+          raw.match(/<div[^>]*class="[^"]*result[^"]*"[^>]*>\s*(\d+\s*-\s*\d+)\s*<\/div>/i) ||
+          raw.match(/>\s*(\d+)\s*-\s*(\d+)\s*<\/a>/i);
+
+        if (flexibleEndResult) {
           status = 'finished';
-          const parts = endResult[1].split('-');
+          const scoreText = flexibleEndResult[1];
+          const parts = scoreText.split('-');
           if (parts.length === 2) {
             homeScore = parseInt(parts[0].trim(), 10);
             awayScore = parseInt(parts[1].trim(), 10);
@@ -396,6 +403,119 @@ export async function scrapeBonesWebsite(): Promise<FeedItem[]> {
 }
 
 /**
+ * Fetches the specific match page on fotball.no to enrich match details:
+ * - Direct endResult in match card
+ * - StatsBox goal summary
+ * - Timeline goals and match events
+ */
+export async function enrichMatchResultFromFiks(match: Match): Promise<{ match: Match; events: MatchEvent[] }> {
+  const kampId = (match.fiksId ? String(match.fiksId) : match.id).replace(/\D+/g, '');
+  const events: MatchEvent[] = [];
+  if (!kampId) return { match, events };
+
+  try {
+    const res = await fetchWithTimeout(`https://www.fotball.no/fotballdata/kamp/?fiksId=${kampId}`, 8000);
+    if (!res || !res.ok) return { match, events };
+    const html = await res.text();
+
+    // 1. Check direct endResult on kamp page
+    const endResultMatch = html.match(/class="[^"]*endResult[^"]*"[^>]*>\s*([^<]+)\s*<\/div>/i) ||
+      html.match(/<div[^>]*class="[^"]*result[^"]*"[^>]*>\s*(\d+\s*-\s*\d+)\s*<\/div>/i);
+    if (endResultMatch) {
+      const parts = endResultMatch[1].split('-');
+      if (parts.length === 2) {
+        match.status = 'finished';
+        match.homeScore = parseInt(parts[0].trim(), 10);
+        match.awayScore = parseInt(parts[1].trim(), 10);
+      }
+    }
+
+    // 2. Check statsBox "Mål" summary table
+    const statsBoxMatch = html.match(/<span>\d+\s+Mål<\/span>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/i);
+    if (statsBoxMatch) {
+      const rows = [...statsBoxMatch[1].matchAll(/<span\s+class="teamName">([^<:]+):?<\/span>[\s\S]*?<td>\s*(\d+)\s+totalt<\/td>/gi)];
+      if (rows.length >= 2) {
+        match.status = 'finished';
+        match.homeScore = parseInt(rows[0][2].trim(), 10);
+        match.awayScore = parseInt(rows[1][2].trim(), 10);
+      }
+    }
+
+    // 3. Check timeline for events (goals, cards)
+    const eventLineRegex = /<div[^>]*class="timelineEventLine\s+([^"]+)"[^>]*>([\s\S]*?)(?=<div[^>]*class="timelineEventLine|<\/section>|$)/gi;
+    let lineMatch;
+    let homeGoals = 0;
+    let awayGoals = 0;
+    let hasTimelineEvents = false;
+    let idx = 0;
+
+    while ((lineMatch = eventLineRegex.exec(html)) !== null) {
+      hasTimelineEvents = true;
+      const sideClass = lineMatch[1];
+      const block = lineMatch[2];
+      const isHome = sideClass.includes('homeTeam');
+      const teamName = isHome ? match.homeTeam : match.awayTeam;
+
+      const minMatch = block.match(/class="timelineMinute"[^>]*>\s*(\d+)/i) || block.match(/(\d+)\s*(?:'|&apos;)/i);
+      const minute = minMatch ? parseInt(minMatch[1], 10) : (idx + 1) * 10;
+
+      const pMatch = block.match(/class="eventHeading"[^>]*>([^<]+)/i);
+      let playerName = pMatch ? decodeEntities(pMatch[1].trim()) : undefined;
+      if (playerName && (playerName.toLowerCase().includes('personinfo ikke') || playerName.toLowerCase().includes('ikke tilgjengelig'))) {
+        playerName = undefined;
+      }
+
+      const typeMatch = block.match(/<div class="timelineEventContent">[\s\S]*?<div>([^<]+)<\/div>/i);
+      const rawType = typeMatch ? decodeEntities(typeMatch[1].trim()) : block;
+
+      let type: 'goal' | 'yellow_card' | 'red_card' | 'sub' = 'goal';
+      if (/advarsel|gult/i.test(rawType)) {
+        type = 'yellow_card';
+      } else if (/utvisning|rødt/i.test(rawType)) {
+        type = 'red_card';
+      } else if (/bytte|innbytte/i.test(rawType)) {
+        type = 'sub';
+      } else if (/mål|spillemål|straffespark|straffemål|scoring/i.test(rawType)) {
+        type = 'goal';
+      }
+
+      if (type === 'goal') {
+        if (isHome) homeGoals++;
+        else awayGoals++;
+      }
+
+      const description = `${minute}' ${rawType || type}${playerName ? `: ${playerName}` : ''} (${teamName})`;
+      const eventId = `${match.id}_m${minute}_${type}_${idx}_${teamName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+      events.push({
+        id: eventId,
+        matchId: match.id,
+        minute,
+        type,
+        player: playerName,
+        team: teamName,
+        description,
+        source: 'NFF',
+        createdAt: new Date().toISOString()
+      });
+      idx++;
+    }
+
+    if (hasTimelineEvents) {
+      match.status = 'finished';
+      if (match.homeScore === null || match.homeScore === undefined) {
+        match.homeScore = homeGoals;
+        match.awayScore = awayGoals;
+      }
+    }
+  } catch (err: any) {
+    console.warn(`[Scraper] Could not enrich kamp ${kampId}:`, err.message);
+  }
+
+  return { match, events };
+}
+
+/**
  * Main coordinator function to scrape all 16 Bønes teams + club news
  */
 export async function runFullClubScrape(): Promise<ScrapedClubData> {
@@ -438,6 +558,33 @@ export async function runFullClubScrape(): Promise<ScrapedClubData> {
     }
   }
   const deduplicatedMatches = Array.from(matchMap.values());
+
+  // Enrich any past matches that are not marked as finished yet (e.g. results missing from overview cards)
+  const todayStr = new Date().toISOString().split('T')[0];
+  const unfinalizedPastMatches = deduplicatedMatches.filter(
+    m => m.date <= todayStr && m.status !== 'finished'
+  );
+
+  if (unfinalizedPastMatches.length > 0) {
+    console.log(`[Scraper] Found ${unfinalizedPastMatches.length} past match(es) not marked finished. Enriching from fotball.no match pages...`);
+    await Promise.all(
+      unfinalizedPastMatches.map(async (m) => {
+        try {
+          const { match: enriched, events } = await enrichMatchResultFromFiks(m);
+          if (events.length > 0 && (!m.events || m.events.length === 0)) {
+            m.events = events;
+          }
+          if (enriched.status === 'finished') {
+            m.status = 'finished';
+            m.homeScore = enriched.homeScore;
+            m.awayScore = enriched.awayScore;
+          }
+        } catch (e: any) {
+          console.warn(`[Scraper] Failed to enrich match ${m.id}:`, e.message);
+        }
+      })
+    );
+  }
 
   // Sort matches by date descending
   deduplicatedMatches.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
@@ -534,14 +681,17 @@ export async function scrapeMatchEvents(match: Match): Promise<MatchEvent[]> {
 
           const description = `${minute}' ${rawType || type}${playerName ? `: ${playerName}` : ''} (${teamName})`;
 
+          const eventId = `${match.id}_m${minute}_${type}_${idx}_${teamName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
           events.push({
-            id: `ev-${kampId}-${idx}`,
+            id: eventId,
+            matchId: match.id,
             minute,
             type,
             player: playerName,
             team: teamName,
             description,
-            source: 'NFF'
+            source: 'NFF',
+            createdAt: new Date().toISOString()
           });
           idx++;
         }
@@ -634,6 +784,9 @@ export async function scrapeMatchLineup(fiksIdOrMatch: string | number | Match):
           id: personFiksId ? `fiks-${personFiksId}` : `num-${number}-${idx}`,
           name,
           number,
+          jerseyNumber: number,
+          teamId: currentTeam === 1 ? (matchObj?.homeTeam || 'home') : (matchObj?.awayTeam || 'away'),
+          teamName: currentTeam === 1 ? (homeTeam || 'Hjemmelag') : (awayTeam || 'Bortelag'),
           position,
           fiksId: personFiksId,
           role: isCaptain ? 'Kaptein' : 'Spiller',

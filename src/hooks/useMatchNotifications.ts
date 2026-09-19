@@ -36,9 +36,11 @@ export function useMatchNotifications(
   const [activeToast, setActiveToast] = useState<BonesNotification | null>(null);
 
   // Store previous match status and scores in ref to detect state transitions
-  const prevMatchesMapRef = useRef<Map<string, { status: string; homeScore: number; awayScore: number; eventCount: number }>>(
+  const prevMatchesMapRef = useRef<Map<string, { status: string; homeScore: number; awayScore: number }>>(
     new Map()
   );
+  // Authoritative event-driven tracking: track known goal event IDs to prevent false alarms
+  const knownGoalEventIdsRef = useRef<Set<string>>(new Set());
   const isFirstRunRef = useRef(true);
 
   // Save settings when changed
@@ -151,21 +153,31 @@ export function useMatchNotifications(
 
     const currentMap = prevMatchesMapRef.current;
 
-    // Skip trigger on first run, just populate initial states
+    // Helper to get a stable unique ID for a goal event
+    const getGoalEventKey = (mId: string, ev: any, index: number) => {
+      return ev.id || `${mId}_goal_${ev.minute || 0}_${ev.player || 'ukjent'}_${ev.team || 'lag'}_${index}`;
+    };
+
+    // Skip trigger on first run, just populate initial states and known events
     if (isFirstRunRef.current) {
       matches.forEach((m) => {
         currentMap.set(m.id, {
           status: m.status,
           homeScore: m.homeScore ?? 0,
           awayScore: m.awayScore ?? 0,
-          eventCount: m.events?.length ?? 0,
+        });
+
+        (m.events || []).forEach((ev, idx) => {
+          if (ev.type === 'goal') {
+            knownGoalEventIdsRef.current.add(getGoalEventKey(m.id, ev, idx));
+          }
         });
       });
       isFirstRunRef.current = false;
       return;
     }
 
-    // Inspect each match for status changes (kickoff) and score changes (goal)
+    // Inspect each match for status changes (kickoff) and event-driven goals
     matches.forEach((m) => {
       const prev = currentMap.get(m.id);
       if (!prev) {
@@ -173,7 +185,11 @@ export function useMatchNotifications(
           status: m.status,
           homeScore: m.homeScore ?? 0,
           awayScore: m.awayScore ?? 0,
-          eventCount: m.events?.length ?? 0,
+        });
+        (m.events || []).forEach((ev, idx) => {
+          if (ev.type === 'goal') {
+            knownGoalEventIdsRef.current.add(getGoalEventKey(m.id, ev, idx));
+          }
         });
         return;
       }
@@ -181,12 +197,16 @@ export function useMatchNotifications(
       // Check favorites filter
       const isFavoriteMatch = favoriteTeamIds.includes(m.teamId);
       if (settings.favoritesOnly && !isFavoriteMatch) {
-        // Still update state map to avoid re-triggering later
+        // Still update state map & known events to avoid re-triggering later
         currentMap.set(m.id, {
           status: m.status,
           homeScore: m.homeScore ?? 0,
           awayScore: m.awayScore ?? 0,
-          eventCount: m.events?.length ?? 0,
+        });
+        (m.events || []).forEach((ev, idx) => {
+          if (ev.type === 'goal') {
+            knownGoalEventIdsRef.current.add(getGoalEventKey(m.id, ev, idx));
+          }
         });
         return;
       }
@@ -208,38 +228,42 @@ export function useMatchNotifications(
         dispatchNotification(kickoffNotif);
       }
 
-      // 2. Goal Event / Score change
+      // 2. Authoritative Event-Driven Goal Detection (type === 'goal')
       const currentHome = m.homeScore ?? 0;
       const currentAway = m.awayScore ?? 0;
-      const scoreIncreased = currentHome > prev.homeScore || currentAway > prev.awayScore;
+      const goalEvents = (m.events || []).filter((e) => e.type === 'goal');
 
-      if (settings.goalAlerts && scoreIncreased && (m.status === 'live' || m.status === 'finished')) {
-        const homeScored = currentHome > prev.homeScore;
-        const scoringTeam = homeScored ? m.homeTeam : m.awayTeam;
-        const isBonesScoring = scoringTeam.toLowerCase().includes('bønes');
+      for (let idx = 0; idx < goalEvents.length; idx++) {
+        const ev = goalEvents[idx];
+        const eventKey = getGoalEventKey(m.id, ev, idx);
 
-        // Look for latest goal event
-        const goalEvents = (m.events || []).filter((e) => e.type === 'goal');
-        const latestGoal = goalEvents.length > 0 ? goalEvents[goalEvents.length - 1] : null;
-        const scorerName = latestGoal?.player || 'Bønes-spiller';
-        const minute = latestGoal?.minute || m.currentMinute;
+        if (!knownGoalEventIdsRef.current.has(eventKey)) {
+          knownGoalEventIdsRef.current.add(eventKey);
 
-        const goalNotif: BonesNotification = {
-          id: `goal-${m.id}-${currentHome}-${currentAway}-${Date.now()}`,
-          type: 'goal',
-          title: isBonesScoring ? `⚽ MÅL TIL BØNES! (${currentHome} - ${currentAway})` : `⚽ Mål: ${scoringTeam} (${currentHome} - ${currentAway})`,
-          body: `${scoringTeam} scorer${minute ? ` i det ${minute}. minutt` : ''}! ${scorerName ? `Målscorer: ${scorerName}. ` : ''}Stilling: ${m.homeTeam} ${currentHome} - ${currentAway} ${m.awayTeam}.`,
-          timestamp: new Date().toLocaleTimeString('no-NO', { hour: '2-digit', minute: '2-digit' }),
-          matchId: m.id,
-          teamId: m.teamId,
-          homeTeam: m.homeTeam,
-          awayTeam: m.awayTeam,
-          score: `${currentHome} - ${currentAway}`,
-          scorer: scorerName,
-          minute: minute,
-          read: false,
-        };
-        dispatchNotification(goalNotif);
+          if (settings.goalAlerts && (m.status === 'live' || m.status === 'finished')) {
+            const scoringTeam = ev.team || (m.isHome ? m.homeTeam : m.awayTeam);
+            const isBonesScoring = scoringTeam.toLowerCase().includes('bønes');
+            const scorerName = ev.player || (isBonesScoring ? 'Bønes-spiller' : scoringTeam);
+            const minute = ev.minute || m.currentMinute;
+
+            const goalNotif: BonesNotification = {
+              id: `goal-${eventKey}-${Date.now()}`,
+              type: 'goal',
+              title: isBonesScoring ? `⚽ MÅL TIL BØNES! (${currentHome} - ${currentAway})` : `⚽ Mål: ${scoringTeam} (${currentHome} - ${currentAway})`,
+              body: `${scoringTeam} scorer${minute ? ` i det ${minute}. minutt` : ''}! ${scorerName ? `Målscorer: ${scorerName}. ` : ''}Stilling: ${m.homeTeam} ${currentHome} - ${currentAway} ${m.awayTeam}.`,
+              timestamp: new Date().toLocaleTimeString('no-NO', { hour: '2-digit', minute: '2-digit' }),
+              matchId: m.id,
+              teamId: m.teamId,
+              homeTeam: m.homeTeam,
+              awayTeam: m.awayTeam,
+              score: `${currentHome} - ${currentAway}`,
+              scorer: scorerName,
+              minute: minute,
+              read: false,
+            };
+            dispatchNotification(goalNotif);
+          }
+        }
       }
 
       // Update map for next tick
@@ -247,7 +271,6 @@ export function useMatchNotifications(
         status: m.status,
         homeScore: currentHome,
         awayScore: currentAway,
-        eventCount: m.events?.length ?? 0,
       });
     });
   }, [matches, settings, favoriteTeamIds]);

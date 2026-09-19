@@ -33,22 +33,47 @@ const PLAYER_ROSTER_INFO: Record<string, { position: string; number: number; spr
  * (including players with 0 goals and 0 cards, defenders, goalkeepers, squad members)
  */
 export function buildPlayerProfile(
-  playerName: string,
+  playerNameOrId: string,
   teamIdHint: string | undefined,
-  data: BonesClubData
+  data: BonesClubData,
+  playerFiksId?: number
 ): PlayerProfile | null {
-  if (!playerName || playerName.trim() === '') return null;
+  if (!playerNameOrId || playerNameOrId.trim() === '') return null;
 
-  const normalizedTargetName = playerName.trim().toLowerCase();
+  // Extract FIKS ID from parameter or string if formatted as fiks-12345 or digits
+  let targetFiksId = playerFiksId;
+  if (!targetFiksId) {
+    if (/^fiks-\d+$/i.test(playerNameOrId.trim())) {
+      targetFiksId = parseInt(playerNameOrId.trim().replace(/^fiks-/i, ''), 10);
+    } else if (/^\d{5,}$/.test(playerNameOrId.trim())) {
+      targetFiksId = parseInt(playerNameOrId.trim(), 10);
+    }
+  }
 
-  // 1. Gather all occurrences of this player across data.players, ALL_BONES_PLAYERS, and match lineups
   const allKnownPlayers = [...(data.players || []), ...ALL_BONES_PLAYERS];
-  const matchedSquadPlayers = allKnownPlayers.filter(
-    (p) => p.name.trim().toLowerCase() === normalizedTargetName
-  );
 
-  // Look for FiksID from any matched squad player or match lineup entry
-  let fiksId = matchedSquadPlayers.find((p) => p.fiksId)?.fiksId;
+  // Resolve player by FIKS ID first if available
+  let matchedSquadPlayers = targetFiksId
+    ? allKnownPlayers.filter((p) => p.fiksId === targetFiksId)
+    : [];
+
+  let canonicalName = playerNameOrId.trim();
+  if (matchedSquadPlayers.length > 0 && matchedSquadPlayers[0].name) {
+    canonicalName = matchedSquadPlayers[0].name;
+  }
+
+  const playerName = canonicalName;
+  const normalizedTargetName = canonicalName.toLowerCase();
+
+  // Fallback to name search if not found by fiksId
+  if (matchedSquadPlayers.length === 0) {
+    matchedSquadPlayers = allKnownPlayers.filter(
+      (p) => p.name.trim().toLowerCase() === normalizedTargetName
+    );
+  }
+
+  // Look for FiksID from matched players or match lineup entries
+  let fiksId = targetFiksId || matchedSquadPlayers.find((p) => p.fiksId)?.fiksId;
   if (!fiksId) {
     for (const m of data.matches || []) {
       const allLp = [...(m.lineup?.starters || []), ...(m.lineup?.bench || []), ...(m.lineup?.subs || [])];
@@ -110,38 +135,38 @@ export function buildPlayerProfile(
   const springDivision = data.tables[`${teamId}_var`]?.divisionName || `${primaryTeam.division} (vår)`;
   const autumnDivision = data.tables[`${teamId}_host`]?.divisionName || data.tables[teamId]?.divisionName || primaryTeam.division;
 
-  // Find all matches across the entire club where this player participated:
+  // Find all matches across the entire club where this player actually participated:
   // 1. Matches where player is in lineup (starters, bench, subs) by fiksId or name
-  // 2. Matches where player had an event (goals, cards, etc.)
-  // 3. Fallback: if player has a registered squad on that team and match has no detailed lineup
+  // 2. Matches where player had an event (goals, cards, assists, subs)
   const matchedMatches = (data.matches || []).filter((m) => {
-    // Check lineup
-    const allLineup = [...(m.lineup?.starters || []), ...(m.lineup?.bench || []), ...(m.lineup?.subs || [])];
+    // Check lineup (home/away or team lineup)
+    const allLineup = [
+      ...(m.lineup?.starters || []),
+      ...(m.lineup?.bench || []),
+      ...(m.lineup?.subs || []),
+      ...(m.homeLineup?.starters || []),
+      ...(m.homeLineup?.bench || []),
+      ...(m.awayLineup?.starters || []),
+      ...(m.awayLineup?.bench || [])
+    ];
     const inLineup = allLineup.some(
-      (lp) => (fiksId && lp.fiksId === fiksId) || (lp.name && lp.name.trim().toLowerCase() === normalizedTargetName)
+      (lp) => (fiksId && lp.fiksId === fiksId) || (lp.id && fiksId && lp.id === `fiks-${fiksId}`) || (lp.name && lp.name.trim().toLowerCase() === normalizedTargetName)
     );
     if (inLineup) return true;
 
     // Check events
     const inEvents = (m.events || []).some(
-      (e) => e.player && e.player.trim().toLowerCase() === normalizedTargetName
+      (e) => (fiksId && (e.fiksId === fiksId || e.playerId === `fiks-${fiksId}`)) ||
+             (e.player && e.player.trim().toLowerCase() === normalizedTargetName) ||
+             (e.assistPlayer && e.assistPlayer.trim().toLowerCase() === normalizedTargetName)
     );
     if (inEvents) return true;
-
-    // Fallback: registered team matches without lineup details
-    const isPlayerRegisteredForTeam = matchedSquadPlayers.some((p) => p.teamId === m.teamId) || m.teamId === teamId;
-    const hasLineup = m.lineup && ((m.lineup.starters && m.lineup.starters.length > 0) || (m.lineup.bench && m.lineup.bench.length > 0));
-    if (isPlayerRegisteredForTeam && !hasLineup) {
-      return true;
-    }
 
     return false;
   }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  // If no matches found by cross-team check, fallback to primary team matches
-  const effectiveMatches = matchedMatches.length > 0
-    ? matchedMatches
-    : (data.matches || []).filter((m) => m.teamId === teamId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  // Only count matches where the player was actually present in lineup or events
+  const effectiveMatches = matchedMatches;
 
   // Build match logs
   const finishedMatches = effectiveMatches.filter((m) => m.status === 'finished');
@@ -178,7 +203,8 @@ export function buildPlayerProfile(
 
     // Check if match has actual verified events for this player
     const playerEvents = (m.events || []).filter(
-      (e) => e.player && e.player.trim().toLowerCase() === normalizedTargetName
+      (e) => (fiksId && (e.fiksId === fiksId || e.playerId === `fiks-${fiksId}`)) ||
+             (e.player && e.player.trim().toLowerCase() === normalizedTargetName)
     );
     const realGoals = playerEvents.filter((e) => e.type === 'goal').length;
     const realYellow = playerEvents.some((e) => e.type === 'yellow_card');

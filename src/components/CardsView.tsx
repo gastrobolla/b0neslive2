@@ -66,17 +66,14 @@ export const CardsView: React.FC<CardsViewProps> = ({
           </div>
         </div>
 
-        {onSyncRealData && (
-          <button
-            id="sync-real-cards-btn"
-            onClick={onSyncRealData}
-            disabled={isSyncing}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#165094] hover:bg-[#0F3A6D] text-white font-bold text-xs shadow-xs transition-all disabled:opacity-50 shrink-0 self-start sm:self-auto cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Synkroniserer NFF...' : 'Oppdater fra NFF'}</span>
-          </button>
-        )}
+        <div
+          id="cards-autosync-indicator"
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/80 border border-amber-300/80 text-amber-900 font-semibold text-xs shadow-2xs shrink-0 self-start sm:self-auto"
+          title="Kort- og soningsregisteret holdes kontinuerlig oppdatert fra NFF fotball.no"
+        >
+          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+          <span>Autosynk hvert 5. min</span>
+        </div>
       </div>
 
       {/* Fair Play & Suspension Warning Cards */}

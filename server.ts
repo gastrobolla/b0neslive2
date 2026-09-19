@@ -2,9 +2,10 @@ import express from 'express';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
 import { BonesClubData, ScanLog, MatchEvent, FeedItem, Match, LaglederReportRequest, TopScorer, CardStatistic, MatchStatus } from './src/types.js';
-import { runFullClubScrape, BONES_16_TEAMS, scrapeMatchEvents, scrapeMatchLineup } from './server/bonesScraper.js';
+import { runFullClubScrape, BONES_16_TEAMS, scrapeMatchEvents, scrapeMatchLineup, enrichMatchResultFromFiks } from './server/bonesScraper.js';
 import { loadPersistedData, savePersistedData, upsertMatches, queryMatches } from './server/storage.js';
 import { ALL_BONES_SQUADS, ALL_BONES_PLAYERS, getSquadForTeam, getMatchLineup } from './src/data/bonesSquads.js';
+import { matchService } from './server/services/matchService.js';
 
 const app = express();
 const PORT = 3000;
@@ -209,37 +210,14 @@ async function syncRealData(): Promise<void> {
     }
 
     if (scraped.matches.length > 0) {
-      // Merge matches preserving any lagleder events already reported
-      for (const newMatch of scraped.matches) {
-        const existing = currentData.matches.find(m => m.id === newMatch.id);
-        if (existing && existing.events && existing.events.length > 0) {
-          const laglederEvents = existing.events.filter(e => e.source === 'lagleder');
-          if (laglederEvents.length > 0) {
-            newMatch.events = [...(newMatch.events || []), ...laglederEvents];
-          }
-          if (existing.status === 'live' && existing.id !== 'nff-9183579' && newMatch.status === 'upcoming') {
-            const todayStr = new Date().toISOString().split('T')[0];
-            if (existing.date === todayStr) {
-              newMatch.status = 'live';
-              newMatch.homeScore = existing.homeScore;
-              newMatch.awayScore = existing.awayScore;
-            }
-          }
-        }
-      }
-      currentData.matches = scraped.matches;
-      currentData.stats.totalMatchesRecorded = scraped.matches.length;
-      currentData.stats.upcomingHomeMatches = scraped.matches.filter(m => m.isHome && m.status === 'upcoming').length;
+      // Non-destructive upsert: strictly preserves existing match events, lineups, and live scores
+      upsertMatches(scraped.matches, currentData);
+      currentData.stats.totalMatchesRecorded = currentData.matches.length;
+      currentData.stats.upcomingHomeMatches = currentData.matches.filter(m => m.isHome && m.status === 'upcoming').length;
     }
 
-    if (scraped.topScorers && scraped.topScorers.length > 0) {
-      currentData.topScorers = scraped.topScorers;
-      currentData.stats.totalGoalsScored = scraped.topScorers.reduce((acc, curr) => acc + curr.goals, 0);
-    }
-
-    if (scraped.cards && scraped.cards.length > 0) {
-      currentData.cards = scraped.cards;
-    }
+    // Authoritative event-driven stats: rebuild top scorers and cards from verified match events
+    rebuildScorersAndCardsFromEvents(currentData.matches);
 
     if (scraped.clubNews && scraped.clubNews.length > 0) {
       for (const item of scraped.clubNews.reverse()) {
@@ -386,6 +364,18 @@ setInterval(async () => {
     await syncRealData();
   }
 }, 60000);
+
+// 5-minute background sync cron: Continuously checks and syncs all 16 Bønes teams from fotball.no
+const FIVE_MINUTES_MS = 5 * 60 * 1000;
+setInterval(async () => {
+  try {
+    console.log('[Cron 5-min] Executing scheduled 5-minute background sync for Bønes IL from NFF...');
+    await syncRealData();
+    addScanLog('info', 'Autosynk (5 min)', 'Automatisk 5-minutters synkronisering mot NFF fotball.no fullført.');
+  } catch (err: any) {
+    console.error('[Cron 5-min] Background sync failed:', err.message);
+  }
+}, FIVE_MINUTES_MS);
 
 // API ROUTES
 
@@ -585,6 +575,7 @@ app.post('/api/bones/match/:matchId/sync-lineup', async (req, res) => {
     match.homeLineup = scraped.homeLineup;
     match.awayLineup = scraped.awayLineup;
     match.lineup = scraped.bonesLineup || scraped.homeLineup;
+    match.isOfficialFiks = true;
     match.lastUpdatedAt = new Date().toLocaleTimeString('no-NO', { hour: '2-digit', minute: '2-digit' });
 
     savePersistedData(currentData);
@@ -634,180 +625,38 @@ app.get('/api/bones/autoscrape/status', (req, res) => {
   });
 });
 
-// 4. Lagleder / Trener direct live reporting (Fastest & authoritative grassroots source!)
-app.post('/api/bones/match/:matchId/report', (req, res) => {
-  const { matchId } = req.params;
-  const body: LaglederReportRequest = req.body;
+// 4. Lagleder / Trener direct live reporting (Restricted: only comments, subs, assists enrichment)
+app.post(['/api/bones/match/:matchId/report', '/api/lagleder/report'], async (req, res) => {
+  const matchId = req.params.matchId || req.body.matchId;
+  const body: LaglederReportRequest = { ...req.body, matchId };
 
   if (!body.reporterName || !body.action) {
     return res.status(400).json({ error: 'Lagledernavn og type hendelse er påkrevd.' });
   }
 
-  const match = currentData.matches.find(m => m.id === matchId);
-  if (!match) {
-    return res.status(404).json({ error: `Kamp med ID ${matchId} ble ikke funnet i databasen.` });
+  try {
+    const result = await matchService.handleLaglederReport(body);
+    
+    // Sync currentData in-memory state
+    const matchIdx = currentData.matches.findIndex(m => m.id === matchId);
+    if (matchIdx !== -1) {
+      currentData.matches[matchIdx] = result.match;
+    }
+
+    addScanLog(
+      'info',
+      'Kamprapport',
+      `${result.message} for ${result.match.homeTeam} vs ${result.match.awayTeam} innrapportert av ${body.reporterName}.`
+    );
+
+    res.json({
+      success: true,
+      message: result.message,
+      match: result.match
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Kunne ikke registrere rapport.' });
   }
-
-  const minute = body.minute || match.currentMinute || 0;
-  const team = body.team || match.homeTeam;
-  const isBones = team.toLowerCase().includes('bønes');
-
-  if (!match.events) {
-    match.events = [];
-  }
-
-  let eventTitle = '';
-  let eventDesc = body.description || '';
-  let eventType: 'goal' | 'yellow_card' | 'red_card' | 'sub' | 'whistle' = 'goal';
-
-  if (body.action === 'goal') {
-    eventType = 'goal';
-    // Update score
-    match.homeScore = match.homeScore ?? 0;
-    match.awayScore = match.awayScore ?? 0;
-
-    if (body.homeScore !== undefined && body.awayScore !== undefined) {
-      match.homeScore = body.homeScore;
-      match.awayScore = body.awayScore;
-    } else {
-      if (team === match.homeTeam) {
-        match.homeScore += 1;
-      } else {
-        match.awayScore += 1;
-      }
-    }
-
-    if (match.status === 'upcoming') {
-      match.status = 'live';
-    }
-    match.currentMinute = minute;
-
-    eventTitle = `⚽ MÅL: ${team} (${match.homeScore} - ${match.awayScore})`;
-    if (!eventDesc) {
-      eventDesc = body.player ? `Mål scoret av ${body.player} (${minute}')` : `Mål scoret for ${team} (${minute}')`;
-    }
-
-    // If Bønes player and named, update top scorers
-    if (isBones && body.player) {
-      let scorer = currentData.topScorers.find(ts => ts.name.toLowerCase() === body.player?.toLowerCase());
-      if (scorer) {
-        scorer.goals += 1;
-        scorer.goalsPerMatch = Number((scorer.goals / Math.max(1, scorer.matches)).toFixed(2));
-      } else {
-        currentData.topScorers.push({
-          id: `scorer-${Date.now()}`,
-          name: body.player,
-          teamId: match.teamId,
-          teamName: match.teamName,
-          goals: 1,
-          matches: 1,
-          penalties: 0,
-          goalsPerMatch: 1.0,
-          isBonesPlayer: true
-        });
-      }
-      currentData.topScorers.sort((a, b) => b.goals - a.goals);
-    }
-  } else if (body.action === 'card') {
-    const isRed = body.cardType === 'red';
-    eventType = isRed ? 'red_card' : 'yellow_card';
-    eventTitle = `${isRed ? '🟥 RØDT KORT' : '🟨 GULT KORT'}: ${body.player || team}`;
-    if (!eventDesc) {
-      eventDesc = `Kort tildelt ${body.player || team} i det ${minute}. minutt.`;
-    }
-
-    // Update cards table if named Bønes player
-    if (isBones && body.player) {
-      let cardEntry = currentData.cards.find(c => c.name.toLowerCase() === body.player?.toLowerCase());
-      if (cardEntry) {
-        if (isRed) cardEntry.redCards += 1;
-        else cardEntry.yellowCards += 1;
-        cardEntry.points = cardEntry.yellowCards + (cardEntry.redCards * 3);
-        cardEntry.status = cardEntry.redCards > 0 || cardEntry.yellowCards >= 4 ? 'Karantene' : cardEntry.yellowCards === 3 ? 'Advarsel (1 fra soning)' : 'Klar';
-      } else {
-        currentData.cards.push({
-          id: `card-${Date.now()}`,
-          name: body.player,
-          teamId: match.teamId,
-          teamName: match.teamName,
-          yellowCards: isRed ? 0 : 1,
-          redCards: isRed ? 1 : 0,
-          points: isRed ? 3 : 1,
-          status: isRed ? 'Karantene' : 'Klar',
-          matches: 1,
-          isBonesPlayer: true
-        });
-      }
-      currentData.cards.sort((a, b) => b.points - a.points);
-    }
-  } else if (body.action === 'sub') {
-    eventType = 'sub';
-    eventTitle = `🔄 BYTTE: ${team}`;
-    if (!eventDesc) {
-      eventDesc = body.player ? `Spillerbytte: ${body.player} (${minute}')` : `Bytte gjennomført for ${team} (${minute}')`;
-    }
-  } else if (body.action === 'status_change') {
-    if (body.matchStatus) {
-      match.status = body.matchStatus;
-    }
-    match.currentMinute = minute;
-    eventType = 'whistle';
-    eventTitle = `⏱️ KAMPSTATUS: ${match.status.toUpperCase()} (${match.homeTeam} vs ${match.awayTeam})`;
-    eventDesc = `Status oppdatert til ${match.status} (${body.reporterName}). Stilling: ${match.homeScore ?? 0} - ${match.awayScore ?? 0}.`;
-  } else if (body.action === 'score_adjust') {
-    if (body.homeScore !== undefined) match.homeScore = body.homeScore;
-    if (body.awayScore !== undefined) match.awayScore = body.awayScore;
-    eventType = 'whistle';
-    eventTitle = `KORRIGERT STILLING: ${match.homeTeam} ${match.homeScore} - ${match.awayScore} ${match.awayTeam}`;
-    eventDesc = `Resultat justert av ${body.reporterName}.`;
-  }
-
-  // Create match event
-  const newEvent: MatchEvent = {
-    id: `ev-lagleder-${Date.now()}`,
-    minute,
-    type: eventType,
-    player: body.player,
-    team,
-    description: eventDesc,
-    source: 'lagleder',
-    reportedBy: body.reporterName
-  };
-  match.events.push(newEvent);
-  match.events.sort((a, b) => a.minute - b.minute);
-
-  match.lastUpdatedSource = 'lagleder';
-  match.lastUpdatedAt = new Date().toLocaleTimeString('no-NO', { hour: '2-digit', minute: '2-digit' });
-  match.reportedBy = body.reporterName;
-
-  // Add to Live Feed
-  addFeedItem({
-    type: body.action === 'card' ? 'card' : body.action === 'goal' ? 'goal' : 'match_start',
-    teamId: match.teamId,
-    teamName: team,
-    title: eventTitle,
-    description: `${eventDesc} (Innrapportert av ${body.reporterName})`,
-    badgeText: `⭐ LAGLEDER • ${minute}'`,
-    isHomeMatch: match.isHome,
-    venue: match.venue,
-    score: `${match.homeScore ?? 0} - ${match.awayScore ?? 0}`,
-    minute,
-    player: body.player,
-    source: 'lagleder',
-    reportedBy: body.reporterName
-  });
-
-  addScanLog('success', 'Lagleder-innrapportering', `${eventTitle} for ${match.homeTeam} vs ${match.awayTeam} innrapportert av ${body.reporterName}.`);
-
-  // Persist to disk
-  savePersistedData(currentData);
-
-  res.json({
-    success: true,
-    message: 'Hendelse registrert og lagret til database.',
-    match,
-    event: newEvent
-  });
 });
 
 // 5. Trigger scraping of events for a specific match from NFF
@@ -1050,6 +899,31 @@ async function startServer() {
       syncRealData().catch(err => console.error('[Startup] Failed initial real scrape:', err));
     } else {
       console.log(`[Startup] Loaded ${currentData.matches.length} matches and ${Object.keys(currentData.tables).length} tables from persistent storage.`);
+      // Enrich any past matches in database that are still marked 'upcoming'
+      const todayStr = new Date().toISOString().split('T')[0];
+      const pastUpcoming = currentData.matches.filter(m => m.date <= todayStr && m.status !== 'finished');
+      if (pastUpcoming.length > 0) {
+        console.log(`[Startup] Found ${pastUpcoming.length} past unfinalized match(es). Enriching from NFF...`);
+        Promise.all(pastUpcoming.map(async (m) => {
+          try {
+            const { match: enriched, events } = await enrichMatchResultFromFiks(m);
+            if (events.length > 0 && (!m.events || m.events.length === 0)) {
+              m.events = events;
+            }
+            if (enriched.status === 'finished') {
+              m.status = 'finished';
+              m.homeScore = enriched.homeScore;
+              m.awayScore = enriched.awayScore;
+            }
+          } catch (e: any) {
+            console.warn(`[Startup] Failed to enrich match ${m.id}:`, e.message);
+          }
+        })).then(() => {
+          rebuildScorersAndCardsFromEvents(currentData.matches);
+          savePersistedData(currentData);
+          console.log('[Startup] Finished enriching past matches.');
+        });
+      }
     }
 
     // Daily automatic scrape every 24 hours (86,400,000 ms)

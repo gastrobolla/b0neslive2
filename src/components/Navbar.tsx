@@ -112,21 +112,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>AI-rapport</span>
             </button>
 
-            {/* Unified NFF Sync Button */}
-            <button
-              id="btn-manual-scan"
-              onClick={onSyncNff}
-              disabled={isSyncing}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                isSyncing
-                  ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
-                  : 'bg-[#165094] hover:bg-[#12427a] text-white shadow-xs'
-              }`}
-              title="Synkroniser alle 16 lag direkte fra NFF fotball.no"
+            {/* Automated 5-Minute NFF Sync Badge */}
+            <div
+              id="nff-autosync-badge"
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-500/30 text-xs shadow-2xs"
+              title="Data synkroniseres automatisk fra NFF fotball.no hvert 5. minutt"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Synker...' : 'Oppdater NFF'}</span>
-            </button>
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="font-semibold text-[11px] text-emerald-300 hidden sm:inline">NFF-synk:</span>
+              <span className="text-[11px] text-emerald-200 font-bold font-mono">Hvert 5. min</span>
+            </div>
 
           </div>
 

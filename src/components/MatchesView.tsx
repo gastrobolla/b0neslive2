@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { MatchShareModal, copyToClipboard, getMatchShareUrl } from './MatchShareModal.js';
 import { MatchDetailModal } from './MatchDetailModal.js';
+import { SofascoreMatchCard } from './SofascoreMatchCard.js';
 
 interface MatchesViewProps {
   matches: Match[];
@@ -315,8 +316,8 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
 
       </div>
 
-      {/* Match Cards List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Match Cards List (Standardized Sofascore Design) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
         {filteredMatches.length === 0 ? (
           <div className="col-span-full bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500">
             <Calendar className="w-10 h-10 mx-auto text-slate-400 mb-2 opacity-60" />
@@ -324,327 +325,21 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
             <p className="text-xs text-slate-400 mt-1">Prøv å velge "Alle lag" eller nullstill hjemmekamp-filteret.</p>
           </div>
         ) : (
-          filteredMatches.map((match) => {
-            const isLive = match.status === 'live';
-            const isHome = match.isHome;
-            const isExpanded = expandedMatchId === match.id;
-            const hasEvents = match.events && match.events.length > 0;
-            const isLoadingEvents = loadingMatchId === match.id;
-
-            return (
-              <div
-                key={match.id}
-                id={`match-card-${match.id}`}
-                className={`relative rounded-xl transition-all overflow-hidden border ${
-                  isLive
-                    ? 'bg-white border-[#165094] ring-2 ring-[#165094]/30 shadow-md'
-                    : isHome
-                    ? 'bg-gradient-to-b from-[#F0F6FC] to-white border-[#165094]/30 ring-1 ring-[#165094]/20 shadow-xs'
-                    : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
-                }`}
-              >
-                
-                {/* Home Match Top Highlight Banner */}
-                {isHome && (
-                  <div className="bg-gradient-to-r from-[#165094] to-[#0F3A6D] text-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider flex items-center justify-between">
-                    <div className="flex items-center space-x-1.5">
-                      <Home className="w-3.5 h-3.5 text-emerald-300" />
-                      <span>HJEMMEKAMP</span>
-                    </div>
-                    <span className="text-[10px] font-medium bg-black/30 px-2 py-0.2 rounded truncate max-w-[200px]">
-                      {match.venue}
-                    </span>
-                  </div>
-                )}
-
-                <div className="p-4 space-y-3">
-                  
-                  {/* Division & Round Meta */}
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center space-x-1.5 text-slate-600 font-medium">
-                      <span className="font-bold text-[#165094]">{match.teamName}</span>
-                      <span>•</span>
-                      <span className="text-slate-500">{match.division}</span>
-                    </div>
-
-                    <div className="flex items-center space-x-1.5">
-                      {match.division?.toLowerCase().includes('høst') && (
-                        <span className="bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded text-[10px] border border-amber-300/60">
-                          🍂 Høst
-                        </span>
-                      )}
-                      {match.division?.toLowerCase().includes('vår') && (
-                        <span className="bg-emerald-100 text-emerald-900 font-bold px-1.5 py-0.5 rounded text-[10px] border border-emerald-300/60">
-                          🌸 Vår
-                        </span>
-                      )}
-                      <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded text-[11px]">
-                        {match.round}
-                      </span>
-                      {isLive && (
-                        <span className="bg-[#165094] text-white font-extrabold px-2 py-0.5 rounded text-[11px] flex items-center space-x-1 animate-pulse">
-                          <Radio className="w-3 h-3 text-emerald-300" />
-                          <span>LIVE {match.currentMinute}'</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Match Teams & Score */}
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-center justify-between">
-                    
-                    {/* Home Team */}
-                    <div className="flex-1 text-center sm:text-left">
-                      <p className={`font-bold text-sm sm:text-base ${
-                        match.homeTeam.includes('Bønes') ? 'text-[#165094]' : 'text-slate-800'
-                      }`}>
-                        {match.homeTeam}
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-medium">
-                        {match.homeTeam.includes('Bønes') ? 'Bønes IL (Hjemme)' : 'Hjemmelag'}
-                      </p>
-                    </div>
-
-                    {/* Score or VS */}
-                    <div className="px-4 py-1.5 text-center">
-                      {match.status === 'upcoming' ? (
-                        <div className="flex flex-col items-center">
-                          <span className="text-xs font-mono font-bold text-slate-400">VS</span>
-                          <span className="text-[11px] font-semibold text-[#165094] bg-[#F0F6FC] px-2 py-0.5 rounded mt-0.5">
-                            {match.time}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="bg-[#0B2545] text-white px-3 py-1 rounded-lg font-mono font-extrabold text-base tracking-wider shadow-inner">
-                          {match.homeScore} - {match.awayScore}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Away Team */}
-                    <div className="flex-1 text-center sm:text-right">
-                      <p className={`font-bold text-sm sm:text-base ${
-                        match.awayTeam.includes('Bønes') ? 'text-[#165094]' : 'text-slate-800'
-                      }`}>
-                        {match.awayTeam}
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-medium">
-                        {match.awayTeam.includes('Bønes') ? 'Bønes IL (Borte)' : 'Bortelag'}
-                      </p>
-                    </div>
-
-                  </div>
-
-                  {/* Venue & Date Footer */}
-                  <div className="pt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 border-t border-slate-100">
-                    <div className="flex items-center space-x-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="font-semibold text-slate-700">
-                        {new Date(match.date).toLocaleDateString('no-NO', {
-                          weekday: 'short',
-                          day: 'numeric',
-                          month: 'short'
-                        })}
-                      </span>
-                      <span>kl. {match.time}</span>
-                    </div>
-
-                    <div className="flex items-center space-x-1">
-                      <MapPin className={`w-3.5 h-3.5 ${isHome ? 'text-[#165094]' : 'text-slate-400'}`} />
-                      <span className={`font-medium ${isHome ? 'font-bold text-[#165094]' : 'text-slate-600'}`}>
-                        {match.venue}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Referee info if present */}
-                  {match.referee && (
-                    <p className="text-[11px] text-slate-400 italic">
-                      Dommer: {match.referee}
-                    </p>
-                  )}
-
-                  {/* Kamphendelser Section (under kamper som er listet opp) */}
-                  <div className="mt-3 pt-2.5 border-t border-slate-200/80">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <button
-                        onClick={() => setExpandedMatchId(isExpanded ? null : match.id)}
-                        className="flex items-center space-x-1.5 text-xs font-bold text-[#165094] hover:text-[#0F3A6D] transition-colors"
-                      >
-                        <Zap className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Kamphendelser ({match.events?.length || 0})</span>
-                        {match.events && match.events.length > 0 && (
-                          <span className="flex items-center space-x-1 text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                            <span>⚽ {match.events.filter(e => e.type === 'goal').length}</span>
-                            <span>•</span>
-                            <span>🟨 {match.events.filter(e => e.type === 'yellow_card' || e.type === 'red_card').length}</span>
-                          </span>
-                        )}
-                        {isExpanded ? (
-                          <ChevronUp className="w-3.5 h-3.5" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-
-                      <div className="flex items-center space-x-1.5">
-                        {/* Del kamp (Web Share API & direktelenke) */}
-                        <button
-                          id={`btn-share-match-${match.id}`}
-                          onClick={() => {
-                            setShareModalMatch(match);
-                            setIsShareModalOpen(true);
-                          }}
-                          className="flex items-center space-x-1 px-2.5 py-1.2 rounded-lg text-xs font-bold bg-[#F0F6FC] hover:bg-blue-100 text-[#165094] border border-[#165094]/30 shadow-2xs transition-all active:scale-95 cursor-pointer"
-                          title="Del kampinformasjon eller kopier direktelenke"
-                        >
-                          <Share2 className="w-3.5 h-3.5 text-[#165094]" />
-                          <span>Del</span>
-                        </button>
-
-                        {/* Hurtigkopier direktelenke */}
-                        <button
-                          id={`btn-quickcopy-match-${match.id}`}
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            const url = getMatchShareUrl(match);
-                            const success = await copyToClipboard(url);
-                            if (success) {
-                              setCopiedMatchId(match.id);
-                              setTimeout(() => setCopiedMatchId(null), 2500);
-                            }
-                          }}
-                          className={`p-1.5 rounded-lg border text-xs font-bold transition-all active:scale-95 cursor-pointer ${
-                            copiedMatchId === match.id
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                              : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200'
-                          }`}
-                          title={copiedMatchId === match.id ? 'Direktelenke kopiert!' : 'Kopier direktelenke til utklippstavle'}
-                        >
-                          {copiedMatchId === match.id ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5 text-slate-500" />
-                          )}
-                        </button>
-
-                        {onViewLineup && (
-                          <button
-                            onClick={() => onViewLineup(match)}
-                            className="flex items-center space-x-1 px-2.5 py-1.2 rounded-lg text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs transition-all active:scale-95 cursor-pointer"
-                            title="Se lagoppstilling og taktikk for Bønes"
-                          >
-                            <span>⚽ Oppstilling</span>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleScrapeMatchEvents(match)}
-                          disabled={isLoadingEvents}
-                          className="flex items-center space-x-1.5 px-3 py-1.2 rounded-lg text-xs font-bold bg-blue-50/80 hover:bg-blue-100 text-[#165094] border border-blue-200 shadow-2xs transition-all active:scale-95"
-                          title="Henter scoringer og kort fra fotball.no og oppdaterer toppscorere og disiplinærtabeller"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingEvents ? 'animate-spin text-[#165094]' : 'text-blue-600'}`} />
-                          <span>{isLoadingEvents ? 'Synker...' : 'NFF-synk'}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Expandable or Default Events List */}
-                    {isExpanded && (
-                      <div className="mt-2.5 bg-slate-50/90 rounded-xl p-3 border border-slate-200 space-y-2.5">
-                        {match.lastUpdatedSource && (
-                          <div className="flex items-center justify-between text-[10px] text-slate-500 bg-white/80 px-2.5 py-1 rounded-md border border-slate-200/70">
-                            <span>Kilde: <strong className="text-slate-800 font-semibold">{match.lastUpdatedSource === 'lagleder' ? 'Innrapportert hendelse' : 'Offisiell NFF fotball.no'}</strong></span>
-                            {match.lastUpdatedAt && <span>Synket: {match.lastUpdatedAt}</span>}
-                          </div>
-                        )}
-
-                        {hasEvents ? (
-                          <div className="space-y-1.5">
-                            {match.events!.map((ev) => (
-                              <div
-                                key={ev.id}
-                                className="flex items-start justify-between text-xs bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs hover:border-blue-200 transition-colors"
-                              >
-                                <div className="flex items-start space-x-2">
-                                  <span className="font-mono font-bold text-slate-800 text-[11px] bg-slate-100 px-1.5 py-0.5 rounded">
-                                    {ev.minute}'
-                                  </span>
-                                  <span>
-                                    {ev.type === 'goal'
-                                      ? '⚽'
-                                      : ev.type === 'yellow_card'
-                                      ? '🟨'
-                                      : ev.type === 'red_card'
-                                      ? '🟥'
-                                      : '🔄'}
-                                  </span>
-                                  <div>
-                                    <div className="flex items-center space-x-1.5">
-                                      {ev.player ? (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            onSelectPlayer?.(ev.player!, match.teamId);
-                                          }}
-                                          className="font-bold text-[#165094] hover:text-[#0B2545] hover:underline text-left cursor-pointer transition-colors"
-                                          title="Klikk for å åpne spillerprofil & statistikk"
-                                        >
-                                          {ev.player}
-                                        </button>
-                                      ) : (
-                                        <p className="font-semibold text-slate-800">
-                                          {ev.team}
-                                        </p>
-                                      )}
-                                      {ev.source === 'lagleder' ? (
-                                        <span className="text-[9px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded">
-                                          ⭐ Lagleder {ev.reportedBy ? `(${ev.reportedBy})` : ''}
-                                        </span>
-                                      ) : (
-                                        <span className="text-[9px] bg-blue-50 text-blue-800 font-bold px-1.5 py-0.2 rounded">
-                                          NFF
-                                        </span>
-                                      )}
-                                    </div>
-                                    <p className="text-[11px] text-slate-500 mt-0.5">
-                                      {ev.description}
-                                    </p>
-                                  </div>
-                                </div>
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
-                                  ev.team.includes('Bønes')
-                                    ? 'bg-blue-100 text-[#165094]'
-                                    : 'bg-slate-100 text-slate-600'
-                                }`}>
-                                  {ev.team}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-3 text-xs text-slate-500 space-y-2">
-                            <p>Ingen kamphendelser registrert i kampskjemaet hos NFF ennå.</p>
-                            <div className="flex items-center justify-center">
-                              <button
-                                onClick={() => handleScrapeMatchEvents(match)}
-                                className="text-xs font-bold text-[#165094] hover:underline inline-flex items-center space-x-1"
-                              >
-                                <RefreshCw className="w-3 h-3 text-[#165094]" />
-                                <span>Kjør NFF-sjekk for denne kampen</span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-              </div>
-            );
-          })
+          filteredMatches.map((match) => (
+            <SofascoreMatchCard
+              key={match.id}
+              match={match}
+              isFavorite={false}
+              onToggleFavorite={(e) => {
+                e.stopPropagation();
+              }}
+              onOpenDetail={() => {
+                setDetailModalMatch(match);
+                setIsDetailModalOpen(true);
+              }}
+              onOpenLineup={() => onViewLineup && onViewLineup(match)}
+            />
+          ))
         )}
       </div>
 

@@ -33,7 +33,7 @@ export const LaglederModal: React.FC<LaglederModalProps> = ({
     return localStorage.getItem('bones_reporter_name') || '';
   });
   const [selectedMatchId, setSelectedMatchId] = useState<string>('');
-  const [action, setAction] = useState<'goal' | 'card' | 'sub' | 'status_change' | 'score_adjust'>('goal');
+  const [action, setAction] = useState<'comment' | 'sub' | 'assist_comment' | 'status_change'>('comment');
   const [scoringTeamSide, setScoringTeamSide] = useState<'home' | 'away'>('home');
   const [minute, setMinute] = useState<number>(35);
   const [playerName, setPlayerName] = useState('');
@@ -108,15 +108,9 @@ export const LaglederModal: React.FC<LaglederModalProps> = ({
       team,
       minute: Number(minute) || 0,
       player: playerName.trim() || undefined,
-      cardType,
       matchStatus,
       description: description.trim() || undefined
     };
-
-    if (action === 'score_adjust') {
-      payload.homeScore = Number(homeScore);
-      payload.awayScore = Number(awayScore);
-    }
 
     try {
       const res = await fetch(`/api/bones/match/${selectedMatchId}/report`, {
@@ -131,7 +125,7 @@ export const LaglederModal: React.FC<LaglederModalProps> = ({
       }
 
       const data = await res.json();
-      onReportSuccess(data.match, 'Hendelsen er registrert, lagret til database og synlig i sanntidsfeeden!');
+      onReportSuccess(data.match, data.message || 'Hendelsen er registrert, lagret til database og synlig i tidslinjen!');
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'Feil ved innsending');
@@ -152,13 +146,13 @@ export const LaglederModal: React.FC<LaglederModalProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h3 className="font-extrabold text-base">Lagleder / Trener Live-Innrapportering</h3>
+                <h3 className="font-extrabold text-base">Meld inn hendelser & kommentarer</h3>
                 <span className="bg-[#3E8A37] text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase">
-                  Direkte kilde
+                  Tilleggsdata
                 </span>
               </div>
               <p className="text-xs text-blue-100 mt-0.5">
-                Raskeste kilde i breddefotballen – oppdaterer stilling, mål og kort umiddelbart
+                Mål og kort synkroniseres fra NFF. Meld inn kommentarer, bytter og målgivende pasninger her.
               </p>
             </div>
           </div>
@@ -179,6 +173,14 @@ export const LaglederModal: React.FC<LaglederModalProps> = ({
               <span>{errorMsg}</span>
             </div>
           )}
+
+          {/* Offisiell NFF merknad */}
+          <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start space-x-2">
+            <Info className="w-4 h-4 shrink-0 mt-0.5 text-[#165094]" />
+            <div>
+              <span className="font-bold">Offisiell NFF-statistikk:</span> Mål og kort registreres automatisk fra NFF for å garantere 100% korrekt statistikk. Du kan bidra med live-kommentarer, spillerbytter og målgivende pasninger.
+            </div>
+          </div>
 
           {/* Reporter info */}
           <div>
@@ -219,31 +221,19 @@ export const LaglederModal: React.FC<LaglederModalProps> = ({
           {/* Action Selector Pills */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Hva skal meldes inn?
+              Hva vil du melde inn?
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 type="button"
-                onClick={() => setAction('goal')}
+                onClick={() => setAction('comment')}
                 className={`py-2 px-3 rounded-xl border text-xs font-extrabold flex items-center justify-center space-x-1.5 transition-all ${
-                  action === 'goal'
+                  action === 'comment'
                     ? 'bg-[#165094] text-white border-[#165094] shadow-xs'
                     : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                 }`}
               >
-                <span>⚽ Mål</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAction('card')}
-                className={`py-2 px-3 rounded-xl border text-xs font-extrabold flex items-center justify-center space-x-1.5 transition-all ${
-                  action === 'card'
-                    ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-xs'
-                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                <span>🟨 Kort</span>
+                <span>💬 Kommentar</span>
               </button>
 
               <button
@@ -256,6 +246,18 @@ export const LaglederModal: React.FC<LaglederModalProps> = ({
                 }`}
               >
                 <span>🔄 Bytte</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAction('assist_comment')}
+                className={`py-2 px-3 rounded-xl border text-xs font-extrabold flex items-center justify-center space-x-1.5 transition-all ${
+                  action === 'assist_comment'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span>👟 Assist</span>
               </button>
 
               <button
@@ -328,35 +330,6 @@ export const LaglederModal: React.FC<LaglederModalProps> = ({
                   </div>
                 </div>
 
-                {/* Specific card type */}
-                {action === 'card' && (
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                      Korttype
-                    </label>
-                    <div className="flex space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => setCardType('yellow')}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold border ${
-                          cardType === 'yellow' ? 'bg-amber-400 text-slate-950 border-amber-500 font-extrabold' : 'bg-white border-slate-200'
-                        }`}
-                      >
-                        🟨 Gult
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCardType('red')}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold border ${
-                          cardType === 'red' ? 'bg-red-600 text-white border-red-700 font-extrabold' : 'bg-white border-slate-200'
-                        }`}
-                      >
-                        🟥 Rødt
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 {/* Match status selector */}
                 {action === 'status_change' && (
                   <div>
@@ -380,31 +353,26 @@ export const LaglederModal: React.FC<LaglederModalProps> = ({
               {action !== 'status_change' && (
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                    {action === 'goal' ? 'Målscorer' : action === 'card' ? 'Spiller som fikk kort' : 'Spillere (inn/ut)'}
+                    {action === 'sub' ? 'Spiller inn / ut' : action === 'assist_comment' ? 'Målgivende pasning (spiller)' : 'Spiller(e) involvert (valgfritt)'}
                   </label>
                   <input
                     type="text"
-                    placeholder={action === 'goal' ? 'F.eks. Sander Lie eller Eirik Helle' : action === 'sub' ? 'F.eks. Magnus Nybø inn for Henrik Olsen' : 'Spillerens navn'}
+                    placeholder={action === 'sub' ? 'F.eks. Magnus Nybø inn for Henrik Olsen' : action === 'assist_comment' ? 'F.eks. Sander Lie' : 'F.eks. Thea Karlsen'}
                     value={playerName}
                     onChange={(e) => setPlayerName(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white"
                   />
-                  {action === 'goal' && (
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Scoringer av Bønes-spillere vil automatisk oppdatere klubbens toppscorerliste.
-                    </p>
-                  )}
                 </div>
               )}
 
               {/* Description / comment */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                  Kommentar / Detaljer (valgfritt)
+                  {action === 'assist_comment' ? 'Kommentar til målet (valgfritt)' : 'Kommentar / Beskrivelse'}
                 </label>
                 <input
                   type="text"
-                  placeholder="F.eks. Flott skudd i krysset etter hjørnespark!"
+                  placeholder={action === 'assist_comment' ? 'F.eks. Flott gjennombruddspasning i bakrom' : 'F.eks. Kjempesjanse Bønes etter corner!'}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs bg-white"
