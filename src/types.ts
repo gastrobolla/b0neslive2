@@ -140,6 +140,7 @@ export interface PlayerProfile {
   formSummary: ('W' | 'D' | 'L')[];
   formTrend: 'rising' | 'steady' | 'declining';
   matchHistory: PlayerMatchLog[];
+  officialNffData?: any;
 }
 
 export type PlayerPosition = 'Keeper' | 'Forsvar' | 'Midtbane' | 'Angrep';

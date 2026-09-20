@@ -7,6 +7,12 @@ import { loadPersistedData, savePersistedData, upsertMatches, queryMatches } fro
 import { ALL_BONES_SQUADS, ALL_BONES_PLAYERS, getSquadForTeam, getMatchLineup } from './src/data/bonesSquads.js';
 import { matchService } from './server/services/matchService.js';
 import { generateOpponentScoutReport } from './server/scoutService.js';
+import {
+  getOfficialPlayerStats,
+  scrapeOfficialPlayerStats,
+  getAllCachedPlayerStats,
+  syncAllPlayerStats
+} from './server/services/playerStatsService.js';
 
 const app = express();
 const PORT = 3000;
@@ -664,6 +670,60 @@ app.get('/api/bones/players/:idOrName', (req, res) => {
   res.json({
     success: true,
     player
+  });
+});
+
+// 1g. Official NFF Player Stats (Multi-team breakdown, career totals, verified fotball.no data)
+app.get('/api/bones/players/nff-stats', (req, res) => {
+  const allStats = getAllCachedPlayerStats();
+  res.json({
+    success: true,
+    count: Object.keys(allStats).length,
+    stats: allStats
+  });
+});
+
+app.get('/api/bones/player/:fiksId/nff-stats', async (req, res) => {
+  const fiksId = parseInt(req.params.fiksId, 10);
+  if (isNaN(fiksId)) {
+    return res.status(400).json({ success: false, error: 'Ugyldig FIKS ID' });
+  }
+  const force = req.query.force === 'true';
+  const stats = await getOfficialPlayerStats(fiksId, force);
+  if (!stats) {
+    return res.status(404).json({ success: false, error: 'Fant ikke offisiell statistikk for denne spilleren på fotball.no' });
+  }
+  res.json({
+    success: true,
+    stats
+  });
+});
+
+app.post('/api/bones/player/:fiksId/nff-stats/refresh', async (req, res) => {
+  const fiksId = parseInt(req.params.fiksId, 10);
+  if (isNaN(fiksId)) {
+    return res.status(400).json({ success: false, error: 'Ugyldig FIKS ID' });
+  }
+  const stats = await scrapeOfficialPlayerStats(fiksId, true);
+  if (!stats) {
+    return res.status(500).json({ success: false, error: 'Kunne ikke oppdatere statistikk fra fotball.no' });
+  }
+  res.json({
+    success: true,
+    message: `Oppdatert offisiell statistikk fra fotball.no for ${stats.name}`,
+    stats
+  });
+});
+
+app.post('/api/bones/players/nff-stats/sync', async (req, res) => {
+  const fiksIds = [...new Set((currentData.players || ALL_BONES_PLAYERS).map(p => p.fiksId).filter(Boolean))] as number[];
+  res.json({
+    success: true,
+    message: `Startet bakgrunnssynkronisering av offisiell NFF-statistikk for ${fiksIds.length} spillere`,
+    total: fiksIds.length
+  });
+  syncAllPlayerStats(fiksIds, 6).catch(err => {
+    console.error('Error during background player sync:', err);
   });
 });
 

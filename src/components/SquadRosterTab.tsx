@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Users, Search, RefreshCw, ChevronRight, ExternalLink, CheckCircle2 } from 'lucide-react';
 import { ALL_BONES_SQUADS, TeamSquad } from '../data/bonesSquads.js';
 import { Player, PlayerPosition, TeamInfo } from '../types.js';
+import { getOfficialStatsForPlayer } from '../services/playerStatsApi.js';
 
 interface SquadRosterTabProps {
   teams: TeamInfo[];
@@ -360,6 +361,21 @@ export const SquadRosterTab: React.FC<SquadRosterTabProps> = ({
                                 FIKS {player.fiksId}
                               </span>
                             )}
+                            {(() => {
+                              const official = player.fiksId ? getOfficialStatsForPlayer(player.fiksId) : null;
+                              const teams = official?.season2026?.teams;
+                              if (teams && teams.length > 1) {
+                                return (
+                                  <span
+                                    title={`Spiller på ${teams.length} lag i klubben (${official.season2026.totalMatches} kamper, ${official.season2026.totalGoals} mål)`}
+                                    className="bg-purple-100 text-purple-900 font-bold text-[10px] px-1.5 py-0.2 rounded border border-purple-200 shrink-0"
+                                  >
+                                    Flere lag ({teams.length})
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                           <div className="flex items-center space-x-2 text-xs text-slate-500 mt-0.5">
                             <span>{player.position}</span>

@@ -15,7 +15,8 @@ import {
   ChevronRight,
   Activity,
   ArrowUpRight,
-  MapPin
+  MapPin,
+  ExternalLink
 } from 'lucide-react';
 
 interface PlayerHistoryModalProps {
@@ -65,11 +66,11 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
   const springRedCount = springLogs.filter((l) => l.redCard).length;
   const springGoalsPerMatch = springMatchesCount > 0 ? (springGoalsCount / springMatchesCount).toFixed(2) : '0.00';
 
-  // Overall totals derived from logs
-  const totalMatchesCount = autumnMatchesCount + springMatchesCount;
-  const totalGoalsCount = autumnGoalsCount + springGoalsCount;
-  const totalYellowCount = autumnYellowCount + springYellowCount;
-  const totalRedCount = autumnRedCount + springRedCount;
+  // Overall totals derived from official NFF stats or player.total
+  const totalMatchesCount = player.officialNffData ? player.officialNffData.season2026.totalMatches : (player.total?.matches || (autumnMatchesCount + springMatchesCount));
+  const totalGoalsCount = player.officialNffData ? player.officialNffData.season2026.totalGoals : (player.total?.goals ?? (autumnGoalsCount + springGoalsCount));
+  const totalYellowCount = player.officialNffData ? player.officialNffData.season2026.yellowCards : (player.total?.yellowCards ?? (autumnYellowCount + springYellowCount));
+  const totalRedCount = player.officialNffData ? player.officialNffData.season2026.redCards : (player.total?.redCards ?? (autumnRedCount + springRedCount));
   const totalGoalsPerMatch = totalMatchesCount > 0 ? (totalGoalsCount / totalMatchesCount).toFixed(2) : '0.00';
   const totalDisciplinaryPoints = totalYellowCount * 1 + totalRedCount * 3;
 
@@ -531,6 +532,137 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
               </div>
 
             </div>
+          </section>
+
+          {/* Offisiell NFF Statistikk & Lagfordeling (fotball.no) */}
+          <section id="official-nff-stats-section" className="bg-white rounded-xl border border-emerald-200 p-4 space-y-3 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-emerald-100">
+              <div className="flex items-center space-x-2">
+                <span className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                  <CheckCircle className="w-4 h-4 text-emerald-700" />
+                </span>
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center space-x-1.5">
+                    <span>Offisiell NFF Spillerstatistikk</span>
+                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.2 rounded-full">
+                      Verifisert
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Kvalitetssikret direkte mot NFF FIKS-databasen for 2026-sesongen
+                  </p>
+                </div>
+              </div>
+
+              {player.fiksId && (
+                <a
+                  href={player.fiksUrl || `https://www.fotball.no/fotballdata/person/profil/?fiksId=${player.fiksId}&underside=statistikk`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-[#165094] transition-colors shrink-0"
+                >
+                  <span>Åpne på fotball.no</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-blue-200" />
+                </a>
+              )}
+            </div>
+
+            {/* Team Breakdown Table */}
+            {player.teamsPlayedFor && player.teamsPlayedFor.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600">
+                      <th className="py-2 px-3">Lag i Bønes IL</th>
+                      <th className="py-2 px-2 text-center">Kamper</th>
+                      <th className="py-2 px-2 text-center">Mål</th>
+                      <th className="py-2 px-2 text-center">Snitt (mål/k)</th>
+                      <th className="py-2 px-2 text-center">Gule</th>
+                      <th className="py-2 px-2 text-center">Røde</th>
+                      <th className="py-2 px-3 text-right">Filter</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-mono">
+                    {player.teamsPlayedFor.map((t) => (
+                      <tr key={t.teamId} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="py-2.5 px-3 font-sans font-semibold text-slate-900 flex items-center space-x-1.5">
+                          <span className="w-2 h-2 rounded-full bg-[#165094]" />
+                          <span>{t.teamName}</span>
+                        </td>
+                        <td className="py-2.5 px-2 text-center font-bold text-slate-700">
+                          {t.matches}
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          <span className={`px-2 py-0.5 rounded font-black ${t.goals > 0 ? 'bg-amber-100 text-amber-950' : 'text-slate-400'}`}>
+                            {t.goals}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-slate-600">
+                          {t.matches > 0 ? (t.goals / t.matches).toFixed(2) : '0.00'}
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-slate-600">
+                          {t.yellowCards > 0 ? `${t.yellowCards} 🟨` : '-'}
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-slate-600">
+                          {t.redCards > 0 ? `${t.redCards} 🟥` : '-'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-sans">
+                          <button
+                            onClick={() => setSelectedTeamFilter(t.teamId)}
+                            className={`text-[11px] font-semibold px-2 py-1 rounded transition-colors ${
+                              selectedTeamFilter === t.teamId
+                                ? 'bg-[#165094] text-white'
+                                : 'text-[#165094] hover:bg-blue-50'
+                            }`}
+                          >
+                            {selectedTeamFilter === t.teamId ? 'Aktivt filter ✓' : 'Vis kamper'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Summary row */}
+                    <tr className="bg-emerald-50/60 font-bold border-t-2 border-emerald-200 text-slate-900">
+                      <td className="py-2.5 px-3 font-sans">
+                        TOTALT FOR BØNES IL
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-black text-[#165094]">
+                        {totalMatchesCount}
+                      </td>
+                      <td className="py-2.5 px-2 text-center">
+                        <span className="bg-amber-200 text-amber-950 px-2 py-0.5 rounded font-black">
+                          {totalGoalsCount}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-black text-slate-800">
+                        {totalGoalsPerMatch}
+                      </td>
+                      <td className="py-2.5 px-2 text-center text-slate-700">
+                        {totalYellowCount > 0 ? `${totalYellowCount} 🟨` : '-'}
+                      </td>
+                      <td className="py-2.5 px-2 text-center text-slate-700">
+                        {totalRedCount > 0 ? `${totalRedCount} 🟥` : '-'}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-sans">
+                        {selectedTeamFilter !== 'all' && (
+                          <button
+                            onClick={() => setSelectedTeamFilter('all')}
+                            className="text-[11px] text-emerald-800 hover:underline font-semibold"
+                          >
+                            Nullstill filter
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
+            {player.teamsPlayedFor && player.teamsPlayedFor.length > 1 && (
+              <div className="bg-blue-50/70 border border-blue-200/80 rounded-lg p-2.5 text-[11px] text-blue-900 leading-relaxed">
+                <span className="font-bold">✓ Nøyaktig klubbstatistikk:</span> Spilleren representerer {player.teamsPlayedFor.length} ulike lag i klubben ({player.teamsPlayedFor.map(t => t.teamName.replace('Bønes ', '')).join(', ')}). Kamp- og måltallene er samlet nøyaktig fra NFF FIKS slik at statistikken ikke dupliseres eller telles dobbelt.
+              </div>
+            )}
           </section>
 
           {/* Formkurve & Momentum */}

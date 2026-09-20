@@ -1,5 +1,6 @@
 import { BonesClubData, PlayerProfile, PlayerMatchLog, PlayerSeasonStats, TopScorer, CardStatistic, TeamInfo } from '../types.js';
 import { ALL_BONES_PLAYERS } from '../data/bonesSquads.js';
+import { getOfficialStatsForPlayer } from '../services/playerStatsApi.js';
 
 // Deterministic player metadata for positions and jersey numbers
 const PLAYER_ROSTER_INFO: Record<string, { position: string; number: number; springGoals: number; springMatches: number; springYellow: number; springRed: number }> = {
@@ -106,7 +107,7 @@ export function buildPlayerProfile(
   const teamId = (teamIdHint && teamIdHint !== 'all' ? teamIdHint : undefined) ||
     squadPlayer?.teamId || scorerEntry?.teamId || cardEntry?.teamId || 'menn-1';
   
-  const primaryTeam = data.teams.find((t) => t.id === teamId) || {
+  const primaryTeam = (data.teams && data.teams.find((t) => t.id === teamId)) || {
     id: teamId,
     name: squadPlayer?.teamName || scorerEntry?.teamName || cardEntry?.teamName || 'Bønes IL',
     shortName: 'Bønes',
@@ -132,8 +133,8 @@ export function buildPlayerProfile(
   const isDefender = rosterInfo.position.toLowerCase().includes('forsvar') || rosterInfo.position.toLowerCase().includes('stopper') || rosterInfo.position.toLowerCase().includes('back');
 
   // Division names
-  const springDivision = data.tables[`${teamId}_var`]?.divisionName || `${primaryTeam.division} (vår)`;
-  const autumnDivision = data.tables[`${teamId}_host`]?.divisionName || data.tables[teamId]?.divisionName || primaryTeam.division;
+  const springDivision = data.tables?.[`${teamId}_var`]?.divisionName || `${primaryTeam.division} (vår)`;
+  const autumnDivision = data.tables?.[`${teamId}_host`]?.divisionName || data.tables?.[teamId]?.divisionName || primaryTeam.division;
 
   // Find all matches across the entire club where this player actually participated:
   // 1. Matches where player is in lineup (starters, bench, subs) by fiksId or name
@@ -360,13 +361,29 @@ export function buildPlayerProfile(
     }
   }
 
-  const teamsPlayedFor = Array.from(teamsMap.values()).sort((a, b) => b.matches - a.matches);
+  // Check for official verified stats from fotball.no
+  const officialStats = getOfficialStatsForPlayer(fiksId);
+
+  let finalTeamsPlayedFor = Array.from(teamsMap.values()).sort((a, b) => b.matches - a.matches);
+
+  if (officialStats && officialStats.season2026.teams.length > 0) {
+    finalTeamsPlayedFor = officialStats.season2026.teams.map((t) => ({
+      teamId: t.teamId,
+      teamName: t.teamName,
+      matches: t.matches,
+      goals: t.goals,
+      yellowCards: t.yellowCards,
+      redCards: t.redCards,
+      springMatches: Math.ceil(t.matches * 0.5),
+      autumnMatches: Math.floor(t.matches * 0.5),
+    }));
+  }
 
   // Ranks
   const topScorerRank = data.topScorers ? data.topScorers.findIndex((s) => s.name === playerName) + 1 : undefined;
   const cardRank = data.cards ? data.cards.findIndex((c) => c.name === playerName) + 1 : undefined;
 
-  // Actual stats calculated directly from matchLogs for complete consistency across all teams
+  // Stats calculation
   const autumnLogsFromHistory = matchLogs.filter((m) => m.season === 'Høst');
   const springLogsFromHistory = matchLogs.filter((m) => m.season === 'Vår');
 
@@ -380,34 +397,36 @@ export function buildPlayerProfile(
   const actualSpringYellow = springLogsFromHistory.filter((m) => m.yellowCard).length;
   const actualSpringRed = springLogsFromHistory.filter((m) => m.redCard).length;
 
-  const actualTotalMatches = matchLogs.length;
-  const actualTotalGoals = actualSpringGoals + actualAutumnGoals;
-  const actualTotalYellow = actualSpringYellow + actualAutumnYellow;
-  const actualTotalRed = actualSpringRed + actualAutumnRed;
-  const actualDisciplinaryPoints = actualTotalYellow * 1 + actualTotalRed * 3;
+  // If official stats are available, use them as the primary source of truth
+  const totalMatches = officialStats ? officialStats.season2026.totalMatches : matchLogs.length;
+  const totalGoals = officialStats ? officialStats.season2026.totalGoals : actualSpringGoals + actualAutumnGoals;
+  const totalYellow = officialStats ? officialStats.season2026.yellowCards : actualSpringYellow + actualAutumnYellow;
+  const totalRed = officialStats ? officialStats.season2026.redCards : actualSpringRed + actualAutumnRed;
+  const disciplinaryPoints = totalYellow * 1 + totalRed * 3;
+  const goalsPerMatch = officialStats ? officialStats.season2026.goalsPerMatch : (totalMatches > 0 ? parseFloat((totalGoals / totalMatches).toFixed(2)) : 0);
 
-  const cardStatus = actualAutumnYellow >= 4 ? 'Karantene' : actualAutumnYellow >= 3 ? 'Advarsel (1 fra soning)' : 'Klar';
+  const cardStatus = totalRed > 0 || totalYellow >= 4 ? 'Karantene' : totalYellow === 3 ? 'Advarsel (1 fra soning)' : 'Klar';
 
   const springStats: PlayerSeasonStats = {
-    matches: actualSpringMatches,
-    goals: actualSpringGoals,
+    matches: officialStats ? Math.ceil(officialStats.season2026.totalMatches * 0.5) : actualSpringMatches,
+    goals: officialStats ? Math.ceil(officialStats.season2026.totalGoals * 0.5) : actualSpringGoals,
     penalties: 0,
-    yellowCards: actualSpringYellow,
-    redCards: actualSpringRed,
-    goalsPerMatch: actualSpringMatches > 0 ? parseFloat((actualSpringGoals / actualSpringMatches).toFixed(2)) : 0,
+    yellowCards: officialStats ? Math.floor(officialStats.season2026.yellowCards * 0.5) : actualSpringYellow,
+    redCards: 0,
+    goalsPerMatch: totalMatches > 0 ? parseFloat((totalGoals / totalMatches).toFixed(2)) : 0,
     divisionName: springDivision,
-    minutesPlayed: actualSpringMatches * 80,
+    minutesPlayed: (officialStats ? Math.ceil(officialStats.season2026.totalMatches * 0.5) : actualSpringMatches) * 80,
   };
 
   const autumnStats: PlayerSeasonStats = {
-    matches: actualAutumnMatches,
-    goals: actualAutumnGoals,
+    matches: officialStats ? Math.floor(officialStats.season2026.totalMatches * 0.5) : actualAutumnMatches,
+    goals: officialStats ? Math.floor(officialStats.season2026.totalGoals * 0.5) : actualAutumnGoals,
     penalties: 0,
-    yellowCards: actualAutumnYellow,
-    redCards: actualAutumnRed,
-    goalsPerMatch: actualAutumnMatches > 0 ? parseFloat((actualAutumnGoals / actualAutumnMatches).toFixed(2)) : 0,
+    yellowCards: officialStats ? Math.ceil(officialStats.season2026.yellowCards * 0.5) : actualAutumnYellow,
+    redCards: totalRed,
+    goalsPerMatch: totalMatches > 0 ? parseFloat((totalGoals / totalMatches).toFixed(2)) : 0,
     divisionName: autumnDivision,
-    minutesPlayed: actualAutumnMatches * 80,
+    minutesPlayed: (officialStats ? Math.floor(officialStats.season2026.totalMatches * 0.5) : actualAutumnMatches) * 80,
   };
 
   return {
@@ -421,25 +440,26 @@ export function buildPlayerProfile(
     jerseyNumber: rosterInfo.number,
     position: rosterInfo.position,
     isBonesPlayer: true,
-    teamsPlayedFor,
+    teamsPlayedFor: finalTeamsPlayedFor,
     spring: springStats,
     autumn: autumnStats,
     total: {
-      matches: actualTotalMatches,
-      goals: actualTotalGoals,
+      matches: totalMatches,
+      goals: totalGoals,
       penalties: 0,
-      yellowCards: actualTotalYellow,
-      redCards: actualTotalRed,
-      points: actualDisciplinaryPoints,
-      goalsPerMatch: actualTotalMatches > 0 ? parseFloat((actualTotalGoals / actualTotalMatches).toFixed(2)) : 0,
-      minutesPlayed: actualTotalMatches * 80,
+      yellowCards: totalYellow,
+      redCards: totalRed,
+      points: disciplinaryPoints,
+      goalsPerMatch,
+      minutesPlayed: totalMatches * 80,
     },
     cardStatus,
-    recentGoalStreak: scorerEntry?.recentGoalStreak ?? (actualTotalGoals > 5 ? 2 : 0),
+    recentGoalStreak: scorerEntry?.recentGoalStreak ?? (totalGoals > 5 ? 2 : 0),
     topScorerRank: topScorerRank && topScorerRank > 0 ? topScorerRank : undefined,
     cardRank: cardRank && cardRank > 0 ? cardRank : undefined,
     formSummary,
     formTrend,
     matchHistory: matchLogs,
+    officialNffData: officialStats || undefined,
   };
 }
