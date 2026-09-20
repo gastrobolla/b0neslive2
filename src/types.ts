@@ -28,6 +28,7 @@ export interface TableRow {
   goalDiff: number;
   points: number;
   form: ('W' | 'D' | 'L')[];
+  fiksId?: number;
 }
 
 export interface DivisionTable {
@@ -207,6 +208,29 @@ export interface MatchStats {
   saves?: { home: number; away: number };
 }
 
+export interface WeatherPitchStatus {
+  badge: 'Klar for spill' | 'Regn i luften' | 'Klassisk bergensvær' | 'Frisk bris' | 'Kjølig i luften' | 'Sol & tørt kunstgress' | string;
+  badgeColor: 'emerald' | 'blue' | 'cyan' | 'amber' | 'rose' | 'slate';
+  preMatchMessage: string;
+  postMatchSummary: string;
+  ballSpeed: 'Normal' | 'Rask (vått underlag)' | 'Meget rask (kraftig regn)' | 'Tørr / kontrollert';
+}
+
+export interface MatchWeather {
+  temperature: number; // Celsius
+  feelsLike: number; // Celsius
+  conditionText: string; // Norwegian e.g. 'Regnbyger', 'Delvis skyet', 'Lettskyet'
+  iconCode: 'clearsky' | 'partlycloudy' | 'cloudy' | 'rain' | 'heavyrain' | 'snow' | 'wind' | 'fog';
+  precipitationMm: number; // mm
+  windSpeedMs: number; // m/s
+  windDirection?: string; // e.g. 'NV'
+  humidityPercent: number; // %
+  pitchStatus: WeatherPitchStatus;
+  venueName: string;
+  isForecast: boolean;
+  fetchedAt?: string;
+}
+
 export interface Match {
   id: string; // e.g. "nff-8051234"
   fiksId?: number;
@@ -229,6 +253,7 @@ export interface Match {
   referee?: string;
   events?: MatchEvent[];
   stats?: MatchStats;
+  weather?: MatchWeather;
   attendance?: number;
   season?: string;
   category?: TeamCategory;
@@ -239,6 +264,8 @@ export interface Match {
   homeLineup?: MatchLineup;
   awayLineup?: MatchLineup;
   isOfficialFiks?: boolean;
+  opponentFiksId?: number;
+  opponentName?: string;
 }
 
 export interface ScanLog {
@@ -338,4 +365,89 @@ export interface LaglederReportRequest {
   homeScore?: number;
   awayScore?: number;
   description?: string;
+}
+
+export interface ScoutRecentMatch {
+  date: string;
+  opponent: string;
+  isHome: boolean;
+  score: string;
+  homeScore: number;
+  awayScore: number;
+  result: 'W' | 'D' | 'L';
+  competition?: string;
+  matchFiksId?: number;
+}
+
+export interface ScoutKeyPlayer {
+  id: string;
+  name: string;
+  position: 'Keeper' | 'Forsvar' | 'Midtbane' | 'Angrep';
+  jerseyNumber?: number;
+  goals: number;
+  matches: number;
+  yellowCards?: number;
+  redCards?: number;
+  role?: string;
+  threatLevel?: 'Ekstrem' | 'Høy' | 'Middels';
+  fiksId?: number;
+}
+
+export interface OpponentScoutReport {
+  opponentTeamName: string;
+  opponentShortName: string;
+  opponentFiksId?: number;
+  matchFiksId?: number;
+  ageGroup?: string;
+  targetTeamCategory?: string;
+  bonesTeamName?: string;
+  bonesTeamId?: string;
+  division: string;
+  currentRank: number;
+  totalTeams: number;
+  points: number;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDiff: number;
+  goalsPerMatch: number;
+  goalsConcededPerMatch: number;
+  cleanSheets: number;
+  winRatePercent: number;
+  form: ('W' | 'D' | 'L')[];
+  formStreakDescription: string;
+  recentMatches: ScoutRecentMatch[];
+  keyPlayers: ScoutKeyPlayer[];
+  topScorerName?: string;
+  topScorerGoals?: number;
+  tacticalAnalysis: {
+    playStyle: string;
+    strengths: string[];
+    weaknesses: string[];
+    threatLevel: 'Meget høy' | 'Høy' | 'Moderat' | 'Lav';
+    attackRating: number;
+    defenseRating: number;
+    paceRating: number;
+    physicalRating: number;
+    coachAdviceForBones: string;
+  };
+  headToHead: {
+    matchesPlayed: number;
+    bonesWins: number;
+    draws: number;
+    opponentWins: number;
+    previousMeetings: Array<{
+      date: string;
+      homeTeam: string;
+      awayTeam: string;
+      score: string;
+      resultForBones: 'W' | 'D' | 'L';
+      venue?: string;
+    }>;
+  };
+  scoutedAt: string;
+  source: string;
 }

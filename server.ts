@@ -6,6 +6,7 @@ import { runFullClubScrape, BONES_16_TEAMS, scrapeMatchEvents, scrapeMatchLineup
 import { loadPersistedData, savePersistedData, upsertMatches, queryMatches } from './server/storage.js';
 import { ALL_BONES_SQUADS, ALL_BONES_PLAYERS, getSquadForTeam, getMatchLineup } from './src/data/bonesSquads.js';
 import { matchService } from './server/services/matchService.js';
+import { generateOpponentScoutReport } from './server/scoutService.js';
 
 const app = express();
 const PORT = 3000;
@@ -449,6 +450,151 @@ app.get('/api/bones/match/:id', (req, res) => {
   });
 });
 
+// 1e-2. Weather data endpoint for pitch location and time
+const serverWeatherCache = new Map<string, { data: any; timestamp: number }>();
+
+app.get('/api/weather', async (req, res) => {
+  try {
+    const venue = typeof req.query.venue === 'string' ? req.query.venue : 'Fjellsdalen idrettsplass';
+    const date = typeof req.query.date === 'string' ? req.query.date : '';
+    const time = typeof req.query.time === 'string' ? req.query.time : '';
+    let lat = parseFloat(req.query.lat as string);
+    let lon = parseFloat(req.query.lon as string);
+
+    if (isNaN(lat) || isNaN(lon)) {
+      lat = 60.3345;
+      lon = 5.2977;
+    }
+
+    const cacheKey = `${lat.toFixed(3)}_${lon.toFixed(3)}_${date}_${time}`;
+    const cached = serverWeatherCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < 1000 * 60 * 15) { // 15 min cache
+      return res.json({ success: true, weather: cached.data, cached: true });
+    }
+
+    const openMeteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,relative_humidity_2m&timezone=Europe%2FOslo`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const apiRes = await fetch(openMeteoUrl, {
+      headers: { 'User-Agent': 'BonesIL-Fotball/1.0 (matsbarsnes@gmail.com)' },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (apiRes.ok) {
+      const data: any = await apiRes.json();
+      const current = data.current;
+      if (current) {
+        const wmo = current.weather_code ?? 2;
+        let conditionText = 'Oppholdsvær';
+        let iconCode = 'partlycloudy';
+        if (wmo === 0) { conditionText = 'Klarvær / Sol'; iconCode = 'clearsky'; }
+        else if (wmo <= 2) { conditionText = 'Delvis skyet'; iconCode = 'partlycloudy'; }
+        else if (wmo === 3) { conditionText = 'Overskyet'; iconCode = 'cloudy'; }
+        else if (wmo >= 51 && wmo <= 65) { conditionText = wmo >= 65 ? 'Kraftig regn' : 'Regn'; iconCode = wmo >= 65 ? 'heavyrain' : 'rain'; }
+        else if (wmo >= 80 && wmo <= 82) { conditionText = 'Regnbyger'; iconCode = wmo === 82 ? 'heavyrain' : 'rain'; }
+        else if (wmo >= 71 && wmo <= 75) { conditionText = 'Snø'; iconCode = 'snow'; }
+        else if (wmo >= 95) { conditionText = 'Tordenbyger'; iconCode = 'heavyrain'; }
+
+        const temp = Math.round(current.temperature_2m ?? 12);
+        const feelsLike = Math.round(current.apparent_temperature ?? temp);
+        const precip = Math.round((current.precipitation ?? 0) * 10) / 10;
+        const wind = Math.round((current.wind_speed_10m ?? 3.5) * 10) / 10;
+        const humidity = Math.round(current.relative_humidity_2m ?? 75);
+
+        // Predefined pitch status and messages
+        let badge = 'Klar for spill';
+        let badgeColor = 'emerald';
+        let preMatchMessage = 'Oppholdsvær, mild bris og ypperlige spilleforhold – alt ligger til rette for en fartsfylt fotballkamp.';
+        let postMatchSummary = 'Oppholdsvær og gode baneforhold ga lagene ideelle arbeidsbetingelser i nitti minutter.';
+        let ballSpeed = 'Normal';
+
+        if (precip >= 2.5 || iconCode === 'heavyrain') {
+          badge = 'Klassisk bergensvær';
+          badgeColor = 'cyan';
+          preMatchMessage = 'Kraftig regnvær og vått kunstgress – forvent lynrask ballgang, krevende returer og glatt underlag.';
+          postMatchSummary = 'Kampen ble preget av klassisk bergensvær med kraftig nedbør og lynraskt kunstgress som satte fart på spillet.';
+          ballSpeed = 'Meget rask (kraftig regn)';
+        } else if (precip >= 0.2 || iconCode === 'rain') {
+          badge = 'Regn i luften';
+          badgeColor = 'blue';
+          preMatchMessage = 'Regn i luften og lett fuktig gress – gode forhold for hurtige stikkballer og presise pasninger langs bakken.';
+          postMatchSummary = 'Regn i luften og fuktig underlag ga god fart på ballen gjennom oppgjøret.';
+          ballSpeed = 'Rask (vått underlag)';
+        } else if (wind >= 7.5) {
+          badge = 'Frisk bris';
+          badgeColor = 'amber';
+          preMatchMessage = 'Merkbar vind over banen – kan påvirke høye oppspill og krever god presisjon på dødballer.';
+          postMatchSummary = 'Frisk bris over anlegget satte sitt preg på luftduellene og krevde ekstra tålmodighet i oppbyggingen.';
+          ballSpeed = 'Normal';
+        } else if (temp <= 3) {
+          badge = 'Kjølig i luften';
+          badgeColor = 'rose';
+          preMatchMessage = 'Kjølig i luften – viktig med intensiv oppvarming og god sirkulasjon av ballen for å holde varmen.';
+          postMatchSummary = 'Kjølige temperaturer ga en skarp ramme rundt et intenst oppgjør.';
+          ballSpeed = 'Normal';
+        } else if (iconCode === 'clearsky' && temp >= 14 && precip === 0) {
+          badge = 'Sol & tørt kunstgress';
+          badgeColor = 'amber';
+          preMatchMessage = 'Strålende sol og tørre baneforhold – ypperlige rammer for festfotball og stor underholdning.';
+          postMatchSummary = 'Strålende sol og tørre baneforhold la en perfekt ramme rundt lokaloppgjøret.';
+          ballSpeed = 'Tørr / kontrollert';
+        }
+
+        const weatherResult = {
+          temperature: temp,
+          feelsLike,
+          conditionText,
+          iconCode,
+          precipitationMm: precip,
+          windSpeedMs: wind,
+          humidityPercent: humidity,
+          pitchStatus: {
+            badge,
+            badgeColor,
+            preMatchMessage,
+            postMatchSummary,
+            ballSpeed
+          },
+          venueName: venue,
+          isForecast: true,
+          fetchedAt: new Date().toISOString()
+        };
+
+        serverWeatherCache.set(cacheKey, { data: weatherResult, timestamp: Date.now() });
+        return res.json({ success: true, weather: weatherResult });
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Weather API] Fetch failed, falling back:', err?.message);
+  }
+
+  // Deterministic fallback response
+  const fallback = {
+    temperature: 12,
+    feelsLike: 11,
+    conditionText: 'Opphold og lettskyet',
+    iconCode: 'partlycloudy',
+    precipitationMm: 0.1,
+    windSpeedMs: 3.8,
+    humidityPercent: 78,
+    pitchStatus: {
+      badge: 'Klar for spill',
+      badgeColor: 'emerald',
+      preMatchMessage: 'Oppholdsvær, mild bris og ypperlige spilleforhold – alt ligger til rette for en fartsfylt fotballkamp.',
+      postMatchSummary: 'Oppholdsvær og gode baneforhold ga lagene ideelle arbeidsbetingelser i nitti minutter.',
+      ballSpeed: 'Normal'
+    },
+    venueName: typeof req.query.venue === 'string' ? req.query.venue : 'Fjellsdalen idrettsplass',
+    isForecast: true,
+    fetchedAt: new Date().toISOString()
+  };
+
+  res.json({ success: true, weather: fallback });
+});
+
 // 1f. Squads and player rosters endpoints
 app.get('/api/bones/squads', (req, res) => {
   res.json({
@@ -593,6 +739,55 @@ app.post('/api/bones/match/:matchId/sync-lineup', async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Dedicated Speider (Scout) endpoint for detailed opponent intelligence based on Fiks-ID
+app.get('/api/bones/scout', async (req, res) => {
+  try {
+    const { matchId, matchFiksId, opponentFiksId, opponent, teamId, division, force } = req.query;
+    const report = await generateOpponentScoutReport({
+      matchId: typeof matchId === 'string' ? matchId : undefined,
+      matchFiksId: typeof matchFiksId === 'string' ? matchFiksId : undefined,
+      opponentFiksId: typeof opponentFiksId === 'string' ? opponentFiksId : undefined,
+      opponentName: typeof opponent === 'string' ? opponent : undefined,
+      teamId: typeof teamId === 'string' ? teamId : undefined,
+      division: typeof division === 'string' ? division : undefined,
+      currentData,
+      forceRefresh: force === 'true'
+    });
+
+    res.json({
+      success: true,
+      report
+    });
+  } catch (err: any) {
+    console.error('Error generating opponent scout report:', err);
+    res.status(500).json({ success: false, error: err.message || 'Kunne ikke generere speiderrapport' });
+  }
+});
+
+app.post('/api/bones/scout/refresh', async (req, res) => {
+  try {
+    const { matchId, matchFiksId, opponentFiksId, opponent, teamId, division } = req.body || {};
+    const report = await generateOpponentScoutReport({
+      matchId: typeof matchId === 'string' ? matchId : undefined,
+      matchFiksId: typeof matchFiksId === 'string' ? matchFiksId : undefined,
+      opponentFiksId: typeof opponentFiksId === 'string' ? opponentFiksId : undefined,
+      opponentName: typeof opponent === 'string' ? opponent : undefined,
+      teamId: typeof teamId === 'string' ? teamId : undefined,
+      division: typeof division === 'string' ? division : undefined,
+      currentData,
+      forceRefresh: true
+    });
+
+    res.json({
+      success: true,
+      message: `Oppdatert fersk speiderrapport for ${report.opponentTeamName} (FIKS #${report.opponentFiksId})`,
+      report
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Kunne ikke oppdatere speiderrapport' });
   }
 });
 

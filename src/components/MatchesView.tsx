@@ -21,6 +21,7 @@ import {
 import { MatchShareModal, copyToClipboard, getMatchShareUrl } from './MatchShareModal.js';
 import { MatchDetailModal } from './MatchDetailModal.js';
 import { SofascoreMatchCard } from './SofascoreMatchCard.js';
+import { ScoutReportModal } from './ScoutReportModal.js';
 
 interface MatchesViewProps {
   matches: Match[];
@@ -55,6 +56,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [detailModalMatch, setDetailModalMatch] = useState<Match | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [scoutModalMatch, setScoutModalMatch] = useState<Match | null>(null);
   const [copiedMatchId, setCopiedMatchId] = useState<string | null>(null);
 
   // Keep localMatches synced when prop matches change
@@ -338,6 +340,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                 setIsDetailModalOpen(true);
               }}
               onOpenLineup={() => onViewLineup && onViewLineup(match)}
+              onOpenScout={(m) => setScoutModalMatch(m)}
             />
           ))
         )}
@@ -355,6 +358,13 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
           setDetailModalMatch(match);
           setIsDetailModalOpen(true);
         }}
+      />
+
+      {/* Speider Modal */}
+      <ScoutReportModal
+        match={scoutModalMatch}
+        isOpen={!!scoutModalMatch}
+        onClose={() => setScoutModalMatch(null)}
       />
 
       {/* Match Detail Modal */}

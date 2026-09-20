@@ -1,6 +1,7 @@
 import React from 'react';
 import { Match } from '../types.js';
-import { Star, Shield, ChevronRight } from 'lucide-react';
+import { Star, Shield, ChevronRight, Binoculars } from 'lucide-react';
+import { WeatherWidget } from './WeatherWidget.js';
 
 interface SofascoreMatchCardProps {
   match: Match;
@@ -8,6 +9,7 @@ interface SofascoreMatchCardProps {
   onToggleFavorite: (e: React.MouseEvent) => void;
   onOpenDetail: () => void;
   onOpenLineup?: () => void;
+  onOpenScout?: (match: Match) => void;
 }
 
 export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
@@ -16,9 +18,11 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
   onToggleFavorite,
   onOpenDetail,
   onOpenLineup,
+  onOpenScout,
 }) => {
   const isBonesHome = match.homeTeam.toLowerCase().includes('bønes');
   const isBonesAway = match.awayTeam.toLowerCase().includes('bønes');
+  const opponentName = isBonesHome ? match.awayTeam : match.homeTeam;
   const isLive = match.status === 'live';
   const isFinished = match.status === 'finished';
   const isUpcoming = match.status === 'upcoming';
@@ -63,6 +67,20 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
             )}
           </div>
           <div className="flex items-center space-x-1">
+            {onOpenScout && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenScout(match);
+                }}
+                className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 transition-colors flex items-center gap-1"
+                title={`Speiderrapport for ${opponentName}`}
+              >
+                <Binoculars className="w-3 h-3 text-indigo-600" />
+                <span>Speider</span>
+              </button>
+            )}
             {onOpenLineup && (
               <button
                 type="button"
@@ -180,6 +198,30 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
                 {isUpcoming ? '-' : (match.awayScore ?? 0)}
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* Pitch Weather & Condition Strip */}
+        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs gap-2">
+          <WeatherWidget match={match} variant="compact" />
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onOpenScout && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenScout(match);
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 transition-colors cursor-pointer"
+                title={`Speiderrapport for ${opponentName}`}
+              >
+                <Binoculars className="w-3 h-3 text-indigo-600" />
+                <span>Speider</span>
+              </button>
+            )}
+            <span className="text-[10px] text-slate-400 font-medium truncate hidden sm:inline max-w-[140px]">
+              {match.division}
+            </span>
           </div>
         </div>
 

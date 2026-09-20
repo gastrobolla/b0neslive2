@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Match, MatchEvent, DivisionTable, Player, MatchLineup } from '../types.js';
 import { BtMatchSummary } from './BtMatchSummary.js';
+import { WeatherWidget } from './WeatherWidget.js';
+import { ScoutReportView } from './ScoutReportModal.js';
 import {
   X,
   MapPin,
@@ -21,7 +23,8 @@ import {
   TrendingUp,
   Sparkles,
   Flame,
-  AlertCircle
+  AlertCircle,
+  Binoculars
 } from 'lucide-react';
 
 interface MatchDetailModalProps {
@@ -37,7 +40,7 @@ interface MatchDetailModalProps {
   divisionTable?: DivisionTable;
 }
 
-type SofascoreTab = 'oversikt' | 'lineup' | 'stats' | 'table' | 'h2h';
+type SofascoreTab = 'oversikt' | 'lineup' | 'scout' | 'stats' | 'table' | 'h2h';
 
 export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
   match,
@@ -406,7 +409,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
             }`}
           >
-            Hendelser ({events.length})
+            {match?.status === 'upcoming' ? 'Før kampen' : `Hendelser (${events.length})`}
           </button>
           <button
             id="match-tab-lineup"
@@ -435,6 +438,25 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                 {starters.length || 11}
               </span>
             )}
+          </button>
+          <button
+            id="match-tab-scout"
+            onClick={() => setActiveTab('scout')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center space-x-1.5 ${
+              activeTab === 'scout'
+                ? 'bg-indigo-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+            }`}
+          >
+            <Binoculars className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Speider</span>
+            <span
+              className={`text-[9px] px-1.5 py-0.2 rounded-full font-extrabold uppercase tracking-wider ${
+                activeTab === 'scout' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'
+              }`}
+            >
+              FIKS
+            </span>
           </button>
           <button
             onClick={() => setActiveTab('stats')}
@@ -523,19 +545,99 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">
-                  Kampforløp & Hendelser ({events.length})
+                  {match.status === 'upcoming' ? 'Kampoppsett & Før avspark' : `Kampforløp & Hendelser (${events.length})`}
                 </h4>
-                <span className="text-[11px] text-slate-400">Minutt for minutt</span>
+                <span className="text-[11px] text-slate-400">
+                  {match.status === 'upcoming' ? `Avspark kl. ${match.time}` : 'Minutt for minutt'}
+                </span>
               </div>
 
-              {events.length === 0 ? (
+              {match.status === 'upcoming' ? (
+                <>
+                  <div className="bg-gradient-to-br from-blue-50/70 via-slate-50 to-indigo-50/50 rounded-xl p-4 border border-blue-200/80 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-4 h-4 text-[#165094]" />
+                        <span className="font-bold text-xs text-slate-800">
+                          {match.date} • Kl. {match.time}
+                        </span>
+                      </div>
+                      <span className="bg-blue-100 text-[#165094] text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                        Kommende oppgjør
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                      <div className="flex items-start space-x-2 bg-white p-2.5 rounded-lg border border-slate-200">
+                        <MapPin className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-semibold block">Spillested</span>
+                          <span className="font-bold text-slate-800">{match.venue}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-start space-x-2 bg-white p-2.5 rounded-lg border border-slate-200">
+                        <Shield className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-semibold block">Turnering / Avdeling</span>
+                          <span className="font-bold text-slate-800 truncate block">{match.division}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/70 text-xs">
+                      <div className="text-[11px] text-slate-500 flex items-center space-x-1.5">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Offisiell kamptropp legges inn av lagleder / FIKS før kampstart.</span>
+                      </div>
+                      <button
+                        onClick={() => setActiveTab('lineup')}
+                        className="text-xs font-bold text-[#165094] hover:underline flex items-center space-x-1 cursor-pointer"
+                      >
+                        <span>Sjekk lagoppstilling</span>
+                        <span>→</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Vær og baneforhold før kampen */}
+                  <WeatherWidget match={match} variant="detailed" mode="preMatch" />
+
+                  {/* Speider-oppsummering og snarvei */}
+                  <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs border border-indigo-900/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center shrink-0 border border-indigo-400/30">
+                        <Binoculars className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">
+                            NFF FIKS Etterretning
+                          </span>
+                        </div>
+                        <h5 className="text-sm font-bold text-white">
+                          Speiderrapport for {isBonesHome ? match.awayTeam : match.homeTeam}
+                        </h5>
+                        <p className="text-xs text-slate-300">
+                          Formkurve, målsnitt, nøkkelspillere og taktiske råd for Bønes IL.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('scout')}
+                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors shrink-0 cursor-pointer"
+                    >
+                      <Binoculars className="w-3.5 h-3.5" />
+                      <span>Åpne speiderrapport</span>
+                    </button>
+                  </div>
+                </>
+              ) : events.length === 0 ? (
                 <div className="text-center py-10 px-4 bg-slate-50 rounded-xl border border-slate-200/80">
                   <Activity className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                   <p className="text-sm font-bold text-slate-700">Ingen hendelser registrert enda</p>
                   <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                    {match.status === 'upcoming'
-                      ? 'Hendelser oppdateres så snart kampen blåses i gang på banen.'
-                      : 'Klikk «Oppdater NFF» eller bruk «Rapporter live» for å føre mål og kort.'}
+                    Klikk «Oppdater NFF» eller bruk «Rapporter live» for å føre mål og kort.
                   </p>
                 </div>
               ) : (
@@ -629,6 +731,11 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                 events={events}
                 onSelectPlayer={onSelectPlayer}
               />
+
+              {/* Vær og baneforhold under kampen */}
+              {match.status !== 'upcoming' && (
+                <WeatherWidget match={match} variant="detailed" mode="postMatch" />
+              )}
 
               {/* Match Venue and Referee Info Card */}
               <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 text-xs text-slate-600 space-y-2 mt-4">
@@ -1269,6 +1376,18 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* TAB: SPEIDER & MOTSTANDERANALYSE */}
+          {activeTab === 'scout' && (
+            <div className="py-1">
+              <ScoutReportView
+                match={currentMatch}
+                teamId={currentMatch?.teamId}
+                opponentFiksId={currentMatch?.opponentFiksId}
+                onClose={onClose}
+              />
             </div>
           )}
         </div>

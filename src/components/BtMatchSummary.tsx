@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Match, MatchEvent, TeamInfo } from '../types.js';
+import { Match, MatchEvent, TeamInfo, MatchWeather } from '../types.js';
+import { getDeterministicFallbackWeather } from '../utils/weather.js';
+import { WeatherWidget } from './WeatherWidget.js';
 import {
   Newspaper,
   ExternalLink,
@@ -16,7 +18,10 @@ import {
   AlertCircle,
   Award,
   Flame,
-  CheckCircle2
+  CheckCircle2,
+  Thermometer,
+  Droplets,
+  Wind
 } from 'lucide-react';
 
 interface BtMatchSummaryProps {
@@ -173,12 +178,18 @@ export const BtMatchSummary: React.FC<BtMatchSummaryProps> = ({
       }
     }
 
+    // Weather conditions & predefined pitch status
+    const weather: MatchWeather = match.weather || getDeterministicFallbackWeather(match);
+    const weatherMessage = isUpcoming
+      ? weather.pitchStatus.preMatchMessage
+      : weather.pitchStatus.postMatchSummary;
+
     // 2. Journalistic Ingress
     const openingAtmosphere = pickIdx([
-      `Under gode spilleforhold og med engasjerte tilskuere langs sidelinjen på ${venue}`,
-      `Det var duket for en skikkelig kraftprøve da flomlysene lyste opp ${venue}`,
+      `Under spilleforhold preget av «${weather.pitchStatus.badge}» (${weather.temperature}°C) og med god stemning på ${venue}`,
+      `Det var duket for en skikkelig kraftprøve da flomlysene lyste opp ${venue} (${weather.pitchStatus.badge})`,
       `Fra første fløytesignal var intensiteten til å ta og føle på mellom de to lagene på ${venue}`,
-      `Det ble servert ekte bergensk lokalfotballsjel da lagene entret kunstgresset på ${venue}`,
+      `Det ble servert ekte bergensk lokalfotballsjel da lagene entret kunstgresset på ${venue} i ${weather.conditionText.toLowerCase()}`,
       `Med viktige poeng på spill i ${division} var rammen satt for en nervepirrende dyst på ${venue}`
     ], 3);
 
@@ -256,7 +267,9 @@ export const BtMatchSummary: React.FC<BtMatchSummaryProps> = ({
       coachTakeaway,
       venue,
       division,
-      dateFormatted
+      dateFormatted,
+      weather,
+      weatherMessage
     };
   }, [match, events, isFinished, isLive, isUpcoming, isWin, isDraw, isLoss, bonesScore, oppScore, homeScore, awayScore, goalDiff, bonesTeamName, opponent, isBonesHome]);
 
@@ -330,6 +343,12 @@ export const BtMatchSummary: React.FC<BtMatchSummaryProps> = ({
               </span>
               <span>•</span>
               <span className="text-amber-300 font-bold">{article.division}</span>
+              <span>•</span>
+              <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-white/10 text-cyan-200 border border-white/15 text-[10px] font-bold">
+                <span>{article.weather.temperature}°C</span>
+                <span>•</span>
+                <span>{article.weather.pitchStatus.badge}</span>
+              </span>
             </div>
 
             <h3 className="text-lg sm:text-xl font-black text-white leading-snug tracking-tight">
@@ -339,6 +358,43 @@ export const BtMatchSummary: React.FC<BtMatchSummaryProps> = ({
             <p className="text-xs sm:text-sm text-blue-100/95 leading-relaxed font-serif italic border-l-3 border-[#E31B23] pl-3 py-1 bg-white/5 rounded-r-lg">
               {article.ingress}
             </p>
+          </div>
+
+          {/* Vær & Baneforhold under kampen (BT Lokalfotball) */}
+          <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span className="font-black uppercase tracking-wider text-[11px] text-blue-200">
+                  {isUpcoming ? 'Værvarsel & Forventede Baneforhold' : 'Banerapport & Spilleforhold'}
+                </span>
+              </div>
+              <span className="px-2 py-0.5 rounded text-[10px] font-black border bg-blue-500/20 text-cyan-200 border-cyan-400/30">
+                {article.weather.pitchStatus.badge}
+              </span>
+            </div>
+
+            <p className="text-blue-100 text-xs leading-relaxed bg-blue-950/40 p-2.5 rounded-lg border border-white/10">
+              {article.weatherMessage}
+            </p>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-blue-200/90 pt-0.5">
+              <span className="flex items-center space-x-1">
+                <Thermometer className="w-3 h-3 text-amber-300" />
+                <span>{article.weather.temperature}°C (føles {article.weather.feelsLike}°)</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <Droplets className="w-3 h-3 text-blue-400" />
+                <span>Nedbør: {article.weather.precipitationMm} mm</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <Wind className="w-3 h-3 text-teal-300" />
+                <span>Vind: {article.weather.windSpeedMs} m/s</span>
+              </span>
+              <span className="text-slate-300">
+                Underlag: <strong className="text-white">{article.weather.pitchStatus.ballSpeed}</strong>
+              </span>
+            </div>
           </div>
 
           {/* Match Score & Goalscorers Interactive Snapshot */}

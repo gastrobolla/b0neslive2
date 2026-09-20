@@ -24,6 +24,7 @@ import {
 import { MatchDetailModal } from './MatchDetailModal.js';
 import { LaglederModal } from './LaglederModal.js';
 import { SofascoreMatchCard } from './SofascoreMatchCard.js';
+import { ScoutReportModal } from './ScoutReportModal.js';
 
 interface LivescoreDashboardProps {
   data: BonesClubData;
@@ -57,6 +58,7 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
   const [isLaglederModalOpen, setIsLaglederModalOpen] = useState<boolean>(false);
   const [laglederMatch, setLaglederMatch] = useState<Match | null>(null);
+  const [scoutMatch, setScoutMatch] = useState<Match | null>(null);
 
   // Polling and "seconds ago" timer
   const [secondsAgo, setSecondsAgo] = useState<number>(0);
@@ -605,6 +607,7 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
                     onToggleFavorite={(e) => toggleFavorite(m.teamId, e)}
                     onOpenDetail={() => handleOpenMatchDetail(m)}
                     onOpenLineup={() => onViewLineup && onViewLineup(m)}
+                    onOpenScout={(matchToScout) => setScoutMatch(matchToScout)}
                   />
                 ))}
               </div>
@@ -612,6 +615,13 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
           ))}
         </div>
       )}
+
+      {/* Speider Modal */}
+      <ScoutReportModal
+        match={scoutMatch}
+        isOpen={!!scoutMatch}
+        onClose={() => setScoutMatch(null)}
+      />
 
       {/* Match Detail Modal with Full Sofascore Tabs */}
       <MatchDetailModal

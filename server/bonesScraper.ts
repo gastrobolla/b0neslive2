@@ -65,7 +65,7 @@ export const BONES_16_TEAMS = [
   { id: 'menn-1', name: 'Bønes Menn 1', shortName: 'Menn 1', fiksId: 153650, tourneyId: 205982, springTourneyId: 205982, division: '5. div. menn avd. 03 Hordaland', springDivision: '5. div. menn avd. 03 Hordaland (Vår)', category: 'Senior' as const, krets: 'NFF Hordaland', homeGround: 'Fjellsdalen idrettsplass', nffCode: 'NFF-HOR-M5-03' }
 ];
 
-function decodeEntities(str: string): string {
+export function decodeEntities(str: string): string {
   if (!str) return '';
   return str
     .replace(/&#xF8;/gi, 'ø')
@@ -183,6 +183,10 @@ async function scrapeTeamTable(tourneyId: number, teamId: string, teamName: stri
         }
         const points = parseInt(cells[pointsIdx], 10) || 0;
 
+        // Extract exact team FIKS-ID from row links (e.g. href="/fotballdata/lag/hjem/?fiksId=71912")
+        const fiksLinkMatch = r[1].match(/href="\/fotballdata\/lag\/hjem\/\?fiksId=(\d+)"/i);
+        const rowFiksId = fiksLinkMatch ? parseInt(fiksLinkMatch[1], 10) : undefined;
+
         parsedRows.push({
           rank,
           teamName: isBones ? teamName : cellTeamName,
@@ -195,7 +199,8 @@ async function scrapeTeamTable(tourneyId: number, teamId: string, teamName: stri
           goalsAgainst,
           goalDiff,
           points,
-          form: [] // Populated from actual verified match history, never fabricated
+          form: [], // Populated from actual verified match history, never fabricated
+          fiksId: rowFiksId
         });
       }
     }
