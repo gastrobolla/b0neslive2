@@ -2,6 +2,7 @@ import React from 'react';
 import { RefreshCw, Radio, Shield, Sparkles, Activity, Bell } from 'lucide-react';
 import { ScannerState } from '../types.js';
 import { PWAInstallButton } from './PWAInstallButton.js';
+import { ClubWeatherBadge } from './ClubWeatherBadge.js';
 
 interface NavbarProps {
   scanner: ScannerState;
@@ -69,6 +70,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Quick Actions & Live Scanner Status */}
           <div className="flex items-center space-x-1.5 sm:space-x-2">
             
+            {/* Club Weather Widget */}
+            <ClubWeatherBadge />
+
             {/* Scanner Info Pill */}
             <button
               id="btn-open-scanner-drawer"

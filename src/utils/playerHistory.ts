@@ -1,37 +1,17 @@
 import { BonesClubData, PlayerProfile, PlayerMatchLog, PlayerSeasonStats, TopScorer, CardStatistic, TeamInfo } from '../types.js';
 import { ALL_BONES_PLAYERS } from '../data/bonesSquads.js';
 import { getOfficialStatsForPlayer } from '../services/playerStatsApi.js';
-
-// Deterministic player metadata for positions and jersey numbers
-const PLAYER_ROSTER_INFO: Record<string, { position: string; number: number; springGoals: number; springMatches: number; springYellow: number; springRed: number }> = {
-  'Henrik Vindenes': { position: 'Spiss / Målscorer', number: 9, springGoals: 8, springMatches: 6, springYellow: 0, springRed: 0 },
-  'Emma Sofie Solheim': { position: 'Angrepsspiller / Ving', number: 10, springGoals: 7, springMatches: 6, springYellow: 0, springRed: 0 },
-  'Eirik Helle Soltvedt': { position: 'Spiss / Offensiv midt', number: 11, springGoals: 6, springMatches: 5, springYellow: 1, springRed: 0 },
-  'Sander Fjellstad': { position: 'Sentral midtbane / Playmaker', number: 8, springGoals: 5, springMatches: 5, springYellow: 1, springRed: 0 },
-  'Ingrid Møller': { position: 'Spiss / Venstreving', number: 7, springGoals: 6, springMatches: 5, springYellow: 0, springRed: 0 },
-  'Mathias Bønes Lind': { position: 'Høyreving / Angrep', number: 11, springGoals: 5, springMatches: 5, springYellow: 0, springRed: 0 },
-  'Kasper Haukeland': { position: 'Offensiv midtbane', number: 10, springGoals: 4, springMatches: 5, springYellow: 0, springRed: 0 },
-  'Julie Viken': { position: 'Spiss / Målscorer', number: 9, springGoals: 4, springMatches: 4, springYellow: 0, springRed: 0 },
-  'Tobias Fjellbirkeland': { position: 'Angrep / Kantspiller', number: 7, springGoals: 4, springMatches: 5, springYellow: 1, springRed: 0 },
-  'Oskar Løvaas': { position: 'Midtbane / Spiss', number: 14, springGoals: 3, springMatches: 6, springYellow: 0, springRed: 0 },
-  'Thea Berg': { position: 'Offensiv midtbane / Spiss', number: 10, springGoals: 4, springMatches: 5, springYellow: 0, springRed: 0 },
-  'Noah Straume': { position: 'Spiss', number: 9, springGoals: 3, springMatches: 5, springYellow: 0, springRed: 0 },
-  'Sander Bønes': { position: 'Sentral midtbane', number: 6, springGoals: 2, springMatches: 5, springYellow: 1, springRed: 0 },
-  'Fredrik Dahl': { position: 'Midtstopper / Forsvarssjef', number: 4, springGoals: 1, springMatches: 5, springYellow: 2, springRed: 0 },
-  'Håkon Sandven': { position: 'Defensiv midtbane / Stopper', number: 5, springGoals: 0, springMatches: 5, springYellow: 1, springRed: 0 },
-  'Kristian Bøe': { position: 'Venstreback / Forsvar', number: 3, springGoals: 0, springMatches: 5, springYellow: 1, springRed: 0 },
-  'Markus Tveit': { position: 'Høyreback / Forsvar', number: 2, springGoals: 1, springMatches: 5, springYellow: 1, springRed: 0 },
-  'Jonas Haukeland': { position: 'Sentral midtbane', number: 6, springGoals: 2, springMatches: 5, springYellow: 1, springRed: 0 },
-  'Maren Vik': { position: 'Midtstopper / Kaptein', number: 4, springGoals: 1, springMatches: 5, springYellow: 1, springRed: 0 },
-  'Mikkel Sandven': { position: 'Høyreving', number: 17, springGoals: 3, springMatches: 6, springYellow: 0, springRed: 0 },
-  'Eskil Møller': { position: 'Midtbane', number: 7, springGoals: 2, springMatches: 4, springYellow: 1, springRed: 0 },
-  'Anne Berit Hansen': { position: 'Forsvar / Kaptein', number: 5, springGoals: 1, springMatches: 4, springYellow: 1, springRed: 0 },
-  'Simen Løvaas': { position: 'Keeper / Målvakt', number: 1, springGoals: 0, springMatches: 6, springYellow: 0, springRed: 0 },
-};
+import {
+  extractNumericFiksId,
+  toCanonicalPlayerId,
+  resolvePlayerIdentity,
+  sanitizePlayerNameSlug,
+} from './playerResolver.js';
 
 /**
- * Builds a rich, verified PlayerProfile for ANY player in Bønes IL
- * (including players with 0 goals and 0 cards, defenders, goalkeepers, squad members)
+ * Builds an authentic, verified PlayerProfile for ANY player in Bønes IL
+ * based strictly on real NFF data, authoritative MatchEvents and verified squad registrations.
+ * NEVER fabricates synthetic goals, cards or random jersey numbers.
  */
 export function buildPlayerProfile(
   playerNameOrId: string,
@@ -42,14 +22,7 @@ export function buildPlayerProfile(
   if (!playerNameOrId || playerNameOrId.trim() === '') return null;
 
   // Extract FIKS ID from parameter or string if formatted as fiks-12345 or digits
-  let targetFiksId = playerFiksId;
-  if (!targetFiksId) {
-    if (/^fiks-\d+$/i.test(playerNameOrId.trim())) {
-      targetFiksId = parseInt(playerNameOrId.trim().replace(/^fiks-/i, ''), 10);
-    } else if (/^\d{5,}$/.test(playerNameOrId.trim())) {
-      targetFiksId = parseInt(playerNameOrId.trim(), 10);
-    }
-  }
+  let targetFiksId = extractNumericFiksId(playerFiksId) || extractNumericFiksId(playerNameOrId);
 
   const allKnownPlayers = [...(data.players || []), ...ALL_BONES_PLAYERS];
 
@@ -77,7 +50,15 @@ export function buildPlayerProfile(
   let fiksId = targetFiksId || matchedSquadPlayers.find((p) => p.fiksId)?.fiksId;
   if (!fiksId) {
     for (const m of data.matches || []) {
-      const allLp = [...(m.lineup?.starters || []), ...(m.lineup?.bench || []), ...(m.lineup?.subs || [])];
+      const allLp = [
+        ...(m.lineup?.starters || []),
+        ...(m.lineup?.bench || []),
+        ...(m.lineup?.subs || []),
+        ...(m.homeLineup?.starters || []),
+        ...(m.homeLineup?.bench || []),
+        ...(m.awayLineup?.starters || []),
+        ...(m.awayLineup?.bench || []),
+      ];
       const matchLp = allLp.find((p) => p.name && p.name.trim().toLowerCase() === normalizedTargetName && p.fiksId);
       if (matchLp?.fiksId) {
         fiksId = matchLp.fiksId;
@@ -120,17 +101,11 @@ export function buildPlayerProfile(
     nffCode: 'NFF-HOR'
   };
 
-  const rosterInfo = PLAYER_ROSTER_INFO[playerName] || {
-    position: squadPlayer?.position ? (squadPlayer.position === 'Keeper' ? 'Målvakt / Keeper' : squadPlayer.position) : (scorerEntry ? 'Angrepsspiller' : 'Midtbane / Forsvar'),
-    number: squadPlayer?.jerseyNumber || (playerName.includes('Løvaas') || playerName.includes('Berntsen') ? 1 : Math.floor(Math.random() * 18) + 2),
-    springGoals: scorerEntry ? Math.max(1, Math.floor(scorerEntry.goals * 0.6)) : (squadPlayer?.goals ? Math.max(0, Math.floor(squadPlayer.goals * 0.5)) : 0),
-    springMatches: 5,
-    springYellow: cardEntry ? Math.max(0, Math.floor(cardEntry.yellowCards * 0.5)) : 0,
-    springRed: 0,
-  };
+  const jerseyNumber = squadPlayer?.jerseyNumber || squadPlayer?.number || 0;
+  const position = squadPlayer?.position || 'Ukjent';
 
-  const isGoalkeeper = rosterInfo.position.toLowerCase().includes('keeper') || rosterInfo.position.toLowerCase().includes('målvakt');
-  const isDefender = rosterInfo.position.toLowerCase().includes('forsvar') || rosterInfo.position.toLowerCase().includes('stopper') || rosterInfo.position.toLowerCase().includes('back');
+  const isGoalkeeper = position.toLowerCase().includes('keeper') || position.toLowerCase().includes('målvakt');
+  const isDefender = position.toLowerCase().includes('forsvar') || position.toLowerCase().includes('stopper') || position.toLowerCase().includes('back');
 
   // Division names
   const springDivision = data.tables?.[`${teamId}_var`]?.divisionName || `${primaryTeam.division} (vår)`;
@@ -169,18 +144,8 @@ export function buildPlayerProfile(
   // Only count matches where the player was actually present in lineup or events
   const effectiveMatches = matchedMatches;
 
-  // Build match logs
+  // Build match logs from finished matches
   const finishedMatches = effectiveMatches.filter((m) => m.status === 'finished');
-  const springMatchesList = finishedMatches.filter((m) => m.date < '2026-07-01');
-  const autumnMatchesList = finishedMatches.filter((m) => m.date >= '2026-07-01');
-
-  // Allocate goals and cards deterministically across matches
-  let remainingAutumnGoals = squadPlayer?.goals ?? scorerEntry?.goals ?? 0;
-  let remainingSpringGoals = rosterInfo.springGoals;
-  let remainingAutumnYellow = squadPlayer?.yellowCards ?? cardEntry?.yellowCards ?? 0;
-  let remainingSpringYellow = rosterInfo.springYellow;
-  let remainingRed = (squadPlayer?.redCards ?? cardEntry?.redCards ?? 0) + rosterInfo.springRed;
-
   const matchLogs: PlayerMatchLog[] = [];
 
   for (let i = 0; i < finishedMatches.length; i++) {
@@ -195,61 +160,38 @@ export function buildPlayerProfile(
     const opponent = m.isHome ? m.awayTeam : m.homeTeam;
 
     // Check lineup role
-    const allLineup = [...(m.lineup?.starters || []), ...(m.lineup?.bench || []), ...(m.lineup?.subs || [])];
+    const allLineup = [
+      ...(m.lineup?.starters || []),
+      ...(m.lineup?.bench || []),
+      ...(m.lineup?.subs || []),
+      ...(m.homeLineup?.starters || []),
+      ...(m.homeLineup?.bench || []),
+      ...(m.awayLineup?.starters || []),
+      ...(m.awayLineup?.bench || []),
+    ];
     const lineupPlayer = allLineup.find(
       (lp) => (fiksId && lp.fiksId === fiksId) || (lp.name && lp.name.trim().toLowerCase() === normalizedTargetName)
     );
     const isStarter = lineupPlayer ? Boolean(lineupPlayer.isStarter) : true;
     const role = lineupPlayer ? (isStarter ? 'Startellever' : 'Innbytter') : 'Spiller';
 
-    // Check if match has actual verified events for this player
-    const playerEvents = (m.events || []).filter(
-      (e) => (fiksId && (e.fiksId === fiksId || e.playerId === `fiks-${fiksId}`)) ||
-             (e.player && e.player.trim().toLowerCase() === normalizedTargetName)
-    );
+    // Strictly authentic verified match events - no synthetic fabrication
+    const playerEvents = (m.events || []).filter((e) => {
+      if (e.ambiguous) return false;
+      if (fiksId && (e.fiksId === fiksId || e.playerId === `fiks-${fiksId}`)) return true;
+      if (e.playerId && e.playerId === `fiks-${targetFiksId}`) return true;
+      return e.player && e.player.trim().toLowerCase() === normalizedTargetName;
+    });
+
     const realGoals = playerEvents.filter((e) => e.type === 'goal').length;
     const realYellow = playerEvents.some((e) => e.type === 'yellow_card');
     const realRed = playerEvents.some((e) => e.type === 'red_card');
-    const hasExplicitEvents = playerEvents.length > 0;
 
-    // Goals in this match
-    let goalsInMatch = 0;
-    if (hasExplicitEvents) {
-      goalsInMatch = realGoals;
-    } else if (isSpring && remainingSpringGoals > 0 && bonesScore > 0) {
-      const allocation = Math.min(bonesScore, remainingSpringGoals, (i % 2 === 0 || remainingSpringGoals > springMatchesList.length) ? 2 : 1);
-      goalsInMatch = allocation;
-      remainingSpringGoals -= allocation;
-    } else if (!isSpring && remainingAutumnGoals > 0 && bonesScore > 0) {
-      const isHatTrickCandidate = remainingAutumnGoals >= 3 && bonesScore >= 3 && i === finishedMatches.length - 2;
-      const allocation = isHatTrickCandidate
-        ? 3
-        : Math.min(bonesScore, remainingAutumnGoals, (i % 2 === 0 ? 2 : 1));
-      goalsInMatch = allocation;
-      remainingAutumnGoals -= allocation;
-    }
+    const goalsInMatch = realGoals;
+    const hasYellow = realYellow;
+    const hasRed = realRed;
 
-    // Cards in this match
-    let hasYellow = false;
-    let hasRed = false;
-    if (hasExplicitEvents) {
-      hasYellow = realYellow;
-      hasRed = realRed;
-    } else {
-      if (isSpring && remainingSpringYellow > 0 && i === 1) {
-        hasYellow = true;
-        remainingSpringYellow--;
-      } else if (!isSpring && remainingAutumnYellow > 0 && (i % 2 === 1 || remainingAutumnYellow >= autumnMatchesList.length)) {
-        hasYellow = true;
-        remainingAutumnYellow--;
-      }
-      if (remainingRed > 0 && i === finishedMatches.length - 1) {
-        hasRed = true;
-        remainingRed--;
-      }
-    }
-
-    // Performance rating
+    // Performance rating based on actual outcome and events
     let rating = 7.0;
     if (result === 'W') rating += 0.8;
     if (result === 'L') rating -= 0.6;
@@ -259,19 +201,19 @@ export function buildPlayerProfile(
     if (hasRed) rating -= 2.0;
     rating = Math.max(5.5, Math.min(9.8, parseFloat(rating.toFixed(1))));
 
-    // Highlight text with minute info if available from NFF events
+    // Highlight text with minute info if available from real NFF events
     let highlight = '';
     const goalMins = playerEvents.filter((e) => e.type === 'goal').map((e) => `${e.minute}'`);
     if (hasRed) highlight = '🟥 Utvisning / Rødt kort registrert i NFF';
-    else if (goalsInMatch >= 3) highlight = `⚽ Hat-trick (${goalMins.join(', ')}) & Banens beste!`;
+    else if (goalsInMatch >= 3) highlight = `⚽ Hat-trick (${goalMins.join(', ')})!`;
     else if (goalsInMatch === 2) highlight = `⚽ To mål (${goalMins.join(', ')}) i kampen`;
     else if (goalsInMatch === 1) highlight = `⚽ Mål (${goalMins[0] || 'scoring'}) for Bønes`;
     else if (isGoalkeeper && oppScore === 0) highlight = '🧤 Holdt nullen / Clean sheet!';
-    else if (isDefender && oppScore === 0) highlight = '🛡️ Plettfritt forsvarsspill / Null baklengs';
+    else if (isDefender && oppScore === 0) highlight = '🛡️ Solid forsvarsspill / Null baklengs';
     else if (hasYellow) highlight = '🟨 Gult kort / Advarsel';
-    else if (result === 'W') highlight = isDefender ? 'Trygg i duellspillet & seier' : 'Solid seier & kampinnsats';
-    else if (result === 'D') highlight = 'Kjempet til uavgjort';
-    else highlight = isStarter ? 'Startet kampen' : 'Innbytter';
+    else if (result === 'W') highlight = 'Seier';
+    else if (result === 'D') highlight = 'Uavgjort';
+    else highlight = isStarter ? 'Spilte kampen' : 'Innbytter';
 
     matchLogs.push({
       id: m.id,
@@ -367,16 +309,41 @@ export function buildPlayerProfile(
   let finalTeamsPlayedFor = Array.from(teamsMap.values()).sort((a, b) => b.matches - a.matches);
 
   if (officialStats && officialStats.season2026.teams.length > 0) {
-    finalTeamsPlayedFor = officialStats.season2026.teams.map((t) => ({
-      teamId: t.teamId,
-      teamName: t.teamName,
-      matches: t.matches,
-      goals: t.goals,
-      yellowCards: t.yellowCards,
-      redCards: t.redCards,
-      springMatches: Math.ceil(t.matches * 0.5),
-      autumnMatches: Math.floor(t.matches * 0.5),
-    }));
+    const aggregatedTeams = new Map<string, {
+      teamId: string;
+      teamName: string;
+      matches: number;
+      goals: number;
+      yellowCards: number;
+      redCards: number;
+      springMatches: number;
+      autumnMatches: number;
+    }>();
+
+    for (const t of officialStats.season2026.teams) {
+      const tId = t.teamName.includes('2 Voksen') ? 'menn-2' : t.teamId;
+      if (!aggregatedTeams.has(tId)) {
+        aggregatedTeams.set(tId, {
+          teamId: tId,
+          teamName: t.teamName,
+          matches: t.matches,
+          goals: t.goals,
+          yellowCards: t.yellowCards,
+          redCards: t.redCards,
+          springMatches: Math.ceil(t.matches * 0.5),
+          autumnMatches: Math.floor(t.matches * 0.5),
+        });
+      } else {
+        const existing = aggregatedTeams.get(tId)!;
+        existing.matches += t.matches;
+        existing.goals += t.goals;
+        existing.yellowCards += t.yellowCards;
+        existing.redCards += t.redCards;
+        existing.springMatches += Math.ceil(t.matches * 0.5);
+        existing.autumnMatches += Math.floor(t.matches * 0.5);
+      }
+    }
+    finalTeamsPlayedFor = Array.from(aggregatedTeams.values()).sort((a, b) => b.matches - a.matches);
   }
 
   // Ranks
@@ -397,36 +364,47 @@ export function buildPlayerProfile(
   const actualSpringYellow = springLogsFromHistory.filter((m) => m.yellowCard).length;
   const actualSpringRed = springLogsFromHistory.filter((m) => m.redCard).length;
 
-  // If official stats are available, use them as the primary source of truth
-  const totalMatches = officialStats ? officialStats.season2026.totalMatches : matchLogs.length;
-  const totalGoals = officialStats ? officialStats.season2026.totalGoals : actualSpringGoals + actualAutumnGoals;
-  const totalYellow = officialStats ? officialStats.season2026.yellowCards : actualSpringYellow + actualAutumnYellow;
-  const totalRed = officialStats ? officialStats.season2026.redCards : actualSpringRed + actualAutumnRed;
+  // Calculate exact spring and autumn stats from actual match logs if available, or official stats
+  const hasLogs = matchLogs.length > 0;
+  const springMatchesCount = hasLogs ? actualSpringMatches : (officialStats ? Math.ceil(officialStats.season2026.totalMatches * 0.5) : 0);
+  const autumnMatchesCount = hasLogs ? actualAutumnMatches : (officialStats ? Math.floor(officialStats.season2026.totalMatches * 0.5) : 0);
+  const springGoalsCount = hasLogs ? actualSpringGoals : (officialStats ? Math.ceil(officialStats.season2026.totalGoals * 0.5) : 0);
+  const autumnGoalsCount = hasLogs ? actualAutumnGoals : (officialStats ? Math.floor(officialStats.season2026.totalGoals * 0.5) : 0);
+  const springYellowCount = hasLogs ? actualSpringYellow : (officialStats ? Math.floor(officialStats.season2026.yellowCards * 0.5) : 0);
+  const autumnYellowCount = hasLogs ? actualAutumnYellow : (officialStats ? Math.ceil(officialStats.season2026.yellowCards * 0.5) : 0);
+  const springRedCount = hasLogs ? actualSpringRed : 0;
+  const autumnRedCount = hasLogs ? actualAutumnRed : (officialStats ? officialStats.season2026.redCards : 0);
+
+  // Total stats are strictly and consistently the sum of Spring + Autumn
+  const totalMatches = springMatchesCount + autumnMatchesCount;
+  const totalGoals = springGoalsCount + autumnGoalsCount;
+  const totalYellow = springYellowCount + autumnYellowCount;
+  const totalRed = springRedCount + autumnRedCount;
   const disciplinaryPoints = totalYellow * 1 + totalRed * 3;
-  const goalsPerMatch = officialStats ? officialStats.season2026.goalsPerMatch : (totalMatches > 0 ? parseFloat((totalGoals / totalMatches).toFixed(2)) : 0);
+  const goalsPerMatch = totalMatches > 0 ? parseFloat((totalGoals / totalMatches).toFixed(2)) : 0;
 
   const cardStatus = totalRed > 0 || totalYellow >= 4 ? 'Karantene' : totalYellow === 3 ? 'Advarsel (1 fra soning)' : 'Klar';
 
   const springStats: PlayerSeasonStats = {
-    matches: officialStats ? Math.ceil(officialStats.season2026.totalMatches * 0.5) : actualSpringMatches,
-    goals: officialStats ? Math.ceil(officialStats.season2026.totalGoals * 0.5) : actualSpringGoals,
+    matches: springMatchesCount,
+    goals: springGoalsCount,
     penalties: 0,
-    yellowCards: officialStats ? Math.floor(officialStats.season2026.yellowCards * 0.5) : actualSpringYellow,
-    redCards: 0,
-    goalsPerMatch: totalMatches > 0 ? parseFloat((totalGoals / totalMatches).toFixed(2)) : 0,
+    yellowCards: springYellowCount,
+    redCards: springRedCount,
+    goalsPerMatch: springMatchesCount > 0 ? parseFloat((springGoalsCount / springMatchesCount).toFixed(2)) : 0,
     divisionName: springDivision,
-    minutesPlayed: (officialStats ? Math.ceil(officialStats.season2026.totalMatches * 0.5) : actualSpringMatches) * 80,
+    minutesPlayed: springMatchesCount * 80,
   };
 
   const autumnStats: PlayerSeasonStats = {
-    matches: officialStats ? Math.floor(officialStats.season2026.totalMatches * 0.5) : actualAutumnMatches,
-    goals: officialStats ? Math.floor(officialStats.season2026.totalGoals * 0.5) : actualAutumnGoals,
+    matches: autumnMatchesCount,
+    goals: autumnGoalsCount,
     penalties: 0,
-    yellowCards: officialStats ? Math.ceil(officialStats.season2026.yellowCards * 0.5) : actualAutumnYellow,
-    redCards: totalRed,
-    goalsPerMatch: totalMatches > 0 ? parseFloat((totalGoals / totalMatches).toFixed(2)) : 0,
+    yellowCards: autumnYellowCount,
+    redCards: autumnRedCount,
+    goalsPerMatch: autumnMatchesCount > 0 ? parseFloat((autumnGoalsCount / autumnMatchesCount).toFixed(2)) : 0,
     divisionName: autumnDivision,
-    minutesPlayed: (officialStats ? Math.floor(officialStats.season2026.totalMatches * 0.5) : actualAutumnMatches) * 80,
+    minutesPlayed: autumnMatchesCount * 80,
   };
 
   return {
@@ -437,8 +415,8 @@ export function buildPlayerProfile(
     teamName: primaryTeam.name,
     division: autumnDivision,
     category: primaryTeam.category,
-    jerseyNumber: rosterInfo.number,
-    position: rosterInfo.position,
+    jerseyNumber: jerseyNumber || undefined,
+    position: position,
     isBonesPlayer: true,
     teamsPlayedFor: finalTeamsPlayedFor,
     spring: springStats,

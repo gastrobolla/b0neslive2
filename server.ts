@@ -60,7 +60,7 @@ function checkMatchWindow(): { isActive: boolean; activeMatches: Match[]; detail
     return {
       isActive: true,
       activeMatches,
-      details: `🟢 Kampvindu aktivt: ${desc}. NFF sjekkes hvert 60. sekund.`
+      details: `🟢 Kampvindu aktivt: ${desc}. NFF FIKS sjekkes hvert 3. minutt.`
     };
   }
 
@@ -308,7 +308,7 @@ function addScanLog(level: 'info' | 'success' | 'update' | 'warning', source: st
 async function runScannerCycle(manual: boolean = false): Promise<void> {
   const now = new Date();
   currentData.scanner.lastScanned = now.toLocaleTimeString('no-NO');
-  currentData.scanner.nextScanSeconds = 60;
+  currentData.scanner.nextScanSeconds = 180; // 3 minutes cycle
 
   const windowInfo = checkMatchWindow();
   currentData.activeMatchWindow = windowInfo.isActive;
@@ -392,6 +392,19 @@ app.get('/api/bones/data', (req, res) => {
     rebuildScorersAndCardsFromEvents(currentData.matches);
   }
   res.json(currentData);
+});
+
+// 1a. Lightweight version check endpoint for adaptive polling
+app.get('/api/bones/data/check', (req, res) => {
+  const windowInfo = checkMatchWindow();
+  res.json({
+    success: true,
+    dataVersion: currentData.dataVersion || 1,
+    activeMatchWindow: windowInfo.isActive,
+    hasLiveMatches: currentData.matches.some(m => m.status === 'live'),
+    lastScanned: currentData.scanner.lastScanned,
+    lastRealScraped: currentData.lastRealScraped
+  });
 });
 
 // 1b. Dedicated filtered matches endpoint

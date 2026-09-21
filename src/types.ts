@@ -13,6 +13,8 @@ export interface TeamInfo {
   nffCode: string;
   fiksId?: number;
   tourneyId?: number;
+  previousRank?: number;
+  rankTrend?: 'up' | 'down' | 'same';
 }
 
 export interface TableRow {
@@ -43,6 +45,7 @@ export interface DivisionTable {
 
 export interface TopScorer {
   id: string;
+  fiksId?: number;
   name: string;
   teamId: string;
   teamName: string;
@@ -56,6 +59,7 @@ export interface TopScorer {
 
 export interface CardStatistic {
   id: string;
+  fiksId?: number;
   name: string;
   teamId: string;
   teamName: string;
@@ -143,16 +147,39 @@ export interface PlayerProfile {
   officialNffData?: any;
 }
 
-export type PlayerPosition = 'Keeper' | 'Forsvar' | 'Midtbane' | 'Angrep';
+export type PlayerPosition = 'Keeper' | 'Forsvar' | 'Midtbane' | 'Angrep' | 'Ukjent' | 'unknown';
+export type PositionSource = 'NFF' | 'unknown';
+
+export interface Person {
+  canonicalId: string; // e.g. "fiks-123456" or "legacy_ola_nordmann" (never contains teamId)
+  fiksId?: number;
+  displayName: string;
+  birthYear?: number;
+  gender?: 'G' | 'J' | 'M' | 'K' | 'U';
+  teams: PlayerTeamRepresentation[];
+  position?: PlayerPosition;
+  positionSource?: PositionSource;
+}
+
+export interface IdentityResolutionResult {
+  canonicalId?: string;
+  fiksId?: number;
+  displayName: string;
+  method: 'fiksId' | 'canonicalPlayerId' | 'legacyMapping' | 'scopedNameMatch' | 'unresolved';
+  confidence: 'authoritative' | 'verified' | 'ambiguous' | 'unresolved';
+  isAmbiguous: boolean;
+  candidateCount?: number;
+}
 
 export interface Player {
-  id: string;
+  id: string; // canonical format: "fiks-${fiksId}" or "p-${fiksId}" or "legacy_${nameSlug}"
   name: string;
   teamId?: string;
   teamName?: string;
   jerseyNumber?: number;
   number?: number;
-  position: PlayerPosition;
+  position?: PlayerPosition;
+  positionSource?: PositionSource;
   fiksId?: number;
   role?: 'Kaptein' | 'Visekaptein' | 'Spiller';
   matches: number;
@@ -183,12 +210,17 @@ export interface MatchEvent {
   matchId: string;
   minute: number;
   type: MatchEventType;
-  playerId?: string; // FIKS ID (e.g. "fiks-123456") or legacy fallback (e.g. "legacy_sander_fjellstad")
+  playerId?: string; // Canonical person ID (e.g. "fiks-123456" or "legacy_sander_fjellstad")
   fiksId?: number; // Numeric FIKS person ID if available
   player?: string; // Display name
+  ambiguous?: boolean; // True if name match was ambiguous across multiple players
+  unresolved?: boolean; // True if identity could not be confidently established
+  resolutionMethod?: 'fiksId' | 'canonicalPlayerId' | 'legacyMapping' | 'scopedNameMatch' | 'unresolved';
+  resolutionConfidence?: 'authoritative' | 'verified' | 'ambiguous' | 'unresolved';
   assistPlayerId?: string;
   assistFiksId?: number;
   assistPlayer?: string; // Display name
+  assistAmbiguous?: boolean;
   team: string; // Display team name
   teamId?: string; // Identifier for team if known
   description: string;
@@ -342,6 +374,7 @@ export interface BonesClubData {
   matchWindowDetails?: string;
   processedEventIds?: string[];
   dataVersion?: number;
+  schemaVersion?: string;
   lastDiskSaved?: string;
 }
 

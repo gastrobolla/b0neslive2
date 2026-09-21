@@ -928,9 +928,9 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                   <div className="relative z-10 flex flex-col justify-between min-h-[310px] py-2">
                     {/* Forwards */}
                     <div className="flex justify-around items-center">
-                      {(forwards.length > 0 ? forwards : starters.slice(8, 11)).map((p) => (
+                      {(forwards.length > 0 ? forwards : starters.slice(8, 11)).map((p, idx) => (
                         <SofascorePlayerPin
-                          key={p.id || p.name}
+                          key={`fwd-${p.id || p.name}-${idx}`}
                           player={p}
                           onClick={() => onSelectPlayer && onSelectPlayer(p.name, currentMatch.teamId)}
                         />
@@ -939,9 +939,9 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
 
                     {/* Midfielders */}
                     <div className="flex justify-around items-center">
-                      {(midfielders.length > 0 ? midfielders : starters.slice(5, 8)).map((p) => (
+                      {(midfielders.length > 0 ? midfielders : starters.slice(5, 8)).map((p, idx) => (
                         <SofascorePlayerPin
-                          key={p.id || p.name}
+                          key={`mid-${p.id || p.name}-${idx}`}
                           player={p}
                           onClick={() => onSelectPlayer && onSelectPlayer(p.name, currentMatch.teamId)}
                         />
@@ -950,9 +950,9 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
 
                     {/* Defenders */}
                     <div className="flex justify-around items-center">
-                      {(defenders.length > 0 ? defenders : starters.slice(1, 5)).map((p) => (
+                      {(defenders.length > 0 ? defenders : starters.slice(1, 5)).map((p, idx) => (
                         <SofascorePlayerPin
-                          key={p.id || p.name}
+                          key={`def-${p.id || p.name}-${idx}`}
                           player={p}
                           onClick={() => onSelectPlayer && onSelectPlayer(p.name, currentMatch.teamId)}
                         />
@@ -961,9 +961,9 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
 
                     {/* Goalkeeper */}
                     <div className="flex justify-center items-center">
-                      {(keepers.length > 0 ? keepers : starters.slice(0, 1)).map((p) => (
+                      {(keepers.length > 0 ? keepers : starters.slice(0, 1)).map((p, idx) => (
                         <SofascorePlayerPin
-                          key={p.id || p.name}
+                          key={`gk-${p.id || p.name}-${idx}`}
                           player={p}
                           isKeeper
                           onClick={() => onSelectPlayer && onSelectPlayer(p.name, currentMatch.teamId)}
@@ -983,12 +983,12 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                   <span className="text-[11px] text-slate-400">Klikk på spiller for profil</span>
                 </div>
                 <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
-                  {starters.map((p) => {
+                  {starters.map((p, idx) => {
                     const pNum = (p as any).jerseyNumber ?? p.number ?? '?';
                     const isCaptain = p.role === 'Kaptein';
                     return (
                       <div
-                        key={p.id || `${p.name}-${pNum}`}
+                        key={`starter-${p.id || p.name}-${idx}`}
                         onClick={() => onSelectPlayer && onSelectPlayer(p.name, currentMatch.teamId)}
                         className="px-3.5 py-2.5 flex items-center justify-between hover:bg-blue-50/60 cursor-pointer transition-colors group"
                       >
@@ -1049,12 +1049,12 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                     Innbyttere & Reserver ({bench.length})
                   </h5>
                   <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
-                    {bench.map((p) => {
+                    {bench.map((p, idx) => {
                       const pNum = (p as any).jerseyNumber ?? p.number ?? '?';
                       const isCaptain = p.role === 'Kaptein';
                       return (
                         <div
-                          key={p.id || `${p.name}-${pNum}`}
+                          key={`bench-${p.id || p.name}-${idx}`}
                           onClick={() => onSelectPlayer && onSelectPlayer(p.name, currentMatch.teamId)}
                           className="px-3.5 py-2 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors group"
                         >

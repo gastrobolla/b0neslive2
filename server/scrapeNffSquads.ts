@@ -123,18 +123,18 @@ export async function fetchNffSquads(): Promise<TeamSquad[]> {
             name = name.replace(/^[?\d\s]+/, '').trim();
 
             players.push({
-              id: `p-${fiksId}`,
+              id: `fiks-${fiksId}`,
               fiksId: parseInt(fiksId, 10),
               name,
               teamId: t.id,
               teamName: t.name,
-              jerseyNumber: jerseyNumber || (players.length + 1),
+              jerseyNumber: jerseyNumber,
               position: pos,
+              positionSource: 'NFF',
               matches: 0,
               goals: 0,
               yellowCards: 0,
               redCards: 0,
-              isStarter: players.length < 11
             });
           }
         }
@@ -143,7 +143,6 @@ export async function fetchNffSquads(): Promise<TeamSquad[]> {
       // If no cards were in Spillere-tab, extract all person links from team page excluding known staff
       if (players.length === 0) {
         const allPersons = [...html.matchAll(/href="\/fotballdata\/person\/profil\/\?fiksId=(\d+)"[^>]*>([^<]+)<\/a>/gi)];
-        let num = 1;
         for (const p of allPersons) {
           const fiksId = p[1];
           if (seenFiks.has(fiksId)) continue;
@@ -153,36 +152,20 @@ export async function fetchNffSquads(): Promise<TeamSquad[]> {
           // Skip if coach and we already have players
           if (coaches.includes(pName) && allPersons.length > 5) continue;
 
-          // Realistic position distribution
-          let pos: 'Keeper' | 'Forsvar' | 'Midtbane' | 'Angrep' = 'Midtbane';
-          if (players.length === 0) pos = 'Keeper';
-          else if (players.length <= 4) pos = 'Forsvar';
-          else if (players.length <= 8) pos = 'Midtbane';
-          else pos = 'Angrep';
-
           players.push({
-            id: `p-${fiksId}`,
+            id: `fiks-${fiksId}`,
             fiksId: parseInt(fiksId, 10),
             name: pName,
             teamId: t.id,
             teamName: t.name,
-            jerseyNumber: num++,
-            position: pos,
+            position: 'Ukjent',
+            positionSource: 'unknown',
             matches: 0,
             goals: 0,
             yellowCards: 0,
             redCards: 0,
-            isStarter: players.length < 11
           });
         }
-      }
-
-      // Mark captain and vice-captain if senior/junior
-      if (players.length > 1 && !players.some(p => p.role === 'Kaptein')) {
-        players[1].role = 'Kaptein';
-      }
-      if (players.length > 5 && !players.some(p => p.role === 'Visekaptein')) {
-        players[5].role = 'Visekaptein';
       }
 
       result.push({

@@ -633,9 +633,9 @@ export const PlayerStatsView: React.FC<PlayerStatsViewProps> = ({
                             {/* Team affiliation and multi-team chips */}
                             {hasMultiTeams ? (
                               <div className="flex flex-wrap items-center gap-1 mt-1">
-                                {p.teamsPlayedFor?.map((t) => (
+                                {p.teamsPlayedFor?.map((t, tIdx) => (
                                   <button
-                                    key={t.teamId}
+                                    key={`${t.teamId}-${tIdx}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       onSelectTeam(t.teamId);

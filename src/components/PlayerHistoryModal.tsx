@@ -44,12 +44,30 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
 
   if (!player) return null;
 
-  // Extract autumn season stats directly from match history logs where season is 'Høst'
-  const autumnLogs = player.matchHistory.filter((log) => log.season === 'Høst');
-  const autumnMatchesCount = autumnLogs.length > 0 ? autumnLogs.length : player.autumn.matches;
-  const autumnGoalsCount = autumnLogs.length > 0 ? autumnLogs.reduce((sum, l) => sum + (l.goals || 0), 0) : player.autumn.goals;
-  const autumnYellowCount = autumnLogs.filter((l) => l.yellowCard).length;
-  const autumnRedCount = autumnLogs.filter((l) => l.redCard).length;
+  // Filter logs by selected team if multi-lag filter is applied
+  const baseLogs = React.useMemo(() => {
+    if (selectedTeamFilter === 'all') return player.matchHistory;
+    return player.matchHistory.filter((log) => log.teamId === selectedTeamFilter);
+  }, [player.matchHistory, selectedTeamFilter]);
+
+  // Extract autumn and spring season stats directly from baseLogs
+  const autumnLogs = React.useMemo(() => baseLogs.filter((log) => log.season === 'Høst'), [baseLogs]);
+  const springLogs = React.useMemo(() => baseLogs.filter((log) => log.season === 'Vår'), [baseLogs]);
+
+  const autumnMatchesCount = baseLogs.length > 0
+    ? autumnLogs.length
+    : (selectedTeamFilter === 'all'
+        ? player.autumn.matches
+        : (player.teamsPlayedFor?.find((t) => t.teamId === selectedTeamFilter)?.autumnMatches ?? 0));
+  const autumnGoalsCount = baseLogs.length > 0
+    ? autumnLogs.reduce((sum, l) => sum + (l.goals || 0), 0)
+    : (selectedTeamFilter === 'all' ? player.autumn.goals : 0);
+  const autumnYellowCount = baseLogs.length > 0
+    ? autumnLogs.filter((l) => l.yellowCard).length
+    : (selectedTeamFilter === 'all' ? player.autumn.yellowCards : 0);
+  const autumnRedCount = baseLogs.length > 0
+    ? autumnLogs.filter((l) => l.redCard).length
+    : (selectedTeamFilter === 'all' ? player.autumn.redCards : 0);
   const autumnGoalsPerMatch = autumnMatchesCount > 0 ? (autumnGoalsCount / autumnMatchesCount).toFixed(2) : '0.00';
   const autumnWins = autumnLogs.filter((l) => l.result === 'W').length;
   const autumnDraws = autumnLogs.filter((l) => l.result === 'D').length;
@@ -58,28 +76,37 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
     ? (autumnLogs.reduce((sum, l) => sum + l.rating, 0) / autumnLogs.length).toFixed(1)
     : null;
 
-  // Extract spring season stats directly from match history logs where season is 'Vår'
-  const springLogs = player.matchHistory.filter((log) => log.season === 'Vår');
-  const springMatchesCount = springLogs.length > 0 ? springLogs.length : player.spring.matches;
-  const springGoalsCount = springLogs.length > 0 ? springLogs.reduce((sum, l) => sum + (l.goals || 0), 0) : player.spring.goals;
-  const springYellowCount = springLogs.filter((l) => l.yellowCard).length;
-  const springRedCount = springLogs.filter((l) => l.redCard).length;
+  const springMatchesCount = baseLogs.length > 0
+    ? springLogs.length
+    : (selectedTeamFilter === 'all'
+        ? player.spring.matches
+        : (player.teamsPlayedFor?.find((t) => t.teamId === selectedTeamFilter)?.springMatches ?? 0));
+  const springGoalsCount = baseLogs.length > 0
+    ? springLogs.reduce((sum, l) => sum + (l.goals || 0), 0)
+    : (selectedTeamFilter === 'all' ? player.spring.goals : 0);
+  const springYellowCount = baseLogs.length > 0
+    ? springLogs.filter((l) => l.yellowCard).length
+    : (selectedTeamFilter === 'all' ? player.spring.yellowCards : 0);
+  const springRedCount = baseLogs.length > 0
+    ? springLogs.filter((l) => l.redCard).length
+    : (selectedTeamFilter === 'all' ? player.spring.redCards : 0);
   const springGoalsPerMatch = springMatchesCount > 0 ? (springGoalsCount / springMatchesCount).toFixed(2) : '0.00';
 
-  // Overall totals derived from official NFF stats or player.total
-  const totalMatchesCount = player.officialNffData ? player.officialNffData.season2026.totalMatches : (player.total?.matches || (autumnMatchesCount + springMatchesCount));
-  const totalGoalsCount = player.officialNffData ? player.officialNffData.season2026.totalGoals : (player.total?.goals ?? (autumnGoalsCount + springGoalsCount));
-  const totalYellowCount = player.officialNffData ? player.officialNffData.season2026.yellowCards : (player.total?.yellowCards ?? (autumnYellowCount + springYellowCount));
-  const totalRedCount = player.officialNffData ? player.officialNffData.season2026.redCards : (player.total?.redCards ?? (autumnRedCount + springRedCount));
+  // Overall totals derived directly from Spring + Autumn so that Vår + Høst ALWAYS equals Samlet:
+  const totalMatchesCount = springMatchesCount + autumnMatchesCount;
+  const totalGoalsCount = springGoalsCount + autumnGoalsCount;
+  const totalYellowCount = springYellowCount + autumnYellowCount;
+  const totalRedCount = springRedCount + autumnRedCount;
   const totalGoalsPerMatch = totalMatchesCount > 0 ? (totalGoalsCount / totalMatchesCount).toFixed(2) : '0.00';
   const totalDisciplinaryPoints = totalYellowCount * 1 + totalRedCount * 3;
 
-  const filteredLogs = player.matchHistory.filter((log) => {
-    if (selectedTeamFilter !== 'all' && log.teamId !== selectedTeamFilter) return false;
-    if (activeSeasonTab === 'host') return log.season === 'Høst';
-    if (activeSeasonTab === 'var') return log.season === 'Vår';
-    return true;
-  });
+  const filteredLogs = React.useMemo(() => {
+    return baseLogs.filter((log) => {
+      if (activeSeasonTab === 'host') return log.season === 'Høst';
+      if (activeSeasonTab === 'var') return log.season === 'Vår';
+      return true;
+    });
+  }, [baseLogs, activeSeasonTab]);
 
   const isSuspended = player.cardStatus === 'Karantene';
   const isWarning = player.cardStatus.includes('Advarsel');
@@ -284,11 +311,11 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {player.teamsPlayedFor.map((t) => {
+                {player.teamsPlayedFor.map((t, idx) => {
                   const isSelected = selectedTeamFilter === t.teamId;
                   return (
                     <button
-                      key={t.teamId}
+                      key={`${t.teamId}-${idx}`}
                       onClick={() => setSelectedTeamFilter(isSelected ? 'all' : t.teamId)}
                       className={`text-left p-3 rounded-lg border transition-all ${
                         isSelected
@@ -493,7 +520,9 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                       ⚡ Samlet Sesong 2026
                     </span>
                     <span className="text-[11px] text-blue-200">
-                      {activeSeasonTab === 'all' ? 'Alle i logg ✓' : 'Vår + Høst'}
+                      {selectedTeamFilter !== 'all'
+                        ? `${player.teamsPlayedFor?.find((t) => t.teamId === selectedTeamFilter)?.teamName.replace('Bønes ', '') || 'Valgt lag'} (Vår + Høst)`
+                        : (activeSeasonTab === 'all' ? 'Alle i logg ✓' : 'Vår + Høst')}
                     </span>
                   </div>
 
@@ -529,6 +558,18 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                     {totalDisciplinaryPoints} p ({totalYellowCount}G / {totalRedCount}R)
                   </span>
                 </div>
+
+                {player.officialNffData && selectedTeamFilter === 'all' && (
+                  <div className="mt-2.5 pt-2 border-t border-white/20 flex items-center justify-between text-[11px] text-blue-200">
+                    <span className="flex items-center space-x-1">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>NFF FIKS offisielt:</span>
+                    </span>
+                    <span className="font-mono font-bold text-amber-300">
+                      {player.officialNffData.season2026.totalMatches} k / {player.officialNffData.season2026.totalGoals} mål
+                    </span>
+                  </div>
+                )}
               </div>
 
             </div>
@@ -583,8 +624,8 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono">
-                    {player.teamsPlayedFor.map((t) => (
-                      <tr key={t.teamId} className="hover:bg-slate-50/60 transition-colors">
+                    {player.teamsPlayedFor.map((t, idx) => (
+                      <tr key={`${t.teamId}-${idx}`} className="hover:bg-slate-50/60 transition-colors">
                         <td className="py-2.5 px-3 font-sans font-semibold text-slate-900 flex items-center space-x-1.5">
                           <span className="w-2 h-2 rounded-full bg-[#165094]" />
                           <span>{t.teamName}</span>
@@ -803,9 +844,9 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                     >
                       Alle lag ({player.matchHistory.length})
                     </button>
-                    {player.teamsPlayedFor.map((t) => (
+                    {player.teamsPlayedFor.map((t, idx) => (
                       <button
-                        key={t.teamId}
+                        key={`${t.teamId}-${idx}`}
                         onClick={() => setSelectedTeamFilter(t.teamId)}
                         className={`px-2 py-0.5 rounded-md font-semibold transition-all ${
                           selectedTeamFilter === t.teamId

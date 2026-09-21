@@ -90,29 +90,29 @@ export const LineupModal: React.FC<LineupModalProps> = ({
             <div className="relative z-10 flex flex-col justify-between h-72 py-1">
               {/* Forwards Row */}
               <div className="flex justify-around items-center">
-                {forwards.map((p) => (
-                  <PitchPlayerPin key={p.id} player={p} onClick={() => onSelectPlayer(p.name, match.teamId)} />
+                {forwards.map((p, idx) => (
+                  <PitchPlayerPin key={`${p.id || p.name}-${idx}`} player={p} onClick={() => onSelectPlayer(p.name, match.teamId)} />
                 ))}
               </div>
 
               {/* Midfield Row */}
               <div className="flex justify-around items-center">
-                {midfielders.map((p) => (
-                  <PitchPlayerPin key={p.id} player={p} onClick={() => onSelectPlayer(p.name, match.teamId)} />
+                {midfielders.map((p, idx) => (
+                  <PitchPlayerPin key={`${p.id || p.name}-${idx}`} player={p} onClick={() => onSelectPlayer(p.name, match.teamId)} />
                 ))}
               </div>
 
               {/* Defense Row */}
               <div className="flex justify-around items-center">
-                {defenders.map((p) => (
-                  <PitchPlayerPin key={p.id} player={p} onClick={() => onSelectPlayer(p.name, match.teamId)} />
+                {defenders.map((p, idx) => (
+                  <PitchPlayerPin key={`${p.id || p.name}-${idx}`} player={p} onClick={() => onSelectPlayer(p.name, match.teamId)} />
                 ))}
               </div>
 
               {/* Keeper Row */}
               <div className="flex justify-center items-center">
-                {keepers.map((p) => (
-                  <PitchPlayerPin key={p.id} player={p} isKeeper onClick={() => onSelectPlayer(p.name, match.teamId)} />
+                {keepers.map((p, idx) => (
+                  <PitchPlayerPin key={`${p.id || p.name}-${idx}`} player={p} isKeeper onClick={() => onSelectPlayer(p.name, match.teamId)} />
                 ))}
               </div>
             </div>
@@ -133,9 +133,9 @@ export const LineupModal: React.FC<LineupModalProps> = ({
             </div>
 
             <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
-              {starters.map((player) => (
+              {starters.map((player, idx) => (
                 <PlayerRow
-                  key={player.id}
+                  key={`${player.id || player.name}-${idx}`}
                   player={player}
                   onClick={() => onSelectPlayer(player.name, match.teamId)}
                 />
@@ -151,9 +151,9 @@ export const LineupModal: React.FC<LineupModalProps> = ({
                 Innbyttere / Reserver ({bench.length})
               </h4>
               <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
-                {bench.map((player) => (
+                {bench.map((player, idx) => (
                   <PlayerRow
-                    key={player.id}
+                    key={`${player.id || player.name}-${idx}`}
                     player={player}
                     isBench
                     onClick={() => onSelectPlayer(player.name, match.teamId)}

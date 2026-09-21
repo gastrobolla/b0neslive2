@@ -10,6 +10,14 @@ import {
   getPlayerIdentity,
   sanitizeSlug,
 } from '../src/utils/derivedStats.js';
+import {
+  enrichMatchEventWithIdentity,
+  toCanonicalPlayerId,
+  extractNumericFiksId,
+  resolvePlayerIdentity,
+  runPlayerIdentityDiagnostics,
+} from '../src/utils/playerResolver.js';
+import { ALL_BONES_PLAYERS } from '../src/data/bonesSquads.js';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'bones_database.json');
@@ -19,14 +27,14 @@ const V1_BAK_FILE = path.join(DATA_DIR, 'bones_database.v1.bak.json');
 /**
  * Migrates data to DatabaseSchemaV2:
  * 1. Automatic backup to bones_database.v1.bak.json if not already present.
- * 2. Normalizes player IDs (prioritizing FIKS ID with fallback to legacy_<name>_<team>).
- * 3. Enforces deterministic MatchEvent IDs: ${matchId}_m${minute}_${type}_${playerId}_${team}
- * 4. Ensures event-driven match scores.
- * 5. Re-derives topScorers and cards from MatchEvents.
- * 6. Sets dataVersion = 2.
+ * 2. Normalizes player IDs across all squads (canonical format, teamId strictly excluded).
+ * 3. Enriches all MatchEvents using 3-tier scoped identity resolution (Lineup -> Squad -> Club) with Ambiguity Guardrail.
+ * 4. Enforces deterministic MatchEvent IDs: ${matchId}_m${minute}_${type}_${playerId}_${team}
+ * 5. Re-derives event-driven match scores and derived stats (topScorers, cards).
+ * 6. Sets schemaVersion = '2.0', dataVersion = 2.
  */
 export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
-  console.log('[Storage] Starting migration to DatabaseSchemaV2...');
+  console.log('[Storage] Starting migration to DatabaseSchemaV2 with canonical player identities...');
 
   // 1. Create .v1.bak.json backup if not already present
   try {
@@ -38,51 +46,67 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
     console.warn('[Storage] Could not create v1 backup:', err.message);
   }
 
-  // 2. Build fast player lookup by name and fiksId
-  const playerFiksByName = new Map<string, number>();
-  if (Array.isArray(data.players)) {
-    for (const p of data.players) {
-      if (p.fiksId) {
-        playerFiksByName.set(p.name.trim().toLowerCase(), p.fiksId);
+  const allClubPlayers: Player[] = [...(data.players || []), ...ALL_BONES_PLAYERS];
+
+  // Build unambiguous legacy map for Bones players (from officialStats and club squads)
+  const legacyMap = new Map<string, number>();
+  const nameToFids = new Map<string, Set<number>>();
+
+  const registerCandidate = (name?: string, fiksId?: number) => {
+    if (!name || !fiksId) return;
+    const slug = name.toLowerCase().trim().replace(/æ/g, 'ae').replace(/ø/g, 'oe').replace(/å/g, 'aa').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!slug) return;
+    if (!nameToFids.has(slug)) nameToFids.set(slug, new Set());
+    nameToFids.get(slug)!.add(fiksId);
+  };
+
+  // From official_nff_player_stats.json
+  const officialFile = path.join(DATA_DIR, 'official_nff_player_stats.json');
+  if (fs.existsSync(officialFile)) {
+    try {
+      const officialObj = JSON.parse(fs.readFileSync(officialFile, 'utf-8'));
+      for (const entry of Object.values(officialObj) as any[]) {
+        if (entry.name && entry.fiksId) {
+          registerCandidate(entry.name, entry.fiksId);
+        }
       }
+    } catch {
+      // ignore
     }
   }
 
-  // Also collect fiksIds from lineups in matches
-  for (const m of data.matches || []) {
-    const allLineup = [
-      ...(m.lineup?.starters || []),
-      ...(m.lineup?.bench || []),
-      ...(m.homeLineup?.starters || []),
-      ...(m.awayLineup?.starters || []),
-    ];
-    for (const lp of allLineup) {
-      if (lp.fiksId && lp.name) {
-        playerFiksByName.set(lp.name.trim().toLowerCase(), lp.fiksId);
-      }
+  // From allClubPlayers
+  for (const p of allClubPlayers) {
+    const fid = extractNumericFiksId(p.fiksId) || extractNumericFiksId(p.id);
+    if (p.name && fid) {
+      registerCandidate(p.name, fid);
     }
   }
 
-  // 3. Migrate all players in data.players
+  // Ambiguity guardrail: only insert into legacyMap if exactly 1 fiksId exists for this name in the club
+  for (const [slug, fids] of nameToFids.entries()) {
+    if (fids.size === 1) {
+      legacyMap.set(slug, Array.from(fids)[0]);
+    }
+  }
+
+  // 2. Migrate all players in data.players to canonical ID
   if (Array.isArray(data.players)) {
     data.players = data.players.map((p) => {
-      const identity = getPlayerIdentity({
-        fiksId: p.fiksId,
-        id: p.id,
-        name: p.name,
-        teamId: p.teamId,
-      });
+      const numFiks = extractNumericFiksId(p.fiksId) || extractNumericFiksId(p.id);
+      const canonId = toCanonicalPlayerId(numFiks ? `fiks-${numFiks}` : p.id, p.name);
+      const isFiks = canonId.startsWith('fiks-');
+      const fid = isFiks ? extractNumericFiksId(canonId) : undefined;
+
       return {
         ...p,
-        id: identity.id,
-        fiksId: identity.isFiks
-          ? p.fiksId || (identity.id.startsWith('fiks-') ? parseInt(identity.id.replace('fiks-', ''), 10) : undefined)
-          : undefined,
+        id: canonId,
+        fiksId: fid,
       };
     });
   }
 
-  // 4. Migrate all matches and their events
+  // 3. Migrate all matches and enrich their events with canonical identity
   const processedEventIds = new Set<string>();
 
   data.matches = (data.matches || []).map((match) => {
@@ -90,54 +114,45 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
       return match;
     }
 
+    const lineupList = [
+      ...(match.lineup?.starters || []),
+      ...(match.lineup?.bench || []),
+      ...(match.lineup?.subs || []),
+      ...(match.homeLineup?.starters || []),
+      ...(match.homeLineup?.bench || []),
+      ...(match.awayLineup?.starters || []),
+      ...(match.awayLineup?.bench || []),
+    ];
+
+    const squadList = (data.players || []).filter((p) => p.teamId === match.teamId);
+
     const eventMap = new Map<string, MatchEvent>();
 
     for (let idx = 0; idx < match.events.length; idx++) {
-      const ev = match.events[idx];
-      const playerName = (ev.player || '').trim();
+      const rawEv = match.events[idx];
 
-      let resolvedFiksId = ev.fiksId;
-      if (!resolvedFiksId && ev.playerId?.startsWith('fiks-')) {
-        resolvedFiksId = parseInt(ev.playerId.replace('fiks-', ''), 10);
-      }
-      if (!resolvedFiksId && playerName) {
-        resolvedFiksId = playerFiksByName.get(playerName.toLowerCase());
-      }
-
-      const identity = getPlayerIdentity({
-        fiksId: resolvedFiksId,
-        playerId: ev.playerId,
-        name: playerName || undefined,
-        teamId: ev.teamId || match.teamId,
+      // Enrich event using scoped resolution and ambiguity guardrail
+      const enriched = enrichMatchEventWithIdentity(rawEv, match, {
+        lineupPlayers: lineupList,
+        squadPlayers: squadList,
+        allClubPlayers: allClubPlayers,
+        legacyMap: legacyMap,
       });
 
+      const effectivePlayerId = enriched.playerId || toCanonicalPlayerId(undefined, enriched.player);
       const deterministicId = generateDeterministicEventId(
         match.id,
-        ev.minute,
-        ev.type,
-        identity.id,
-        ev.team || match.teamName
+        enriched.minute,
+        enriched.type,
+        effectivePlayerId,
+        enriched.team || match.teamName
       );
 
       const normalizedEvent: MatchEvent = {
+        ...enriched,
         id: deterministicId,
         matchId: match.id,
-        minute: ev.minute,
-        type: ev.type,
-        playerId: identity.id,
-        fiksId: identity.isFiks ? resolvedFiksId : undefined,
-        player: ev.player,
-        assistPlayerId: ev.assistPlayerId,
-        assistFiksId: ev.assistFiksId,
-        assistPlayer: ev.assistPlayer,
-        team: ev.team || match.teamName,
-        teamId: ev.teamId || match.teamId,
-        description: ev.description,
-        source: ev.source || 'NFF',
-        reportedBy: ev.reportedBy,
-        createdAt:
-          ev.createdAt ||
-          (match.date ? `${match.date}T${match.time || '12:00'}:00Z` : new Date().toISOString()),
+        playerId: effectivePlayerId,
       };
 
       eventMap.set(deterministicId, normalizedEvent);
@@ -171,7 +186,7 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
     };
   });
 
-  // 5. Re-derive topScorers and cards from the normalized events
+  // 4. Re-derive topScorers and cards from the normalized events
   data.topScorers = calculateTopScorers(data.matches, data.players, { bonesOnly: true });
   data.cards = calculateCardStatistics(data.matches, data.players, { bonesOnly: true });
 
@@ -184,9 +199,12 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
     lastDiskSaved: new Date().toISOString(),
   };
 
+  // Run integrity diagnostics
+  const diag = runPlayerIdentityDiagnostics(v2Data);
   console.log(
-    `[Storage] Migration complete. Normalized ${data.matches.length} matches and ${v2Data.processedEventIds.length} events to V2.`
+    `[Storage] Migration complete. Diagnostics: ${diag.totalUniqueFiksPersons} unique FIKS persons, ${diag.totalPlayerRecords} squad records, ${diag.eventsDiagnostics.totalEvents} match events (${diag.eventsDiagnostics.authoritativeEvents} authoritative FIKS events, ${diag.eventsDiagnostics.unresolvedEvents} legacy, ${diag.eventsDiagnostics.ambiguousEvents} ambiguous).`
   );
+
   return v2Data;
 }
 
@@ -206,8 +224,10 @@ export function loadPersistedData(): BonesClubData {
       // Verify that parsed object contains minimal required structure
       if (parsed && Array.isArray(parsed.teams) && parsed.tables && Array.isArray(parsed.matches)) {
         // Check if migration to V2 is needed
-        if (!parsed.dataVersion || parsed.dataVersion < 2) {
-          console.log(`[Storage] Database is at version ${parsed.dataVersion || 1}. Migrating to V2...`);
+        if (parsed.schemaVersion !== '2.0' || !parsed.dataVersion || parsed.dataVersion < 2) {
+          console.log(
+            `[Storage] Database schema is not 2.0 (current schemaVersion: ${parsed.schemaVersion || 'none'}, dataVersion: ${parsed.dataVersion}). Migrating to V2...`
+          );
           const v2 = migrateToV2(parsed);
           savePersistedData(v2);
           return v2;
@@ -283,9 +303,8 @@ export function savePersistedData(data: BonesClubData): void {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
 
-    if (!data.dataVersion || data.dataVersion < 2) {
-      data.dataVersion = 2;
-    }
+    data.dataVersion = 2;
+    data.schemaVersion = '2.0';
     data.lastDiskSaved = new Date().toISOString();
 
     const tempFile = `${DB_FILE}.tmp`;

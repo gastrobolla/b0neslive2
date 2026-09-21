@@ -664,7 +664,10 @@ export async function scrapeMatchEvents(match: Match): Promise<MatchEvent[]> {
           const minMatch = block.match(/class="timelineMinute"[^>]*>\s*(\d+)/i) || block.match(/(\d+)\s*(?:'|&apos;)/i);
           const minute = minMatch ? parseInt(minMatch[1], 10) : (idx + 1) * 10;
 
-          const pMatch = block.match(/class="eventHeading"[^>]*>([^<]+)/i);
+          const fiksIdMatch = block.match(/href="[^"]*fiksId=(\d+)"/i);
+          const eventFiksId = fiksIdMatch ? parseInt(fiksIdMatch[1], 10) : undefined;
+
+          const pMatch = block.match(/class="eventHeading"[^>]*>([^<]+)/i) || block.match(/class="eventHeading"[^>]*><a[^>]*>([^<]+)<\/a>/i);
           let playerName = pMatch ? decodeEntities(pMatch[1].trim()) : undefined;
           if (playerName && (playerName.toLowerCase().includes('personinfo ikke') || playerName.toLowerCase().includes('ikke tilgjengelig'))) {
             playerName = undefined;
@@ -693,6 +696,8 @@ export async function scrapeMatchEvents(match: Match): Promise<MatchEvent[]> {
             minute,
             type,
             player: playerName,
+            fiksId: eventFiksId,
+            playerId: eventFiksId ? `fiks-${eventFiksId}` : undefined,
             team: teamName,
             description,
             source: 'NFF',
@@ -761,7 +766,7 @@ export async function scrapeMatchLineup(fiksIdOrMatch: string | number | Match):
       while ((match = itemRegex.exec(htmlFragment)) !== null) {
         const block = match[1];
         const numM = block.match(/class="playerNumber">\s*(\d+)/i);
-        const number = numM ? parseInt(numM[1], 10) : (idx + 1);
+        const number = numM ? parseInt(numM[1], 10) : undefined;
 
         const linkM = block.match(/href="[^"]*fiksId=(\d+)"[^>]*class="playerName"[^>]*>([^<]+)/i)
                    || block.match(/class="playerName"[^>]*>([^<]+)/i);
@@ -775,24 +780,22 @@ export async function scrapeMatchLineup(fiksIdOrMatch: string | number | Match):
         const hasYellow = /YellowCard/i.test(block);
         const hasRed = /RedCard/i.test(block);
 
-        let position: 'Keeper' | 'Forsvar' | 'Midtbane' | 'Angrep' = 'Midtbane';
-        if (isStarting) {
-          if (idx === 0) position = 'Keeper';
-          else if (idx <= 4) position = 'Forsvar';
-          else if (idx <= 8) position = 'Midtbane';
-          else position = 'Angrep';
-        } else {
-          position = idx === 0 && number === 1 ? 'Keeper' : 'Midtbane';
-        }
+        const isExplicitKeeper = /keeper|målvakt|goalie/i.test(block) || (number === 1 && idx === 0);
+        const position = isExplicitKeeper ? 'Keeper' : 'Ukjent';
+        const positionSource = isExplicitKeeper ? 'NFF' : 'unknown';
+
+        const nameSlug = name.toLowerCase().trim().replace(/æ/g, 'ae').replace(/ø/g, 'oe').replace(/å/g, 'aa').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        const canonId = personFiksId ? `fiks-${personFiksId}` : (nameSlug ? `legacy_${nameSlug}` : `num-${number || idx}`);
 
         players.push({
-          id: personFiksId ? `fiks-${personFiksId}` : `num-${number}-${idx}`,
+          id: canonId,
           name,
           number,
           jerseyNumber: number,
           teamId: currentTeam === 1 ? (matchObj?.homeTeam || 'home') : (matchObj?.awayTeam || 'away'),
           teamName: currentTeam === 1 ? (homeTeam || 'Hjemmelag') : (awayTeam || 'Bortelag'),
           position,
+          positionSource,
           fiksId: personFiksId,
           role: isCaptain ? 'Kaptein' : 'Spiller',
           matches: 1,

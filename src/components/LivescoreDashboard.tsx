@@ -19,12 +19,15 @@ import {
   Search,
   ChevronLeft,
   Share2,
-  BarChart2
+  BarChart2,
+  Columns2,
+  Layers
 } from 'lucide-react';
 import { MatchDetailModal } from './MatchDetailModal.js';
 import { LaglederModal } from './LaglederModal.js';
 import { SofascoreMatchCard } from './SofascoreMatchCard.js';
 import { ScoutReportModal } from './ScoutReportModal.js';
+import { DualLiveView } from './DualLiveView.js';
 
 interface LivescoreDashboardProps {
   data: BonesClubData;
@@ -59,6 +62,30 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
   const [isLaglederModalOpen, setIsLaglederModalOpen] = useState<boolean>(false);
   const [laglederMatch, setLaglederMatch] = useState<Match | null>(null);
   const [scoutMatch, setScoutMatch] = useState<Match | null>(null);
+
+  // Simultaneous matches detection (matches on same date and time)
+  const concurrentSlots = useMemo(() => {
+    const map = new Map<string, Match[]>();
+    for (const m of data.matches) {
+      const key = `${m.date} ${m.time}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(m);
+    }
+    return Array.from(map.entries())
+      .filter(([_, list]) => list.length >= 2)
+      .map(([slotKey, matches]) => ({
+        slotKey,
+        date: matches[0].date,
+        time: matches[0].time,
+        matches,
+      }))
+      .sort((a, b) => a.slotKey.localeCompare(b.slotKey));
+  }, [data.matches]);
+
+  const [selectedSlotIndex, setSelectedSlotIndex] = useState<number>(0);
+  const [dualViewMode, setDualViewMode] = useState<'dual' | 'cards'>('dual');
+  const [dualMatch1Override, setDualMatch1Override] = useState<Match | null>(null);
+  const [dualMatch2Override, setDualMatch2Override] = useState<Match | null>(null);
 
   // Polling and "seconds ago" timer
   const [secondsAgo, setSecondsAgo] = useState<number>(0);
@@ -227,10 +254,10 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
     return data.matches.filter((m) => m.isHome).length;
   }, [data.matches]);
 
-  // Adaptive Polling
+  // Real data polling: Fetches real updates from FIKS every 3 minutes (180,000ms) when live, or 3 mins standard
   useEffect(() => {
-    const hasLive = liveMatches.length > 0;
-    const pollIntervalMs = hasLive ? 15000 : 45000;
+    // 3 minutes (180,000 ms) as specified for real FIKS live updates
+    const pollIntervalMs = 180000;
 
     const interval = setInterval(async () => {
       if (onRefreshData && navigator.onLine) {
@@ -369,20 +396,12 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
         </div>
       </div>
 
-      {/* Sofascore Status Tabs: Alle, Live, Kommende, Ferdig, Hjemmekamper, Favoritter */}
+      {/* Sofascore Status Tabs: Live står først, Alle flyttes til etter Favoritter */}
       <div className="flex flex-wrap items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
         <div className="flex items-center space-x-1 overflow-x-auto scrollbar-none w-full sm:w-auto">
+          {/* 1. Live står først */}
           <button
-            onClick={() => setActiveStatusTab('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
-              activeStatusTab === 'all'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Alle ({totalCounts.all})
-          </button>
-          <button
+            id="tab-status-live"
             onClick={() => setActiveStatusTab('live')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center space-x-1.5 ${
               activeStatusTab === 'live'
@@ -393,7 +412,10 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
             {liveMatches.length > 0 && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>}
             <span>Live ({totalCounts.live})</span>
           </button>
+
+          {/* 2. Kommende */}
           <button
+            id="tab-status-upcoming"
             onClick={() => setActiveStatusTab('upcoming')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
               activeStatusTab === 'upcoming'
@@ -403,7 +425,10 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
           >
             Kommende ({totalCounts.upcoming})
           </button>
+
+          {/* 3. Ferdige */}
           <button
+            id="tab-status-finished"
             onClick={() => setActiveStatusTab('finished')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
               activeStatusTab === 'finished'
@@ -413,7 +438,10 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
           >
             Ferdige ({totalCounts.finished})
           </button>
+
+          {/* 4. Hjemmekamper */}
           <button
+            id="tab-status-home"
             onClick={() => setActiveStatusTab('home')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center space-x-1 ${
               activeStatusTab === 'home'
@@ -424,7 +452,10 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
             <Home className="w-3.5 h-3.5" />
             <span>Hjemmekamper ({totalCounts.home})</span>
           </button>
+
+          {/* 5. Favoritter */}
           <button
+            id="tab-status-favorites"
             onClick={() => setActiveStatusTab('favorites')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center space-x-1 ${
               activeStatusTab === 'favorites'
@@ -434,6 +465,19 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
           >
             <Star className="w-3.5 h-3.5 fill-current" />
             <span>Favoritter ({totalCounts.favorites})</span>
+          </button>
+
+          {/* 6. Alle flyttes til etter Favoritter */}
+          <button
+            id="tab-status-all"
+            onClick={() => setActiveStatusTab('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              activeStatusTab === 'all'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Alle ({totalCounts.all})
           </button>
         </div>
 
@@ -489,10 +533,10 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
         </div>
       </div>
 
-      {/* SECTION 1: 🔴 LIVE MATCHES HERO (Sofascore Live Center) */}
+      {/* SECTION 1: 🔴 LIVE MATCHES HERO (Sofascore Live Center & DualView) */}
       {liveMatches.length > 0 && activeStatusTab !== 'finished' && activeStatusTab !== 'upcoming' && (
         <section id="section-live-matches" className="space-y-3">
-          <div className="flex items-center justify-between px-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
             <div className="flex items-center gap-2">
               <span className="relative flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -501,64 +545,198 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
               <h2 className="text-sm font-black uppercase tracking-wider text-red-600">
                 PÅGÅENDE KAMPER NÅ ({liveMatches.length})
               </h2>
+              {liveMatches.length >= 2 && (
+                <span className="bg-red-100 text-red-700 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  ⚡ Samtidige kamper
+                </span>
+              )}
             </div>
-            <span className="text-[11px] font-semibold text-slate-500">Live oppdatering aktiv</span>
+
+            {liveMatches.length >= 2 && (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setDualViewMode(dualViewMode === 'dual' ? 'cards' : 'dual')}
+                  className="px-2.5 py-1 text-xs font-bold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 flex items-center space-x-1.5 cursor-pointer shadow-2xs transition-all"
+                >
+                  <Columns2 className="w-3.5 h-3.5 text-[#165094]" />
+                  <span>{dualViewMode === 'dual' ? 'Bytt til enkeltkort' : 'Vis i DualView'}</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {liveMatches.map((m) => (
-              <SofascoreMatchCard
-                key={m.id}
-                match={m}
-                isFavorite={favoriteTeamIds.includes(m.teamId)}
-                onToggleFavorite={(e) => toggleFavorite(m.teamId, e)}
-                onOpenDetail={() => handleOpenMatchDetail(m)}
-                onOpenLineup={() => onViewLineup && onViewLineup(m)}
-              />
-            ))}
-          </div>
+          {/* If 2 or more live matches and DualView is active */}
+          {liveMatches.length >= 2 && dualViewMode === 'dual' ? (
+            <DualLiveView
+              match1={dualMatch1Override || liveMatches[0]}
+              match2={dualMatch2Override || liveMatches[1]}
+              allConcurrentMatches={liveMatches}
+              onSelectMatch1={(m) => setDualMatch1Override(m)}
+              onSelectMatch2={(m) => setDualMatch2Override(m)}
+              onOpenDetail={(m) => handleOpenMatchDetail(m)}
+              onOpenLineup={(m) => onViewLineup && onViewLineup(m)}
+              onOpenLagleder={(m) => handleOpenLagleder(m)}
+              favoriteTeamIds={favoriteTeamIds}
+              onToggleFavorite={(teamId, e) => toggleFavorite(teamId, e)}
+            />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {liveMatches.map((m) => (
+                <SofascoreMatchCard
+                  key={m.id}
+                  match={m}
+                  isFavorite={favoriteTeamIds.includes(m.teamId)}
+                  onToggleFavorite={(e) => toggleFavorite(m.teamId, e)}
+                  onOpenDetail={() => handleOpenMatchDetail(m)}
+                  onOpenLineup={() => onViewLineup && onViewLineup(m)}
+                  onOpenScout={(matchToScout) => setScoutMatch(matchToScout)}
+                />
+              ))}
+            </div>
+          )}
         </section>
       )}
 
-      {/* SECTION 2: MATCHES LIST GROUPED BY DIVISION (Sofascore Style) */}
+      {/* SECTION 2: MATCHES LIST GROUPED BY DIVISION OR LIVE DUALVIEW */}
       {filteredMatches.length === 0 ? (
         activeStatusTab === 'live' && liveMatches.length === 0 ? (
-          <div className="bg-white rounded-2xl p-8 text-center border border-slate-200/90 shadow-2xs space-y-3">
-            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-              <Radio className="w-6 h-6 text-slate-400" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-800">Ingen pågående kamper for øyeblikket</h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
-                LIVE kampsenter aktiveres automatisk så snart en Bønes-kamp blåses i gang. NFF oppdateres i sanntid under kampforløpet med mål og hendelser.
+          <div className="space-y-4">
+            {/* Live Center Status Box */}
+            <div className="bg-white rounded-2xl p-6 text-center border border-slate-200/90 shadow-2xs space-y-2">
+              <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
+                <Radio className="w-5 h-5 animate-pulse" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800">
+                Ingen kamper spilles akkurat nå
+              </h3>
+              <p className="text-xs text-slate-500 max-w-lg mx-auto leading-relaxed">
+                Her i Live-kampsenteret aktiveres sanntidsoppdateringer automatisk når kamper starter.
+                Nedenfor vises alle <strong>samtidige kamper</strong> med felles avspark, klare for <strong>DualView</strong>.
               </p>
             </div>
-            {data.matches.filter(m => m.status === 'upcoming').sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time))[0] && (
-              (() => {
-                const nextM = data.matches.filter(m => m.status === 'upcoming').sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time))[0];
-                return (
-                  <div className="inline-flex flex-col sm:flex-row items-center space-y-1 sm:space-y-0 sm:space-x-2 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 font-medium mt-1">
-                    <div className="flex items-center space-x-1.5">
-                      <Clock className="w-3.5 h-3.5 text-[#165094]" />
-                      <span>Neste oppgjør:</span>
+
+            {/* Samtidige kamper og DualView seksjon ("Om Det er flere kamper som er samtidig, så kan de listes opp og man viser en dualview på liveview") */}
+            {concurrentSlots.length > 0 && (
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#165094]"></span>
+                      <h4 className="text-sm font-black text-slate-900 tracking-tight">
+                        Samtidige kamper (Parallellkamper)
+                      </h4>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-[#165094]">
+                        {concurrentSlots.length} tidspunkter funnet
+                      </span>
                     </div>
-                    <span className="font-bold text-slate-900">{nextM.teamName} vs {nextM.isHome ? nextM.awayTeam : nextM.homeTeam}</span>
-                    <span className="text-slate-400 hidden sm:inline">•</span>
-                    <span className="text-slate-600">{nextM.date} kl. {nextM.time}</span>
-                    <span className="text-slate-400 hidden sm:inline">•</span>
-                    <span className="text-[#165094] font-medium">{nextM.venue}</span>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Velg et kamptidspunkt under for å liste opp kampene og se dem side-om-side i DualView.
+                    </p>
                   </div>
-                );
-              })()
+
+                  <button
+                    onClick={() => setActiveStatusTab('all')}
+                    className="self-start sm:self-auto px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Vis alle kamper
+                  </button>
+                </div>
+
+                {/* Slot Selector Pills */}
+                <div className="flex items-center space-x-2 overflow-x-auto scrollbar-none pb-1">
+                  {concurrentSlots.slice(0, 10).map((slot, idx) => {
+                    const isSelected = selectedSlotIndex === idx;
+                    return (
+                      <button
+                        key={slot.slotKey}
+                        onClick={() => {
+                          setSelectedSlotIndex(idx);
+                          setDualMatch1Override(null);
+                          setDualMatch2Override(null);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer transition-all flex items-center space-x-1.5 ${
+                          isSelected
+                            ? 'bg-[#165094] text-white shadow-xs ring-2 ring-[#165094]/40'
+                            : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 shadow-2xs'
+                        }`}
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>{slot.date} kl. {slot.time}</span>
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                          isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          {slot.matches.length} kamper
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Current Slot Info & Matches Listing */}
+                {(() => {
+                  const currentSlot = concurrentSlots[selectedSlotIndex] || concurrentSlots[0];
+                  if (!currentSlot) return null;
+                  const dualM1 = dualMatch1Override || currentSlot.matches[0];
+                  const dualM2 = dualMatch2Override || currentSlot.matches[1];
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/90 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-800 flex items-center space-x-1.5">
+                            <Layers className="w-3.5 h-3.5 text-[#165094]" />
+                            <span>Avspark {currentSlot.date} kl. {currentSlot.time} ({currentSlot.matches.length} samtidige kamper):</span>
+                          </span>
+                          <span className="text-[11px] text-[#165094] font-bold">DualView klargjort</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {currentSlot.matches.map((m, idx) => {
+                            const isBeingCompared = m.id === dualM1?.id || m.id === dualM2?.id;
+                            return (
+                              <div
+                                key={m.id}
+                                className={`p-2.5 rounded-lg border text-xs flex items-center justify-between transition-all ${
+                                  isBeingCompared
+                                    ? 'bg-blue-50/70 border-blue-300 ring-1 ring-blue-300'
+                                    : 'bg-white border-slate-200'
+                                }`}
+                              >
+                                <div className="truncate pr-2">
+                                  <div className="font-bold text-slate-900 truncate">{m.teamName}</div>
+                                  <div className="text-slate-600 font-medium truncate">vs {m.isHome ? m.awayTeam : m.homeTeam}</div>
+                                  <div className="text-[10px] text-slate-400 truncate">{m.division} • {m.venue}</div>
+                                </div>
+                                <span className={`text-[10px] font-mono font-bold px-2 py-1 rounded shrink-0 ${
+                                  isBeingCompared ? 'bg-[#165094] text-white' : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {isBeingCompared ? 'I DualView' : `Kamp ${idx + 1}`}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* DualView Split Component */}
+                      {dualM1 && dualM2 && (
+                        <DualLiveView
+                          match1={dualM1}
+                          match2={dualM2}
+                          allConcurrentMatches={currentSlot.matches}
+                          onSelectMatch1={(m) => setDualMatch1Override(m)}
+                          onSelectMatch2={(m) => setDualMatch2Override(m)}
+                          onOpenDetail={(m) => handleOpenMatchDetail(m)}
+                          onOpenLineup={(m) => onViewLineup && onViewLineup(m)}
+                          onOpenLagleder={(m) => handleOpenLagleder(m)}
+                          favoriteTeamIds={favoriteTeamIds}
+                          onToggleFavorite={(teamId, e) => toggleFavorite(teamId, e)}
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
             )}
-            <div className="pt-2">
-              <button
-                onClick={() => setActiveStatusTab('all')}
-                className="px-4 py-2 bg-[#165094] text-white text-xs font-bold rounded-xl hover:bg-[#0F3A6D] transition-colors cursor-pointer"
-              >
-                Vis alle kamper
-              </button>
-            </div>
           </div>
         ) : (
           <div className="bg-white rounded-2xl p-10 text-center border border-slate-200">

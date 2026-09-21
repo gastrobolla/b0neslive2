@@ -1,23 +1,21 @@
 import { Match, MatchEvent, Player, TopScorer, CardStatistic, FeedItem, FeedItemType } from '../types.js';
+import {
+  toCanonicalPlayerId,
+  extractNumericFiksId,
+  resolvePlayerIdentity,
+  sanitizePlayerNameSlug,
+} from './playerResolver.js';
 
 /**
  * Normalizes an arbitrary text string to a safe, URL-friendly slug.
  */
 export function sanitizeSlug(text: string): string {
-  if (!text) return 'unknown';
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/æ/g, 'ae')
-    .replace(/ø/g, 'oe')
-    .replace(/å/g, 'aa')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  return sanitizePlayerNameSlug(text);
 }
 
 /**
- * Resolves an authoritative player key prioritizing numeric FIKS ID.
- * Falls back deterministically to legacy identifier if FIKS ID is missing.
+ * Resolves an authoritative canonical player key prioritizing numeric FIKS ID.
+ * NOTE: teamId is strictly NEVER part of a person's canonical identity.
  */
 export function getPlayerIdentity(player: {
   fiksId?: number | null;
@@ -27,40 +25,27 @@ export function getPlayerIdentity(player: {
   teamId?: string | null;
 }): { key: string; isFiks: boolean; id: string; name: string } {
   const displayName = (player.name || 'Ukjent spiller').trim();
+  const numFiks =
+    extractNumericFiksId(player.fiksId) ||
+    extractNumericFiksId(player.playerId) ||
+    extractNumericFiksId(player.id);
 
-  // 1. Direct numeric fiksId
-  if (player.fiksId && Number(player.fiksId) > 0) {
-    const fid = Number(player.fiksId);
+  if (numFiks) {
     return {
-      key: `fiks_${fid}`,
+      key: `fiks_${numFiks}`,
       isFiks: true,
-      id: `fiks-${fid}`,
+      id: `fiks-${numFiks}`,
       name: displayName,
     };
   }
 
-  // 2. Check if playerId or id has fiks- prefix
-  const rawId = player.playerId || player.id || '';
-  const fiksMatch = rawId.match(/^fiks-(\d+)$/);
-  if (fiksMatch) {
-    const fid = parseInt(fiksMatch[1], 10);
-    return {
-      key: `fiks_${fid}`,
-      isFiks: true,
-      id: `fiks-${fid}`,
-      name: displayName,
-    };
-  }
-
-  // 3. Fallback to deterministic legacy key
-  const nameSlug = sanitizeSlug(displayName);
-  const teamSlug = player.teamId ? sanitizeSlug(player.teamId) : 'bones';
-  const legacyId = `legacy_${nameSlug}_${teamSlug}`;
+  const canon = toCanonicalPlayerId(player.playerId || player.id, displayName);
+  const fid = canon.startsWith('fiks-') ? extractNumericFiksId(canon) : undefined;
 
   return {
-    key: legacyId,
-    isFiks: false,
-    id: legacyId,
+    key: fid ? `fiks_${fid}` : canon,
+    isFiks: !!fid,
+    id: canon,
     name: displayName,
   };
 }
@@ -225,32 +210,44 @@ export function calculateTopScorers(
 
       if (bonesOnly && !isBonesEvent) continue;
 
-      // Resolve player identity
-      let resolvedFiksId = ev.fiksId;
-      if (!resolvedFiksId && ev.playerId?.startsWith('fiks-')) {
-        resolvedFiksId = parseInt(ev.playerId.replace('fiks-', ''), 10);
-      }
-      if (!resolvedFiksId) {
-        const pMatch = playerByName.get(playerName.toLowerCase());
-        if (pMatch?.fiksId) resolvedFiksId = pMatch.fiksId;
+      // Ambiguity Guardrail: Skip ambiguous events so goals are never misattributed
+      if (ev.ambiguous) continue;
+
+      const lineupList = [
+        ...(match.lineup?.starters || []),
+        ...(match.lineup?.bench || []),
+        ...(match.homeLineup?.starters || []),
+        ...(match.awayLineup?.starters || []),
+      ];
+
+      const res = resolvePlayerIdentity(
+        {
+          fiksId: ev.fiksId,
+          playerId: ev.playerId,
+          name: playerName,
+        },
+        {
+          lineupPlayers: lineupList,
+          squadPlayers: players,
+          allClubPlayers: players,
+        }
+      );
+
+      if (res.isAmbiguous) {
+        continue;
       }
 
-      const identity = getPlayerIdentity({
-        fiksId: resolvedFiksId,
-        playerId: ev.playerId,
-        name: playerName,
-        teamId: match.teamId,
-      });
-
+      const canonicalId = res.canonicalId || toCanonicalPlayerId(ev.playerId, playerName);
+      const identityKey = res.fiksId ? `fiks_${res.fiksId}` : canonicalId;
       const isPenalty = (ev.description || '').toLowerCase().includes('straffe');
 
-      let entry = scorersMap.get(identity.key);
+      let entry = scorersMap.get(identityKey);
       if (!entry) {
         entry = {
-          key: identity.key,
-          fiksId: identity.isFiks ? resolvedFiksId : undefined,
-          id: identity.id,
-          name: playerName,
+          key: identityKey,
+          fiksId: res.fiksId,
+          id: canonicalId,
+          name: res.displayName || playerName,
           teamId: match.teamId || 'menn-1',
           teamName: match.teamName || 'Bønes IL',
           goals: 0,
@@ -258,7 +255,7 @@ export function calculateTopScorers(
           matchesSet: new Set<string>(),
           isBonesPlayer: isBonesEvent,
         };
-        scorersMap.set(identity.key, entry);
+        scorersMap.set(identityKey, entry);
       }
 
       entry.goals += 1;
@@ -273,6 +270,7 @@ export function calculateTopScorers(
 
     return {
       id: s.id,
+      fiksId: s.fiksId,
       name: s.name,
       teamId: s.teamId,
       teamName: s.teamName,
@@ -360,29 +358,43 @@ export function calculateCardStatistics(
 
       if (bonesOnly && !isBonesEvent) continue;
 
-      let resolvedFiksId = ev.fiksId;
-      if (!resolvedFiksId && ev.playerId?.startsWith('fiks-')) {
-        resolvedFiksId = parseInt(ev.playerId.replace('fiks-', ''), 10);
-      }
-      if (!resolvedFiksId) {
-        const pMatch = playerByName.get(playerName.toLowerCase());
-        if (pMatch?.fiksId) resolvedFiksId = pMatch.fiksId;
+      // Ambiguity Guardrail: Skip ambiguous events so cards are never misattributed
+      if (ev.ambiguous) continue;
+
+      const lineupList = [
+        ...(match.lineup?.starters || []),
+        ...(match.lineup?.bench || []),
+        ...(match.homeLineup?.starters || []),
+        ...(match.awayLineup?.starters || []),
+      ];
+
+      const res = resolvePlayerIdentity(
+        {
+          fiksId: ev.fiksId,
+          playerId: ev.playerId,
+          name: playerName,
+        },
+        {
+          lineupPlayers: lineupList,
+          squadPlayers: players,
+          allClubPlayers: players,
+        }
+      );
+
+      if (res.isAmbiguous) {
+        continue;
       }
 
-      const identity = getPlayerIdentity({
-        fiksId: resolvedFiksId,
-        playerId: ev.playerId,
-        name: playerName,
-        teamId: match.teamId,
-      });
+      const canonicalId = res.canonicalId || toCanonicalPlayerId(ev.playerId, playerName);
+      const identityKey = res.fiksId ? `fiks_${res.fiksId}` : canonicalId;
 
-      let entry = cardsMap.get(identity.key);
+      let entry = cardsMap.get(identityKey);
       if (!entry) {
         entry = {
-          key: identity.key,
-          fiksId: identity.isFiks ? resolvedFiksId : undefined,
-          id: identity.id,
-          name: playerName,
+          key: identityKey,
+          fiksId: res.fiksId,
+          id: canonicalId,
+          name: res.displayName || playerName,
           teamId: match.teamId || 'menn-1',
           teamName: match.teamName || 'Bønes IL',
           yellowCards: 0,
@@ -390,7 +402,7 @@ export function calculateCardStatistics(
           matchesSet: new Set<string>(),
           isBonesPlayer: isBonesEvent,
         };
-        cardsMap.set(identity.key, entry);
+        cardsMap.set(identityKey, entry);
       }
 
       if (ev.type === 'red_card') {
@@ -415,6 +427,7 @@ export function calculateCardStatistics(
 
     return {
       id: c.id,
+      fiksId: c.fiksId,
       name: c.name,
       teamId: c.teamId,
       teamName: c.teamName,

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BonesClubData, Match } from './types.js';
 import { Navbar } from './components/Navbar.js';
 import { LiveTickerBanner } from './components/LiveTickerBanner.js';
-import { TeamSelector } from './components/TeamSelector.js';
+import { TeamSelector, SparklineTrend, getTeamForm } from './components/TeamSelector.js';
 import { MatchesView } from './components/MatchesView.js';
 import { TablesView } from './components/TablesView.js';
 import { TopScorersView } from './components/TopScorersView.js';
@@ -184,7 +184,7 @@ export default function App() {
     }
   }, []);
 
-  // Adaptive smart polling: avoids pulling full database every 4 seconds
+  // Real data polling: Fetches real updates from FIKS every 3 minutes (180,000ms)
   useEffect(() => {
     fetchData();
 
@@ -202,10 +202,10 @@ export default function App() {
           }
         }
       } catch (err) {
-        // Fallback fetch every 30s
+        // Fallback fetch
         fetchData();
       }
-    }, 15000); // Check every 15s instead of heavy pull every 4s
+    }, 180000); // 3 minutes (180,000 ms) as specified for real FIKS live updates
 
     return () => clearInterval(checkInterval);
   }, []);
@@ -449,7 +449,7 @@ export default function App() {
                 onClick={() => setSelectedTeamId('all')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   selectedTeamId === 'all'
-                    ? 'bg-[#165094] text-white shadow-2xs'
+                    ? 'bg-[#165094] text-white selected-pill-glow font-bold'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
@@ -459,22 +459,44 @@ export default function App() {
               {/* Popular Team Quick Pills */}
               {data.teams.slice(0, 8).map((team) => {
                 const isSelected = selectedTeamId === team.id;
+                const prev = team.previousRank;
+                const trend = team.rankTrend || (prev !== undefined ? (team.currentRank < prev ? 'up' : team.currentRank > prev ? 'down' : 'same') : undefined);
+                const diff = prev !== undefined && prev !== team.currentRank ? Math.abs(prev - team.currentRank) : 0;
+                const form = getTeamForm(team, data.tables, data.matches);
                 return (
                   <button
                     key={team.id}
+                    id={`team-pill-quick-${team.id}`}
                     onClick={() => setSelectedTeamId(team.id)}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${
+                    className={`px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${
                       isSelected
-                        ? 'bg-[#165094] text-white font-bold shadow-2xs'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        ? 'bg-[#165094] text-white font-bold selected-pill-glow'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium'
                     }`}
                   >
                     <span>{team.shortName}</span>
-                    <span className={`text-[10px] font-mono px-1 rounded ${
-                      isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+                    <span className={`text-[10px] font-mono px-1 py-0.5 rounded flex items-center space-x-0.5 ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-slate-200/90 text-slate-700'
                     }`}>
-                      #{team.currentRank}
+                      <span>#{team.currentRank}</span>
+                      {trend === 'up' && (
+                        <span
+                          className={`font-black text-[9px] leading-none ${isSelected ? 'text-emerald-300' : 'text-emerald-600'}`}
+                          title={`Opp ${diff} plass${diff > 1 ? 'er' : ''} på tabellen (fra #${prev} til #${team.currentRank})`}
+                        >
+                          ▲
+                        </span>
+                      )}
+                      {trend === 'down' && (
+                        <span
+                          className={`font-black text-[9px] leading-none ${isSelected ? 'text-rose-300' : 'text-rose-600'}`}
+                          title={`Ned ${diff} plass${diff > 1 ? 'er' : ''} på tabellen (fra #${prev} til #${team.currentRank})`}
+                        >
+                          ▼
+                        </span>
+                      )}
                     </span>
+                    <SparklineTrend form={form} isSelected={isSelected} />
                   </button>
                 );
               })}
@@ -516,6 +538,8 @@ export default function App() {
                 onSelectTeam={(id) => {
                   setSelectedTeamId(id);
                 }}
+                tables={data.tables}
+                matches={data.matches}
               />
             </div>
           )}

@@ -322,9 +322,9 @@ export const SquadRosterTab: React.FC<SquadRosterTabProps> = ({
                 </div>
 
                 <div className="divide-y divide-slate-100">
-                  {playersInPos.map((player) => (
+                  {playersInPos.map((player, pIdx) => (
                     <button
-                      key={player.id}
+                      key={`${player.id || player.name}-${pIdx}`}
                       onClick={() => onSelectPlayer(player.name, player.teamId)}
                       className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50/80 active:bg-slate-100 transition-colors text-left focus:outline-hidden group"
                     >
