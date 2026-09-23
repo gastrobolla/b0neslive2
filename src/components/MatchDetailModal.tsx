@@ -3,6 +3,8 @@ import { Match, MatchEvent, DivisionTable, Player, MatchLineup } from '../types.
 import { BtMatchSummary } from './BtMatchSummary.js';
 import { WeatherWidget } from './WeatherWidget.js';
 import { ScoutReportView } from './ScoutReportModal.js';
+import { PlayerOfTheMatchModal } from './PlayerOfTheMatchModal.js';
+import { calculateMatchPOTM } from '../utils/potmCalculator.js';
 import {
   X,
   MapPin,
@@ -24,8 +26,15 @@ import {
   Sparkles,
   Flame,
   AlertCircle,
-  Binoculars
+  Binoculars,
+  Navigation,
+  PlusCircle,
+  Vote,
+  Star
 } from 'lucide-react';
+
+import { getVenueDetails, getGoogleMapsUrl, getGoogleMapsEmbedUrl } from '../utils/venueMap.js';
+import { AddToCalendarButton } from './AddToCalendarButton.js';
 
 interface MatchDetailModalProps {
   match: Match | null;
@@ -59,6 +68,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   const [localMatch, setLocalMatch] = useState<Match | null>(match);
+  const [isPotmModalOpen, setIsPotmModalOpen] = useState(false);
   const [isSyncingLineup, setIsSyncingLineup] = useState(false);
   const [lineupSyncMsg, setLineupSyncMsg] = useState<{ text: string; success: boolean } | null>(null);
   const [selectedLineupTeam, setSelectedLineupTeam] = useState<'home' | 'away'>('away');
@@ -76,7 +86,15 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
 
   const isBonesHome = currentMatch ? currentMatch.homeTeam.toLowerCase().includes('bønes') : false;
   const isBonesAway = currentMatch ? currentMatch.awayTeam.toLowerCase().includes('bønes') : false;
+  const opponentName = currentMatch ? (isBonesHome ? currentMatch.awayTeam : currentMatch.homeTeam) : '';
   const events = currentMatch?.events || [];
+
+  const [showVenueMapEmbed, setShowVenueMapEmbed] = useState(false);
+
+  const venueLocation = useMemo(() => {
+    if (!currentMatch?.venue) return null;
+    return getVenueDetails(currentMatch.venue, opponentName);
+  }, [currentMatch?.venue, opponentName]);
 
   // Realistic Sofascore match stats calculation
   const matchStats = useMemo(() => {
@@ -280,6 +298,13 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
         className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Bønes IL Club Colors Discreet Accent Line (Blå & Rød) */}
+        <div
+          id="bones-modal-accent-line"
+          className="h-1 w-full bg-gradient-to-r from-[#165094] via-[#dc2626] to-[#165094]"
+          title="Bønes IL klubbfarger: Kongeblå & Rød"
+        />
+
         {/* Top Header Bar */}
         <div className="bg-[#0B2545] text-white px-4 py-3 sm:px-5 flex items-center justify-between border-b border-white/10">
           <div className="flex items-center space-x-2">
@@ -303,13 +328,16 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
               </span>
             )}
           </div>
-          <button
-            id="match-detail-modal-close"
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <AddToCalendarButton match={currentMatch} variant="compact" />
+            <button
+              id="match-detail-modal-close"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Sofascore Score Board Hero */}
@@ -396,6 +424,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
               <MapPin className="w-3.5 h-3.5 text-blue-300" />
               {match.venue}
             </span>
+            <AddToCalendarButton match={currentMatch} variant="compact" />
           </div>
         </div>
 
@@ -543,14 +572,78 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
           {/* TAB 1: OVERSIKT & EVENTS */}
           {activeTab === 'oversikt' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">
                   {match.status === 'upcoming' ? 'Kampoppsett & Før avspark' : `Kampforløp & Hendelser (${events.length})`}
                 </h4>
-                <span className="text-[11px] text-slate-400">
-                  {match.status === 'upcoming' ? `Avspark kl. ${match.time}` : 'Minutt for minutt'}
-                </span>
+                <div className="flex items-center gap-2">
+                  {onOpenLagleder && (
+                    <button
+                      onClick={() => {
+                        onClose();
+                        onOpenLagleder(match);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-[#165094] bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>+ Hendelse / assist / bytte</span>
+                    </button>
+                  )}
+                  <span className="text-[11px] text-slate-400">
+                    {match.status === 'upcoming' ? `Avspark kl. ${match.time}` : 'Minutt for minutt'}
+                  </span>
+                </div>
               </div>
+
+              {/* Banens Beste Spotlight & Live Voting Banner */}
+              {(() => {
+                const potm = currentMatch.playerOfTheMatch || calculateMatchPOTM(currentMatch);
+                const leader = potm.candidates.find((c) => c.playerName === potm.winnerName) || potm.candidates[0];
+
+                return (
+                  <div className="bg-gradient-to-r from-amber-500/10 via-blue-500/10 to-amber-500/10 border border-amber-300/70 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-md shrink-0">
+                        <Trophy className="w-5 h-5 text-slate-950" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-full">
+                            {currentMatch.status === 'finished' ? 'Kåret til Banens Beste' : 'Leder kåringen av Banens Beste'}
+                          </span>
+                          <span className="text-xs text-slate-500 font-medium">
+                            • {potm.totalVotes} {potm.totalVotes === 1 ? 'stemme' : 'stemmer'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <h4 className="font-black text-slate-900 text-base sm:text-lg truncate">
+                            {leader?.playerName || 'Ikke avgjort'}
+                          </h4>
+                          {leader && (
+                            <span className="inline-flex items-center gap-1 bg-amber-400 text-slate-950 font-black text-xs px-2 py-0.5 rounded-md shadow-2xs font-mono">
+                              <Star className="w-3 h-3 fill-slate-950" />
+                              {leader.algoRating.toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-600">
+                          {leader?.team} • Avgjøres av kampscore og publikumsstemmer
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsPotmModalOpen(true)}
+                      className="w-full sm:w-auto px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+                    >
+                      <Vote className="w-4 h-4 text-slate-950" />
+                      <span>Stem på Banens Beste</span>
+                    </button>
+                  </div>
+                );
+              })()}
+
 
               {match.status === 'upcoming' ? (
                 <>
@@ -570,9 +663,22 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
                       <div className="flex items-start space-x-2 bg-white p-2.5 rounded-lg border border-slate-200">
                         <MapPin className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <span className="text-[10px] text-slate-400 font-semibold block">Spillested</span>
-                          <span className="font-bold text-slate-800">{match.venue}</span>
+                          <span className="font-bold text-slate-800 block truncate">{match.venue}</span>
+                          {venueLocation?.address && (
+                            <span className="text-[10px] text-slate-500 block truncate">{venueLocation.address}</span>
+                          )}
+                          <a
+                            href={getGoogleMapsUrl(match.venue, opponentName)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-[#165094] hover:underline font-bold mt-1"
+                          >
+                            <Navigation className="w-3 h-3 text-[#165094]" />
+                            <span>Vis i Google Maps</span>
+                            <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                          </a>
                         </div>
                       </div>
                       <div className="flex items-start space-x-2 bg-white p-2.5 rounded-lg border border-slate-200">
@@ -717,6 +823,36 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                             </div>
                           )}
 
+                          {/* Linked Assist Player */}
+                          {ev.assistPlayer && (
+                            <div className="text-xs font-semibold text-[#165094] flex items-center gap-1 mt-0.5">
+                              <span>👟</span>
+                              <span>Målgivende: <strong>{ev.assistPlayer}</strong></span>
+                            </div>
+                          )}
+
+                          {/* Linked Substitution */}
+                          {(ev.subOutPlayer || ev.subInPlayer) && (
+                            <div className="text-xs font-semibold text-slate-700 flex items-center gap-2 mt-0.5">
+                              {ev.subOutPlayer && (
+                                <span className="text-red-600 font-bold">🔻 Ut: {ev.subOutPlayer}</span>
+                              )}
+                              {ev.subOutPlayer && ev.subInPlayer && (
+                                <span className="text-slate-300">•</span>
+                              )}
+                              {ev.subInPlayer && (
+                                <span className="text-emerald-700 font-bold">🔺 Inn: {ev.subInPlayer}</span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Linked Event / Situation Tag */}
+                          {ev.linkedEventId && (
+                            <div className="inline-flex items-center gap-1 mt-0.5 text-[10px] text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 font-medium">
+                              <span>🔗 Knyttet til kampsituasjon</span>
+                            </div>
+                          )}
+
                           <p className="text-xs text-slate-500 mt-0.5">{ev.description}</p>
                         </div>
                       </div>
@@ -737,30 +873,68 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                 <WeatherWidget match={match} variant="detailed" mode="postMatch" />
               )}
 
-              {/* Match Venue and Referee Info Card */}
-              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 text-xs text-slate-600 space-y-2 mt-4">
-                <div className="flex justify-between">
-                  <span className="text-slate-400 font-medium">Bane / Arena:</span>
-                  <span className="font-bold text-slate-800">{match.venue}</span>
+              {/* Match Venue, Map and Referee Info Card */}
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 text-xs text-slate-600 space-y-3 mt-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="text-slate-400 font-medium block">Bane / Arena:</span>
+                    <span className="font-bold text-slate-800 text-sm block">{match.venue}</span>
+                    {venueLocation?.address && (
+                      <span className="text-[11px] text-slate-500 block mt-0.5">{venueLocation.address}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowVenueMapEmbed(!showVenueMapEmbed)}
+                      className="px-2.5 py-1 text-[11px] font-bold bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-slate-700 shadow-2xs transition-colors cursor-pointer"
+                    >
+                      {showVenueMapEmbed ? 'Skjul kart' : 'Vis kart'}
+                    </button>
+                    <a
+                      href={getGoogleMapsUrl(match.venue, opponentName)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-[#165094] hover:bg-[#0F3A6D] text-white rounded-lg shadow-2xs transition-colors"
+                    >
+                      <Navigation className="w-3 h-3" />
+                      <span>Veibeskrivelse</span>
+                      <ExternalLink className="w-2.5 h-2.5 opacity-80" />
+                    </a>
+                  </div>
                 </div>
-                {match.referee && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 font-medium">Hoveddommer:</span>
-                    <span className="font-bold text-slate-800">{match.referee}</span>
+
+                {showVenueMapEmbed && (
+                  <div className="rounded-xl overflow-hidden border border-slate-200 shadow-inner mt-2">
+                    <iframe
+                      title={`Kart over ${match.venue}`}
+                      src={getGoogleMapsEmbedUrl(match.venue, opponentName)}
+                      className="w-full h-48 border-0"
+                      loading="lazy"
+                    />
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <span className="text-slate-400 font-medium">NFF FIKS Kamp-ID:</span>
-                  <span className="font-mono font-bold text-[#165094]">
-                    {match.fiksId || match.id.replace('nff-', '')}
-                  </span>
-                </div>
-                {match.season && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 font-medium">Sesong:</span>
-                    <span className="font-bold text-slate-800">{match.season}</span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-200/80 text-[11px]">
+                  {match.referee && (
+                    <div>
+                      <span className="text-slate-400 font-medium block">Hoveddommer:</span>
+                      <span className="font-bold text-slate-800">{match.referee}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-slate-400 font-medium block">NFF FIKS Kamp-ID:</span>
+                    <span className="font-mono font-bold text-[#165094]">
+                      {match.fiksId || match.id.replace('nff-', '')}
+                    </span>
                   </div>
-                )}
+                  {match.season && (
+                    <div>
+                      <span className="text-slate-400 font-medium block">Sesong:</span>
+                      <span className="font-bold text-slate-800">{match.season}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1392,9 +1566,23 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Player of the Match Modal */}
+      {currentMatch && (
+        <PlayerOfTheMatchModal
+          isOpen={isPotmModalOpen}
+          onClose={() => setIsPotmModalOpen(false)}
+          match={currentMatch}
+          onVoteSuccess={(updated) => {
+            setLocalMatch(updated);
+            onMatchUpdated?.(updated);
+          }}
+        />
+      )}
     </div>
   );
 };
+
 
 // Sub-component: Sofascore pitch pin with rating badge
 const SofascorePlayerPin: React.FC<{

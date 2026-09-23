@@ -25,9 +25,12 @@ export const SquadRosterTab: React.FC<SquadRosterTabProps> = ({
   // Load latest squads from server API on mount if available
   useEffect(() => {
     fetch('/api/bones/squads')
-      .then((res) => res.json())
+      .then((res) => {
+        const ct = res.headers.get('content-type') || '';
+        return res.ok && ct.includes('application/json') ? res.json() : null;
+      })
       .then((json) => {
-        if (json.success && Array.isArray(json.squads) && json.squads.length > 0) {
+        if (json && json.success && Array.isArray(json.squads) && json.squads.length > 0) {
           setSquads(json.squads);
         }
       })
@@ -42,6 +45,11 @@ export const SquadRosterTab: React.FC<SquadRosterTabProps> = ({
     setSyncStatus(null);
     try {
       const res = await fetch('/api/bones/squads/sync', { method: 'POST' });
+      const ct = res.headers.get('content-type') || '';
+      if (!res.ok || !ct.includes('application/json')) {
+        setSyncStatus('Kunne ikke hente oppdaterte lister');
+        return;
+      }
       const data = await res.json();
       if (data.success && data.squads) {
         setSquads(data.squads);

@@ -112,7 +112,8 @@ export async function fetchOfficialPlayerStats(
   try {
     const url = `/api/bones/player/${fiksId}/nff-stats${force ? '?force=true' : ''}`;
     const res = await fetch(url);
-    if (!res.ok) return memoryCache[fiksId] || null;
+    const ct = res.headers.get('content-type') || '';
+    if (!res.ok || !ct.includes('application/json')) return memoryCache[fiksId] || null;
     const data = await res.json();
     if (data.success && data.stats) {
       memoryCache[fiksId] = data.stats;
@@ -130,7 +131,8 @@ export async function fetchOfficialPlayerStats(
 export async function refreshPlayerStats(fiksId: number): Promise<OfficialNffPlayerStats | null> {
   try {
     const res = await fetch(`/api/bones/player/${fiksId}/nff-stats/refresh`, { method: 'POST' });
-    if (!res.ok) return memoryCache[fiksId] || null;
+    const ct = res.headers.get('content-type') || '';
+    if (!res.ok || !ct.includes('application/json')) return memoryCache[fiksId] || null;
     const data = await res.json();
     if (data.success && data.stats) {
       memoryCache[fiksId] = data.stats;
@@ -148,6 +150,8 @@ export async function refreshPlayerStats(fiksId: number): Promise<OfficialNffPla
 export async function syncPlayerStatsFromNff(): Promise<{ success: boolean; syncedPlayers?: number }> {
   try {
     const res = await fetch('/api/bones/players/nff-stats/sync', { method: 'POST' });
+    const ct = res.headers.get('content-type') || '';
+    if (!res.ok || !ct.includes('application/json')) return { success: false };
     const json = await res.json();
     return json;
   } catch (err) {

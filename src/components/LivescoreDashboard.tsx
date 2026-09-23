@@ -21,19 +21,22 @@ import {
   Share2,
   BarChart2,
   Columns2,
-  Layers
+  Layers,
+  Trophy
 } from 'lucide-react';
 import { MatchDetailModal } from './MatchDetailModal.js';
 import { LaglederModal } from './LaglederModal.js';
 import { SofascoreMatchCard } from './SofascoreMatchCard.js';
 import { ScoutReportModal } from './ScoutReportModal.js';
 import { DualLiveView } from './DualLiveView.js';
+import { PlayerOfTheMatchModal } from './PlayerOfTheMatchModal.js';
 
 interface LivescoreDashboardProps {
   data: BonesClubData;
   onRefreshData?: () => Promise<void>;
   onSelectPlayer?: (playerName: string, teamId?: string) => void;
   onViewLineup?: (match: Match) => void;
+  onOpenPOTM?: (match: Match) => void;
 }
 
 export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
@@ -41,11 +44,15 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
   onRefreshData,
   onSelectPlayer,
   onViewLineup,
+  onOpenPOTM,
 }) => {
-  const [activeStatusTab, setActiveStatusTab] = useState<'all' | 'live' | 'upcoming' | 'finished' | 'home' | 'favorites'>('all');
+  const [activeStatusTab, setActiveStatusTab] = useState<'all' | 'live' | 'upcoming' | 'finished' | 'home' | 'favorites' | 'potm'>('all');
   const [quickFilter, setQuickFilter] = useState<QuickCategoryFilter>('all');
   const [selectedTeamId, setSelectedTeamId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [potmMatch, setPotmMatch] = useState<Match | null>(null);
+  const [isPotmOpen, setIsPotmOpen] = useState(false);
+
   
   // Favorites stored in localStorage
   const [favoriteTeamIds, setFavoriteTeamIds] = useState<string[]>(() => {
@@ -155,6 +162,7 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
       finished: base.filter((m) => m.status === 'finished').length,
       home: base.filter((m) => m.isHome).length,
       favorites: base.filter((m) => favoriteTeamIds.includes(m.teamId)).length,
+      potm: base.filter((m) => m.status === 'finished' || m.status === 'live').length,
     };
   }, [data.matches, searchQuery, quickFilter, selectedTeamId, favoriteTeamIds]);
 
@@ -193,6 +201,7 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
       if (activeStatusTab === 'finished' && m.status !== 'finished') return false;
       if (activeStatusTab === 'home' && !m.isHome) return false;
       if (activeStatusTab === 'favorites' && !favoriteTeamIds.includes(m.teamId)) return false;
+      if (activeStatusTab === 'potm' && m.status !== 'finished' && m.status !== 'live') return false;
 
       return true;
     });
@@ -467,7 +476,21 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
             <span>Favoritter ({totalCounts.favorites})</span>
           </button>
 
-          {/* 6. Alle flyttes til etter Favoritter */}
+          {/* Banens Beste (POTM Spillerbørs & Kåring) */}
+          <button
+            id="tab-status-potm"
+            onClick={() => setActiveStatusTab('potm')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center space-x-1.5 ${
+              activeStatusTab === 'potm'
+                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black shadow-xs'
+                : 'text-amber-700 hover:bg-amber-50'
+            }`}
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-600" />
+            <span>Banens Beste ({totalCounts.potm})</span>
+          </button>
+
+          {/* 6. Alle flyttes til etter Favoritter & Banens Beste */}
           <button
             id="tab-status-all"
             onClick={() => setActiveStatusTab('all')}
@@ -576,6 +599,13 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
               onOpenDetail={(m) => handleOpenMatchDetail(m)}
               onOpenLineup={(m) => onViewLineup && onViewLineup(m)}
               onOpenLagleder={(m) => handleOpenLagleder(m)}
+              onOpenPOTM={(m) => {
+                if (onOpenPOTM) onOpenPOTM(m);
+                else {
+                  setPotmMatch(m);
+                  setIsPotmOpen(true);
+                }
+              }}
               favoriteTeamIds={favoriteTeamIds}
               onToggleFavorite={(teamId, e) => toggleFavorite(teamId, e)}
             />
@@ -590,6 +620,14 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
                   onOpenDetail={() => handleOpenMatchDetail(m)}
                   onOpenLineup={() => onViewLineup && onViewLineup(m)}
                   onOpenScout={(matchToScout) => setScoutMatch(matchToScout)}
+                  onOpenReport={(matchToReport) => handleOpenLagleder(matchToReport)}
+                  onOpenPOTM={(matchToVote) => {
+                    if (onOpenPOTM) onOpenPOTM(matchToVote);
+                    else {
+                      setPotmMatch(matchToVote);
+                      setIsPotmOpen(true);
+                    }
+                  }}
                 />
               ))}
             </div>
@@ -728,6 +766,13 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
                           onOpenDetail={(m) => handleOpenMatchDetail(m)}
                           onOpenLineup={(m) => onViewLineup && onViewLineup(m)}
                           onOpenLagleder={(m) => handleOpenLagleder(m)}
+                          onOpenPOTM={(m) => {
+                            if (onOpenPOTM) onOpenPOTM(m);
+                            else {
+                              setPotmMatch(m);
+                              setIsPotmOpen(true);
+                            }
+                          }}
                           favoriteTeamIds={favoriteTeamIds}
                           onToggleFavorite={(teamId, e) => toggleFavorite(teamId, e)}
                         />
@@ -760,7 +805,7 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
         )
       ) : (
         <div className="space-y-6">
-          {Object.entries(matchesByDate).map(([dateStr, matches]) => (
+          {Object.entries(matchesByDate).map(([dateStr, matches]: [string, Match[]]) => (
             <div key={dateStr} className="space-y-2.5">
               {/* FotMob Match Day Header (Sortert på kampdato) */}
               <div className="flex items-center justify-between px-1 border-b border-slate-200/80 pb-1.5 pt-1">
@@ -786,12 +831,36 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
                     onOpenDetail={() => handleOpenMatchDetail(m)}
                     onOpenLineup={() => onViewLineup && onViewLineup(m)}
                     onOpenScout={(matchToScout) => setScoutMatch(matchToScout)}
+                    onOpenReport={(matchToReport) => handleOpenLagleder(matchToReport)}
+                    onOpenPOTM={(matchToVote) => {
+                      if (onOpenPOTM) onOpenPOTM(matchToVote);
+                      else {
+                        setPotmMatch(matchToVote);
+                        setIsPotmOpen(true);
+                      }
+                    }}
                   />
                 ))}
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Player of the Match Modal */}
+      {potmMatch && (
+        <PlayerOfTheMatchModal
+          isOpen={isPotmOpen}
+          onClose={() => {
+            setIsPotmOpen(false);
+            setPotmMatch(null);
+          }}
+          match={potmMatch}
+          onVoteSuccess={async (updatedMatch) => {
+            setSelectedMatch(updatedMatch);
+            if (onRefreshData) await onRefreshData();
+          }}
+        />
       )}
 
       {/* Speider Modal */}
@@ -820,6 +889,7 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
         onClose={() => setIsLaglederModalOpen(false)}
         matches={data.matches}
         initialMatch={laglederMatch}
+        players={data.players}
         onReportSuccess={async (updatedMatch) => {
           setSelectedMatch(updatedMatch);
           if (onRefreshData) await onRefreshData();

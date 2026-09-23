@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, Radio, Shield, Sparkles, Activity, Bell } from 'lucide-react';
+import { RefreshCw, Radio, Shield, Sparkles, Activity, Bell, Palette } from 'lucide-react';
 import { ScannerState } from '../types.js';
 import { PWAInstallButton } from './PWAInstallButton.js';
 import { ClubWeatherBadge } from './ClubWeatherBadge.js';
@@ -11,6 +11,8 @@ interface NavbarProps {
   onOpenAiModal: () => void;
   onOpenScannerDrawer: () => void;
   onOpenNotifications?: () => void;
+  onOpenDesignSwitcher?: () => void;
+  activeTheme?: string;
   unreadNotificationCount?: number;
   hasLiveMatch?: boolean;
 }
@@ -22,11 +24,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAiModal,
   onOpenScannerDrawer,
   onOpenNotifications,
+  onOpenDesignSwitcher,
+  activeTheme = 'fotmob_pro',
   unreadNotificationCount = 0,
   hasLiveMatch = false,
 }) => {
   return (
     <header id="app-header" className="sticky top-0 z-40 bg-[#0c1e38] border-b border-slate-800 text-white shadow-xs">
+      {/* Bønes ILs lagfarger: diskré aksentlinje (Kongeblå & Rød) */}
+      <div
+        id="bones-club-accent-line"
+        className="h-1 w-full bg-gradient-to-r from-[#165094] via-[#dc2626] to-[#165094]"
+        title="Bønes IL klubbfarger: Kongeblå & Rød"
+      />
       <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 sm:h-16">
           
@@ -46,6 +56,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="flex items-center space-x-2">
                 <span className="font-black text-base sm:text-lg tracking-tight text-white">
                   Bønes IL
+                </span>
+                {/* Bønes IL Club Colors Indicator Badge */}
+                <span
+                  className="hidden xs:inline-flex items-center gap-1 text-[10px] font-semibold text-slate-300 px-1.5 py-0.5 rounded bg-white/5 border border-white/10"
+                  title="Bønes IL offisielle klubbfarger: Blå og rød"
+                >
+                  <span className="w-2 h-2 rounded-full bg-[#165094] ring-1 ring-white/50"></span>
+                  <span className="w-2 h-2 rounded-full bg-[#dc2626] ring-1 ring-white/50"></span>
+                  <span className="hidden sm:inline text-[9px] text-slate-400 font-medium">Blå / Rød</span>
                 </span>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">
                   FotMob
@@ -115,6 +134,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
               <span>AI-rapport</span>
             </button>
+
+            {/* Matchday Brand Badge */}
+            <div
+              id="matchday-brand-badge"
+              className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-900/60 to-[#165094]/70 text-amber-300 border border-blue-400/30 text-xs font-bold shadow-2xs"
+              title="Design: Matchday Fjellsdalen"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>Matchday</span>
+            </div>
+
 
             {/* Automated 5-Minute NFF Sync Badge */}
             <div

@@ -1,4 +1,5 @@
 import { Match, MatchEvent, Player, TopScorer, CardStatistic, FeedItem, FeedItemType } from '../types.js';
+import { calculateMatchPOTM } from './potmCalculator.js';
 import {
   toCanonicalPlayerId,
   extractNumericFiksId,
@@ -450,6 +451,44 @@ export function buildMatchFeed(matches: Match[], limit: number = 40): FeedItem[]
   const feed: FeedItem[] = [];
 
   for (const match of matches) {
+    // Generate 'Banens Beste' status event for finished matches
+    if (match.status === 'finished') {
+      const potm = match.playerOfTheMatch || calculateMatchPOTM(match);
+      const winner = potm?.candidates?.find((c) => c.playerName === potm.winnerName) || potm?.candidates?.[0];
+      if (winner) {
+        feed.push({
+          id: `feed_potm_${match.id}`,
+          timestamp: match.date ? `${match.date}T${match.time || '18:00'}:00Z` : new Date().toISOString(),
+          timeAgo: 'Ferdigspilt',
+          type: 'potm',
+          teamId: match.teamId,
+          teamName: match.teamName,
+          title: `Sluttresultat: ${match.homeTeam} ${match.homeScore ?? 0} - ${match.awayScore ?? 0} ${match.awayTeam}`,
+          description: `Kampen er ferdigspilt. Banens Beste ble kåret til ${winner.playerName} (${winner.algoRating.toFixed(1)} ★) med ${winner.votes || 0} stemmer.`,
+          badgeText: 'Banens Beste',
+          isHomeMatch: match.isHome,
+          venue: match.venue,
+          score: `${match.homeScore ?? 0} - ${match.awayScore ?? 0}`,
+          player: winner.playerName,
+          matchId: match.id,
+          match,
+          potmWinner: {
+            name: winner.playerName,
+            rating: winner.algoRating,
+            votes: winner.votes || 0,
+            team: winner.team,
+            position: winner.position,
+            totalVotes: potm.totalVotes,
+            combinedScore: winner.combinedScore
+          },
+          impact: {
+            type: 'potm',
+            detail: `Banens Beste: ${winner.playerName} (★ ${winner.algoRating.toFixed(1)})`
+          }
+        });
+      }
+    }
+
     if (!match.events || match.events.length === 0) continue;
 
     for (const ev of match.events) {

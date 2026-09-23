@@ -364,22 +364,50 @@ export function buildPlayerProfile(
   const actualSpringYellow = springLogsFromHistory.filter((m) => m.yellowCard).length;
   const actualSpringRed = springLogsFromHistory.filter((m) => m.redCard).length;
 
-  // Calculate exact spring and autumn stats from actual match logs if available, or official stats
-  const hasLogs = matchLogs.length > 0;
-  const springMatchesCount = hasLogs ? actualSpringMatches : (officialStats ? Math.ceil(officialStats.season2026.totalMatches * 0.5) : 0);
-  const autumnMatchesCount = hasLogs ? actualAutumnMatches : (officialStats ? Math.floor(officialStats.season2026.totalMatches * 0.5) : 0);
-  const springGoalsCount = hasLogs ? actualSpringGoals : (officialStats ? Math.ceil(officialStats.season2026.totalGoals * 0.5) : 0);
-  const autumnGoalsCount = hasLogs ? actualAutumnGoals : (officialStats ? Math.floor(officialStats.season2026.totalGoals * 0.5) : 0);
-  const springYellowCount = hasLogs ? actualSpringYellow : (officialStats ? Math.floor(officialStats.season2026.yellowCards * 0.5) : 0);
-  const autumnYellowCount = hasLogs ? actualAutumnYellow : (officialStats ? Math.ceil(officialStats.season2026.yellowCards * 0.5) : 0);
-  const springRedCount = hasLogs ? actualSpringRed : 0;
-  const autumnRedCount = hasLogs ? actualAutumnRed : (officialStats ? officialStats.season2026.redCards : 0);
+  // Calculate exact spring and autumn stats from actual match logs if available, prioritized with official NFF stats
+  let springMatchesCount = actualSpringMatches;
+  let autumnMatchesCount = actualAutumnMatches;
+  let springGoalsCount = actualSpringGoals;
+  let autumnGoalsCount = actualAutumnGoals;
+  let springYellowCount = actualSpringYellow;
+  let autumnYellowCount = actualAutumnYellow;
+  let springRedCount = actualSpringRed;
+  let autumnRedCount = actualAutumnRed;
 
-  // Total stats are strictly and consistently the sum of Spring + Autumn
-  const totalMatches = springMatchesCount + autumnMatchesCount;
-  const totalGoals = springGoalsCount + autumnGoalsCount;
-  const totalYellow = springYellowCount + autumnYellowCount;
-  const totalRed = springRedCount + autumnRedCount;
+  let totalMatches = springMatchesCount + autumnMatchesCount;
+  let totalGoals = springGoalsCount + autumnGoalsCount;
+  let totalYellow = springYellowCount + autumnYellowCount;
+  let totalRed = springRedCount + autumnRedCount;
+
+  if (officialStats && officialStats.season2026) {
+    const off = officialStats.season2026;
+    totalMatches = Math.max(totalMatches, off.totalMatches);
+    totalGoals = Math.max(totalGoals, off.totalGoals);
+    totalYellow = Math.max(totalYellow, off.yellowCards);
+    totalRed = Math.max(totalRed, off.redCards);
+
+    // Reconcile spring/autumn counts so they sum to total
+    if (totalMatches > (springMatchesCount + autumnMatchesCount)) {
+      const remainingMatches = totalMatches - (springMatchesCount + autumnMatchesCount);
+      springMatchesCount += Math.ceil(remainingMatches * 0.5);
+      autumnMatchesCount += Math.floor(remainingMatches * 0.5);
+    }
+    if (totalGoals > (springGoalsCount + autumnGoalsCount)) {
+      const remainingGoals = totalGoals - (springGoalsCount + autumnGoalsCount);
+      autumnGoalsCount += Math.ceil(remainingGoals * 0.6);
+      springGoalsCount += Math.floor(remainingGoals * 0.4);
+    }
+    if (totalYellow > (springYellowCount + autumnYellowCount)) {
+      autumnYellowCount += (totalYellow - (springYellowCount + autumnYellowCount));
+    }
+    if (totalRed > (springRedCount + autumnRedCount)) {
+      autumnRedCount += (totalRed - (springRedCount + autumnRedCount));
+    }
+  } else if (matchLogs.length === 0) {
+    totalMatches = 0;
+    totalGoals = 0;
+  }
+
   const disciplinaryPoints = totalYellow * 1 + totalRed * 3;
   const goalsPerMatch = totalMatches > 0 ? parseFloat((totalGoals / totalMatches).toFixed(2)) : 0;
 

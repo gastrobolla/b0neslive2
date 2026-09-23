@@ -221,6 +221,10 @@ export interface MatchEvent {
   assistFiksId?: number;
   assistPlayer?: string; // Display name
   assistAmbiguous?: boolean;
+  subOutPlayer?: string; // Substituted out player name
+  subInPlayer?: string; // Substituted in player name
+  linkedEventId?: string; // ID of linked goal, card, or event
+  linkedEventType?: MatchEventType; // Type of linked event
   team: string; // Display team name
   teamId?: string; // Identifier for team if known
   description: string;
@@ -299,6 +303,7 @@ export interface Match {
   isOfficialFiks?: boolean;
   opponentFiksId?: number;
   opponentName?: string;
+  playerOfTheMatch?: PlayerOfTheMatchData;
 }
 
 export interface ScanLog {
@@ -323,7 +328,7 @@ export interface ScannerState {
   logs: ScanLog[];
 }
 
-export type FeedItemType = 'goal' | 'card' | 'table' | 'match_start' | 'match_end' | 'fixture' | 'scanner_sync' | 'announcement';
+export type FeedItemType = 'goal' | 'card' | 'table' | 'match_start' | 'match_end' | 'potm' | 'fixture' | 'scanner_sync' | 'announcement';
 
 export interface FeedItem {
   id: string;
@@ -342,8 +347,19 @@ export interface FeedItem {
   player?: string;
   source?: 'NFF' | 'lagleder' | 'bonesil_news' | 'system' | 'official';
   reportedBy?: string;
+  matchId?: string;
+  match?: Match;
+  potmWinner?: {
+    name: string;
+    rating: number;
+    votes: number;
+    team?: string;
+    position?: string;
+    totalVotes?: number;
+    combinedScore?: number;
+  };
   impact?: {
-    type: 'topscorer' | 'card_warning' | 'table_rank' | 'fixture';
+    type: 'topscorer' | 'card_warning' | 'table_rank' | 'fixture' | 'potm';
     detail: string;
   };
 }
@@ -394,8 +410,21 @@ export interface LaglederReportRequest {
   player?: string;
   playerId?: string;
   fiksId?: number;
+  // Goal & Assist linking:
+  targetGoalId?: string; // ID of existing goal to attach assist or comment to
+  assistPlayer?: string;
+  assistPlayerId?: string;
+  goalType?: 'regular' | 'penalty' | 'own_goal' | 'freekick' | 'header';
+  // Substitution linking:
+  subOutPlayer?: string;
+  subInPlayer?: string;
+  // Card linking:
   cardType?: 'yellow' | 'red';
+  cardReason?: string;
+  targetEventId?: string; // ID of card, goal, or event linked to
+  // Match Status:
   matchStatus?: 'upcoming' | 'live' | 'finished';
+  matchPeriod?: '1st_half' | 'halftime' | '2nd_half' | 'extra_time' | 'fulltime';
   homeScore?: number;
   awayScore?: number;
   description?: string;
@@ -484,4 +513,32 @@ export interface OpponentScoutReport {
   };
   scoutedAt: string;
   source: string;
+}
+
+export interface PlayerOfTheMatchCandidate {
+  playerId?: string;
+  playerName: string;
+  team: string;
+  jerseyNumber?: number;
+  position?: string;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCards: number;
+  algoRating: number; // 6.5 - 9.8 based on performance
+  votes: number; // public spectator votes
+  combinedScore: number; // composite of algoRating and public votes
+}
+
+export interface PlayerOfTheMatchData {
+  winnerName?: string;
+  winnerTeam?: string;
+  winnerRating?: number;
+  winnerVotes?: number;
+  candidates: PlayerOfTheMatchCandidate[];
+  totalVotes: number;
+  status: 'voting_open' | 'decided';
+  jurySelectedPlayer?: string;
+  juryNotes?: string;
+  lastVoteAt?: string;
 }

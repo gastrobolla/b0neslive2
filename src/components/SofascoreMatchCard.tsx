@@ -1,7 +1,9 @@
 import React from 'react';
 import { Match } from '../types.js';
-import { Star, Shield, ChevronRight, Binoculars } from 'lucide-react';
+import { Star, Shield, ChevronRight, Binoculars, PlusCircle, Trophy, Vote } from 'lucide-react';
 import { WeatherWidget } from './WeatherWidget.js';
+import { AddToCalendarButton } from './AddToCalendarButton.js';
+import { calculateMatchPOTM } from '../utils/potmCalculator.js';
 
 interface SofascoreMatchCardProps {
   match: Match;
@@ -10,6 +12,8 @@ interface SofascoreMatchCardProps {
   onOpenDetail: () => void;
   onOpenLineup?: () => void;
   onOpenScout?: (match: Match) => void;
+  onOpenReport?: (match: Match) => void;
+  onOpenPOTM?: (match: Match) => void;
 }
 
 export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
@@ -19,7 +23,10 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
   onOpenDetail,
   onOpenLineup,
   onOpenScout,
+  onOpenReport,
+  onOpenPOTM,
 }) => {
+
   const isBonesHome = match.homeTeam.toLowerCase().includes('bønes');
   const isBonesAway = match.awayTeam.toLowerCase().includes('bønes');
   const opponentName = isBonesHome ? match.awayTeam : match.homeTeam;
@@ -38,6 +45,12 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
     (match.lineup && match.lineup.starters?.length > 0)
   );
 
+  // Banens Beste (POTM) status & leader
+  const potm = match.playerOfTheMatch || (isFinished || isLive ? calculateMatchPOTM(match) : undefined);
+  const leader = potm?.candidates?.find((c) => c.playerName === potm.winnerName) || potm?.candidates?.[0];
+  const isPotmDecided = Boolean(potm?.status === 'decided' || isFinished);
+  const isPotmVotingOpen = Boolean(isLive || (isFinished && potm?.status === 'voting_open'));
+
   return (
     <div
       id={`match-card-${match.id}`}
@@ -50,7 +63,7 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
     >
       <div className="p-3 sm:p-4">
         {/* Top mini-header */}
-        <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2 border-b border-slate-100 pb-1.5">
+        <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2 border-b border-slate-100 pb-1.5 gap-2">
           <div className="flex items-center space-x-2 truncate">
             <span className="font-bold text-slate-700 uppercase tracking-wider">{match.date}</span>
             <span>•</span>
@@ -65,8 +78,42 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
                 Tropp klar
               </span>
             )}
+            {/* Direct Banens Beste Star Badge in Header */}
+            {leader && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenPOTM) onOpenPOTM(match);
+                  else onOpenDetail();
+                }}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black cursor-pointer transition-all shadow-2xs shrink-0 ${
+                  isPotmDecided
+                    ? 'bg-gradient-to-r from-amber-100 via-amber-200 to-amber-100 text-amber-950 border border-amber-300 hover:border-amber-400'
+                    : 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 hover:brightness-105 shadow-xs'
+                }`}
+                title={
+                  isPotmDecided
+                    ? `Banens Beste er kåret: ${leader.playerName} (Score ${leader.algoRating.toFixed(1)})`
+                    : `Stemmegivning er åpen! Leder: ${leader.playerName} (Score ${leader.algoRating.toFixed(1)})`
+                }
+              >
+                <Star
+                  className={`w-3 h-3 shrink-0 ${
+                    isPotmDecided ? 'fill-amber-500 text-amber-600' : 'fill-slate-950 text-slate-950'
+                  }`}
+                />
+                <span className="truncate max-w-[110px] sm:max-w-[160px]">
+                  {isPotmDecided ? 'Banens beste: ' : 'Leder: '}
+                  {leader.playerName}
+                </span>
+                <span className="font-mono text-[9px] bg-black/10 px-1 rounded font-black shrink-0">
+                  {leader.algoRating.toFixed(1)}
+                </span>
+              </button>
+            )}
           </div>
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1 shrink-0">
             {onOpenScout && (
               <button
                 type="button"
@@ -94,6 +141,21 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
                 Oppstilling
               </button>
             )}
+            {onOpenReport && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenReport(match);
+                }}
+                className="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-50 hover:bg-blue-100 text-[#165094] border border-blue-200/80 transition-colors flex items-center gap-1 cursor-pointer"
+                title="Meld inn mål, assist, bytte, kort eller status"
+              >
+                <PlusCircle className="w-3 h-3 text-[#165094]" />
+                <span>Hendelse</span>
+              </button>
+            )}
+            <AddToCalendarButton match={match} variant="compact" />
             <button
               onClick={onToggleFavorite}
               aria-label={isFavorite ? 'Fjern favoritt' : 'Lagre favoritt'}
@@ -132,6 +194,31 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
                 <span className="text-xs font-black text-[#165094]">{match.time}</span>
                 <span className="text-[10px] text-slate-400 font-medium">Kommende</span>
               </div>
+            )}
+
+            {/* Direct POTM star pill under status */}
+            {leader && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenPOTM) onOpenPOTM(match);
+                  else onOpenDetail();
+                }}
+                className={`mt-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black cursor-pointer transition-all hover:scale-105 shadow-2xs ${
+                  isPotmDecided
+                    ? 'bg-amber-100 text-amber-950 border border-amber-300'
+                    : 'bg-amber-400 text-slate-950 animate-pulse'
+                }`}
+                title={
+                  isPotmDecided
+                    ? `Banens Beste: ${leader.playerName} (★ ${leader.algoRating.toFixed(1)})`
+                    : `Stemmegivning åpen! Leder: ${leader.playerName}`
+                }
+              >
+                <Star className="w-2.5 h-2.5 fill-current" />
+                <span>POTM</span>
+              </button>
             )}
           </div>
 
@@ -224,6 +311,68 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Banens Beste (Player of the Match) Strip */}
+        {leader && potm && (
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onOpenPOTM) onOpenPOTM(match);
+              else onOpenDetail();
+            }}
+            className={`mt-2 pt-2 border-t flex items-center justify-between text-xs transition-colors -mx-3 px-3 sm:-mx-4 sm:px-4 py-2 cursor-pointer group ${
+              isPotmDecided
+                ? 'bg-amber-50/70 hover:bg-amber-100/90 border-t-amber-200/60'
+                : 'bg-gradient-to-r from-amber-50 via-orange-50/50 to-amber-50 hover:bg-amber-100/80 border-t-amber-300/70'
+            }`}
+            title="Trykk for å se spillerbørs, live stemmefordeling og avgi stemme"
+          >
+            <div className="flex items-center space-x-2 min-w-0">
+              <div
+                className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 shadow-2xs ${
+                  isPotmDecided
+                    ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300/60'
+                    : 'bg-amber-400 text-slate-950 animate-pulse'
+                }`}
+              >
+                <Star className="w-3.5 h-3.5 fill-current" />
+              </div>
+              <div className="flex items-center space-x-1.5 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 shrink-0 flex items-center gap-1">
+                  {isPotmDecided ? (
+                    <>
+                      <Trophy className="w-3 h-3 text-amber-600 inline" />
+                      <span>Banens beste:</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping inline-block" />
+                      <span>Stem åpen:</span>
+                    </>
+                  )}
+                </span>
+                <span className="font-extrabold text-slate-900 truncate">
+                  {leader.playerName}
+                </span>
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 text-[10px] font-mono font-black shrink-0">
+                  <Star className="w-2.5 h-2.5 fill-slate-950" />
+                  {leader.algoRating.toFixed(1)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 shrink-0 ml-2">
+              <span className="text-[10px] text-slate-500 font-semibold hidden xs:inline">
+                {potm.totalVotes} {potm.totalVotes === 1 ? 'stemme' : 'stemmer'}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-black bg-white group-hover:bg-amber-500 group-hover:text-white text-slate-800 border border-amber-300 transition-all shadow-2xs">
+                <Vote className="w-3 h-3 text-amber-500 group-hover:text-white" />
+                <span>{isPotmDecided ? 'Se kåring' : 'Stem'}</span>
+              </span>
+            </div>
+          </div>
+        )}
+
 
         {/* Latest Goal / Event Pill */}
         {latestEvent && (

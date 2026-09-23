@@ -13,8 +13,10 @@ import {
   ChevronDown,
   ExternalLink,
   Shield,
-  Star
+  Star,
+  Vote
 } from 'lucide-react';
+import { calculateMatchPOTM } from '../utils/potmCalculator.js';
 
 interface DualLiveViewProps {
   match1: Match;
@@ -25,6 +27,7 @@ interface DualLiveViewProps {
   onOpenDetail: (match: Match) => void;
   onOpenLineup?: (match: Match) => void;
   onOpenLagleder?: (match: Match) => void;
+  onOpenPOTM?: (match: Match) => void;
   favoriteTeamIds?: string[];
   onToggleFavorite?: (teamId: string, e: React.MouseEvent) => void;
 }
@@ -38,6 +41,7 @@ export const DualLiveView: React.FC<DualLiveViewProps> = ({
   onOpenDetail,
   onOpenLineup,
   onOpenLagleder,
+  onOpenPOTM,
   favoriteTeamIds = [],
   onToggleFavorite,
 }) => {
@@ -55,6 +59,12 @@ export const DualLiveView: React.FC<DualLiveViewProps> = ({
 
     const matchEvents = match.events || [];
     const isFav = favoriteTeamIds.includes(match.teamId);
+
+    // Banens Beste (POTM) status & leader
+    const isFinished = match.status === 'finished';
+    const potm = match.playerOfTheMatch || (isFinished || isLive ? calculateMatchPOTM(match) : undefined);
+    const leader = potm?.candidates?.find((c) => c.playerName === potm.winnerName) || potm?.candidates?.[0];
+    const isPotmDecided = Boolean(potm?.status === 'decided' || isFinished);
 
     // Verified match stats
     const possessionHome = match.stats?.possession?.home ?? 50;
@@ -81,6 +91,41 @@ export const DualLiveView: React.FC<DualLiveViewProps> = ({
               </span>
             )}
             <span className="text-xs font-bold text-slate-700 truncate">{match.teamName}</span>
+
+            {/* Direct Banens Beste Star Badge */}
+            {leader && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenPOTM) onOpenPOTM(match);
+                  else onOpenDetail(match);
+                }}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black cursor-pointer transition-all shadow-2xs shrink-0 ${
+                  isPotmDecided
+                    ? 'bg-amber-100 text-amber-950 border border-amber-300 hover:border-amber-400'
+                    : 'bg-amber-400 text-slate-950 hover:brightness-105 shadow-xs'
+                }`}
+                title={
+                  isPotmDecided
+                    ? `Banens Beste er kåret: ${leader.playerName} (Score ${leader.algoRating.toFixed(1)})`
+                    : `Stemmegivning er åpen! Leder: ${leader.playerName} (Score ${leader.algoRating.toFixed(1)})`
+                }
+              >
+                <Star
+                  className={`w-3 h-3 shrink-0 ${
+                    isPotmDecided ? 'fill-amber-500 text-amber-600' : 'fill-slate-950 text-slate-950'
+                  }`}
+                />
+                <span className="truncate max-w-[90px] sm:max-w-[120px]">
+                  {isPotmDecided ? 'Banens beste: ' : 'Leder: '}
+                  {leader.playerName}
+                </span>
+                <span className="font-mono text-[9px] bg-black/10 px-1 rounded font-black shrink-0">
+                  {leader.algoRating.toFixed(1)}
+                </span>
+              </button>
+            )}
           </div>
 
           {allConcurrentMatches.length > 2 && onSelectOther && (
@@ -244,6 +289,62 @@ export const DualLiveView: React.FC<DualLiveViewProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Banens Beste (POTM) Strip */}
+        {leader && potm && (
+          <div
+            onClick={() => onOpenPOTM ? onOpenPOTM(match) : onOpenDetail(match)}
+            className={`px-3 py-2 border-t flex items-center justify-between text-xs cursor-pointer transition-colors group ${
+              isPotmDecided
+                ? 'bg-amber-50/70 hover:bg-amber-100/90 border-t-amber-200/60'
+                : 'bg-gradient-to-r from-amber-50 via-orange-50/50 to-amber-50 hover:bg-amber-100/80 border-t-amber-300/70'
+            }`}
+            title="Trykk for å se spillerbørs, live stemmefordeling og stemme på Banens Beste"
+          >
+            <div className="flex items-center space-x-2 min-w-0">
+              <div
+                className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 shadow-2xs ${
+                  isPotmDecided
+                    ? 'bg-amber-400 text-slate-950 ring-1 ring-amber-300/80'
+                    : 'bg-amber-400 text-slate-950 animate-pulse'
+                }`}
+              >
+                <Star className="w-3 h-3 fill-current" />
+              </div>
+              <div className="flex items-center space-x-1.5 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 shrink-0 flex items-center gap-1">
+                  {isPotmDecided ? (
+                    <>
+                      <Trophy className="w-3 h-3 text-amber-600 inline" />
+                      <span>Banens beste:</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping inline-block" />
+                      <span>Stem åpen:</span>
+                    </>
+                  )}
+                </span>
+                <span className="font-bold text-slate-900 truncate text-[11px]">
+                  {leader.playerName}
+                </span>
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 text-[10px] font-mono font-black shrink-0">
+                  <Star className="w-2.5 h-2.5 fill-slate-950" />
+                  {leader.algoRating.toFixed(1)}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center space-x-1.5 shrink-0 ml-1">
+              <span className="text-[10px] text-slate-500 font-semibold hidden sm:inline">
+                {potm.totalVotes} {potm.totalVotes === 1 ? 'stemme' : 'stemmer'}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-white group-hover:bg-amber-500 group-hover:text-white text-slate-800 border border-amber-300 shadow-2xs transition-all">
+                <Vote className="w-2.5 h-2.5 text-amber-500 group-hover:text-white" />
+                <span>{isPotmDecided ? 'Kåring' : 'Stem'}</span>
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Footer Actions */}
         <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">

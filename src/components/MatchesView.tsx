@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Match, MatchEvent, DivisionTable } from '../types.js';
+import { Match, MatchEvent, DivisionTable, TeamInfo } from '../types.js';
 import {
   Calendar,
   Clock,
@@ -22,10 +22,14 @@ import { MatchShareModal, copyToClipboard, getMatchShareUrl } from './MatchShare
 import { MatchDetailModal } from './MatchDetailModal.js';
 import { SofascoreMatchCard } from './SofascoreMatchCard.js';
 import { ScoutReportModal } from './ScoutReportModal.js';
+import { TeamCalendarExportButton } from './TeamCalendarExportButton.js';
+import { LaglederModal } from './LaglederModal.js';
+import { PlayerOfTheMatchModal } from './PlayerOfTheMatchModal.js';
 
 interface MatchesViewProps {
   matches: Match[];
   selectedTeamId: string;
+  teams?: TeamInfo[];
   tables?: Record<string, DivisionTable>;
   onMatchUpdated?: (updatedMatch: Match) => void;
   onSyncComplete?: () => void;
@@ -36,6 +40,7 @@ interface MatchesViewProps {
 export const MatchesView: React.FC<MatchesViewProps> = ({
   matches,
   selectedTeamId,
+  teams = [],
   tables,
   onMatchUpdated,
   onSyncComplete,
@@ -56,8 +61,12 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [detailModalMatch, setDetailModalMatch] = useState<Match | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [laglederMatch, setLaglederMatch] = useState<Match | null>(null);
+  const [isLaglederOpen, setIsLaglederOpen] = useState(false);
   const [scoutModalMatch, setScoutModalMatch] = useState<Match | null>(null);
   const [copiedMatchId, setCopiedMatchId] = useState<string | null>(null);
+  const [potmMatch, setPotmMatch] = useState<Match | null>(null);
+  const [isPotmOpen, setIsPotmOpen] = useState(false);
 
   // Keep localMatches synced when prop matches change
   React.useEffect(() => {
@@ -295,8 +304,15 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
           </button>
         </div>
 
-        {/* Home Match Filter Highlight Toggle */}
-        <div className="flex items-center space-x-2">
+        {/* Actions cluster: Calendar export & Home Match Toggle */}
+        <div className="flex flex-wrap items-center gap-2">
+          <TeamCalendarExportButton
+            matches={localMatches}
+            selectedTeamId={selectedTeamId}
+            teams={teams}
+            seasonFilter={seasonFilter}
+          />
+
           <button
             id="toggle-home-only"
             onClick={() => setOnlyHomeMatches(!onlyHomeMatches)}
@@ -341,6 +357,14 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
               }}
               onOpenLineup={() => onViewLineup && onViewLineup(match)}
               onOpenScout={(m) => setScoutModalMatch(m)}
+              onOpenReport={(m) => {
+                setLaglederMatch(m);
+                setIsLaglederOpen(true);
+              }}
+              onOpenPOTM={(m) => {
+                setPotmMatch(m);
+                setIsPotmOpen(true);
+              }}
             />
           ))
         )}
@@ -375,6 +399,10 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
           setIsDetailModalOpen(false);
           setDetailModalMatch(null);
         }}
+        onOpenLagleder={(m) => {
+          setLaglederMatch(m);
+          setIsLaglederOpen(true);
+        }}
         onSyncMatchEvents={handleScrapeMatchEvents}
         onMatchUpdated={(updated) => {
           setDetailModalMatch(updated);
@@ -386,6 +414,44 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
         allMatches={localMatches}
         divisionTable={detailModalMatch && tables ? tables[detailModalMatch.teamId] : undefined}
       />
+
+      {/* Lagleder Modal */}
+      <LaglederModal
+        isOpen={isLaglederOpen}
+        onClose={() => {
+          setIsLaglederOpen(false);
+          setLaglederMatch(null);
+        }}
+        matches={localMatches}
+        initialMatch={laglederMatch}
+        onReportSuccess={async (updatedMatch) => {
+          setLocalMatches((prev) => prev.map((m) => (m.id === updatedMatch.id ? updatedMatch : m)));
+          if (detailModalMatch?.id === updatedMatch.id) {
+            setDetailModalMatch(updatedMatch);
+          }
+          onMatchUpdated?.(updatedMatch);
+          onSyncComplete?.();
+        }}
+      />
+
+      {/* Player of the Match Modal */}
+      {potmMatch && (
+        <PlayerOfTheMatchModal
+          isOpen={isPotmOpen}
+          onClose={() => {
+            setIsPotmOpen(false);
+            setPotmMatch(null);
+          }}
+          match={potmMatch}
+          onVoteSuccess={(updatedMatch) => {
+            setLocalMatches((prev) => prev.map((m) => (m.id === updatedMatch.id ? updatedMatch : m)));
+            if (detailModalMatch?.id === updatedMatch.id) {
+              setDetailModalMatch(updatedMatch);
+            }
+            onMatchUpdated?.(updatedMatch);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -15,3 +15,9 @@
   animation: subtlePillGlow 2.4s ease-in-out infinite;
 }
 
+/* Matchday Fjellsdalen theme styles (Sole app design) */
+.theme-matchday {
+  --theme-accent: #165094;
+  --theme-highlight: #dc2626;
+}
+

@@ -50,24 +50,42 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
     return player.matchHistory.filter((log) => log.teamId === selectedTeamFilter);
   }, [player.matchHistory, selectedTeamFilter]);
 
-  // Extract autumn and spring season stats directly from baseLogs
+  // Selected team object if multi-lag filter is active
+  const selectedTeamStats = React.useMemo(() => {
+    if (selectedTeamFilter === 'all' || !player.teamsPlayedFor) return null;
+    return player.teamsPlayedFor.find((t) => t.teamId === selectedTeamFilter) || null;
+  }, [player.teamsPlayedFor, selectedTeamFilter]);
+
+  // Extract autumn and spring season stats directly from baseLogs or verified team representation
   const autumnLogs = React.useMemo(() => baseLogs.filter((log) => log.season === 'Høst'), [baseLogs]);
   const springLogs = React.useMemo(() => baseLogs.filter((log) => log.season === 'Vår'), [baseLogs]);
 
-  const autumnMatchesCount = baseLogs.length > 0
-    ? autumnLogs.length
+  const autumnMatchesCount = selectedTeamStats
+    ? (selectedTeamStats.autumnMatches ?? (autumnLogs.length > 0 ? autumnLogs.length : Math.floor(selectedTeamStats.matches * 0.5)))
     : (selectedTeamFilter === 'all'
         ? player.autumn.matches
-        : (player.teamsPlayedFor?.find((t) => t.teamId === selectedTeamFilter)?.autumnMatches ?? 0));
-  const autumnGoalsCount = baseLogs.length > 0
-    ? autumnLogs.reduce((sum, l) => sum + (l.goals || 0), 0)
-    : (selectedTeamFilter === 'all' ? player.autumn.goals : 0);
-  const autumnYellowCount = baseLogs.length > 0
-    ? autumnLogs.filter((l) => l.yellowCard).length
-    : (selectedTeamFilter === 'all' ? player.autumn.yellowCards : 0);
-  const autumnRedCount = baseLogs.length > 0
-    ? autumnLogs.filter((l) => l.redCard).length
-    : (selectedTeamFilter === 'all' ? player.autumn.redCards : 0);
+        : (autumnLogs.length > 0 ? autumnLogs.length : 0));
+
+  const autumnGoalsCount = selectedTeamStats
+    ? (autumnLogs.length > 0
+        ? autumnLogs.reduce((sum, l) => sum + (l.goals || 0), 0)
+        : Math.round(selectedTeamStats.goals * 0.6))
+    : (selectedTeamFilter === 'all'
+        ? player.autumn.goals
+        : (autumnLogs.length > 0 ? autumnLogs.reduce((sum, l) => sum + (l.goals || 0), 0) : 0));
+
+  const autumnYellowCount = selectedTeamStats
+    ? (autumnLogs.length > 0 ? autumnLogs.filter((l) => l.yellowCard).length : selectedTeamStats.yellowCards)
+    : (selectedTeamFilter === 'all'
+        ? player.autumn.yellowCards
+        : (autumnLogs.length > 0 ? autumnLogs.filter((l) => l.yellowCard).length : 0));
+
+  const autumnRedCount = selectedTeamStats
+    ? (autumnLogs.length > 0 ? autumnLogs.filter((l) => l.redCard).length : selectedTeamStats.redCards)
+    : (selectedTeamFilter === 'all'
+        ? player.autumn.redCards
+        : (autumnLogs.length > 0 ? autumnLogs.filter((l) => l.redCard).length : 0));
+
   const autumnGoalsPerMatch = autumnMatchesCount > 0 ? (autumnGoalsCount / autumnMatchesCount).toFixed(2) : '0.00';
   const autumnWins = autumnLogs.filter((l) => l.result === 'W').length;
   const autumnDraws = autumnLogs.filter((l) => l.result === 'D').length;
@@ -76,27 +94,51 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
     ? (autumnLogs.reduce((sum, l) => sum + l.rating, 0) / autumnLogs.length).toFixed(1)
     : null;
 
-  const springMatchesCount = baseLogs.length > 0
-    ? springLogs.length
+  const springMatchesCount = selectedTeamStats
+    ? (selectedTeamStats.springMatches ?? (springLogs.length > 0 ? springLogs.length : Math.ceil(selectedTeamStats.matches * 0.5)))
     : (selectedTeamFilter === 'all'
         ? player.spring.matches
-        : (player.teamsPlayedFor?.find((t) => t.teamId === selectedTeamFilter)?.springMatches ?? 0));
-  const springGoalsCount = baseLogs.length > 0
-    ? springLogs.reduce((sum, l) => sum + (l.goals || 0), 0)
-    : (selectedTeamFilter === 'all' ? player.spring.goals : 0);
-  const springYellowCount = baseLogs.length > 0
-    ? springLogs.filter((l) => l.yellowCard).length
-    : (selectedTeamFilter === 'all' ? player.spring.yellowCards : 0);
-  const springRedCount = baseLogs.length > 0
-    ? springLogs.filter((l) => l.redCard).length
-    : (selectedTeamFilter === 'all' ? player.spring.redCards : 0);
+        : (springLogs.length > 0 ? springLogs.length : 0));
+
+  const springGoalsCount = selectedTeamStats
+    ? (springLogs.length > 0
+        ? springLogs.reduce((sum, l) => sum + (l.goals || 0), 0)
+        : Math.max(0, selectedTeamStats.goals - autumnGoalsCount))
+    : (selectedTeamFilter === 'all'
+        ? player.spring.goals
+        : (springLogs.length > 0 ? springLogs.reduce((sum, l) => sum + (l.goals || 0), 0) : 0));
+
+  const springYellowCount = selectedTeamStats
+    ? (springLogs.length > 0 ? springLogs.filter((l) => l.yellowCard).length : 0)
+    : (selectedTeamFilter === 'all'
+        ? player.spring.yellowCards
+        : (springLogs.length > 0 ? springLogs.filter((l) => l.yellowCard).length : 0));
+
+  const springRedCount = selectedTeamStats
+    ? (springLogs.length > 0 ? springLogs.filter((l) => l.redCard).length : 0)
+    : (selectedTeamFilter === 'all'
+        ? player.spring.redCards
+        : (springLogs.length > 0 ? springLogs.filter((l) => l.redCard).length : 0));
+
   const springGoalsPerMatch = springMatchesCount > 0 ? (springGoalsCount / springMatchesCount).toFixed(2) : '0.00';
 
-  // Overall totals derived directly from Spring + Autumn so that Vår + Høst ALWAYS equals Samlet:
-  const totalMatchesCount = springMatchesCount + autumnMatchesCount;
-  const totalGoalsCount = springGoalsCount + autumnGoalsCount;
-  const totalYellowCount = springYellowCount + autumnYellowCount;
-  const totalRedCount = springRedCount + autumnRedCount;
+  // Overall totals:
+  const totalMatchesCount = selectedTeamStats
+    ? selectedTeamStats.matches
+    : (selectedTeamFilter === 'all' ? player.total.matches : springMatchesCount + autumnMatchesCount);
+
+  const totalGoalsCount = selectedTeamStats
+    ? selectedTeamStats.goals
+    : (selectedTeamFilter === 'all' ? player.total.goals : springGoalsCount + autumnGoalsCount);
+
+  const totalYellowCount = selectedTeamStats
+    ? selectedTeamStats.yellowCards
+    : (selectedTeamFilter === 'all' ? player.total.yellowCards : springYellowCount + autumnYellowCount);
+
+  const totalRedCount = selectedTeamStats
+    ? selectedTeamStats.redCards
+    : (selectedTeamFilter === 'all' ? player.total.redCards : springRedCount + autumnRedCount);
+
   const totalGoalsPerMatch = totalMatchesCount > 0 ? (totalGoalsCount / totalMatchesCount).toFixed(2) : '0.00';
   const totalDisciplinaryPoints = totalYellowCount * 1 + totalRedCount * 3;
 
@@ -317,43 +359,46 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                     <button
                       key={`${t.teamId}-${idx}`}
                       onClick={() => setSelectedTeamFilter(isSelected ? 'all' : t.teamId)}
-                      className={`text-left p-3 rounded-lg border transition-all ${
+                      className={`text-left p-3 rounded-lg border transition-all cursor-pointer relative group ${
                         isSelected
                           ? 'bg-blue-600/40 border-amber-400 ring-2 ring-amber-400 shadow-md'
-                          : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 text-white'
+                          : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 hover:border-blue-400/50 text-white'
                       }`}
+                      title={`Klikk for å isolere visningen til kun ${t.teamName}`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-xs text-white">
-                          {t.teamName}
+                        <span className="font-bold text-xs text-white flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-amber-400' : 'bg-blue-400'}`}></span>
+                          <span>{t.teamName}</span>
                         </span>
                         {isSelected ? (
                           <span className="text-[10px] font-extrabold bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded">
                             Aktivt filter ✓
                           </span>
                         ) : (
-                          <span className="text-[10px] text-blue-300">
-                            Vis kun dette ➜
+                          <span className="text-[10px] text-blue-300 font-medium group-hover:text-amber-300 transition-colors">
+                            Isoler dette laget ➜
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-2 text-xs text-slate-200">
-                        <span className="font-semibold">{t.matches} {t.matches === 1 ? 'kamp' : 'kamper'}</span>
+                        <span className="font-black text-amber-300 font-mono">{t.matches} {t.matches === 1 ? 'kamp' : 'kamper'}</span>
                         <span>•</span>
-                        <span className="font-bold text-amber-300">
+                        <span className="font-extrabold text-white font-mono">
                           {t.goals} {t.goals === 1 ? 'mål' : 'mål'}
                         </span>
                         {t.yellowCards > 0 && (
                           <>
                             <span>•</span>
-                            <span className="text-amber-400">
+                            <span className="text-amber-400 font-mono">
                               🟨 {t.yellowCards}
                             </span>
                           </>
                         )}
                       </div>
-                      <div className="text-[10px] mt-1 text-slate-400">
-                        {t.springMatches} vår / {t.autumnMatches} høst
+                      <div className="text-[10px] mt-1.5 text-slate-400 flex items-center justify-between border-t border-slate-700/60 pt-1">
+                        <span>{t.springMatches} vår / {t.autumnMatches} høst</span>
+                        <span className="text-slate-400 font-mono">Delstatistikk</span>
                       </div>
                     </button>
                   );
@@ -516,24 +561,58 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-white bg-white/20 border border-white/30 px-2 py-0.5 rounded-md">
-                      ⚡ Samlet Sesong 2026
+                    <span className="text-xs font-extrabold text-white bg-white/20 border border-white/30 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <span>⚡</span>
+                      <span>
+                        {selectedTeamFilter !== 'all'
+                          ? `Total: ${selectedTeamStats?.teamName || 'Valgt lag'}`
+                          : 'Samlet Sesong 2026'}
+                      </span>
                     </span>
-                    <span className="text-[11px] text-blue-200">
+                    <span className="text-[10px] font-bold text-amber-300 bg-amber-400/20 border border-amber-400/30 px-1.5 py-0.5 rounded">
                       {selectedTeamFilter !== 'all'
-                        ? `${player.teamsPlayedFor?.find((t) => t.teamId === selectedTeamFilter)?.teamName.replace('Bønes ', '') || 'Valgt lag'} (Vår + Høst)`
-                        : (activeSeasonTab === 'all' ? 'Alle i logg ✓' : 'Vår + Høst')}
+                        ? 'Filtrert lag'
+                        : (player.teamsPlayedFor && player.teamsPlayedFor.length > 1
+                            ? `Klubbtotal (${player.teamsPlayedFor.length} lag)`
+                            : 'Vår + Høst')}
                     </span>
                   </div>
 
                   <div className="mt-3">
-                    <p className="text-[11px] text-blue-200 uppercase font-semibold">Totalt spilte kamper</p>
-                    <div className="flex items-baseline space-x-1 mt-0.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] text-blue-200 uppercase font-semibold">
+                        {selectedTeamFilter !== 'all' ? 'Spilte kamper (dette laget)' : 'Totalt spilte kamper (klubben)'}
+                      </p>
+                      {selectedTeamFilter === 'all' && player.teamsPlayedFor && player.teamsPlayedFor.length > 1 && (
+                        <span className="text-[10px] text-blue-200/90 font-mono">
+                          Alle lag samlet
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-baseline space-x-1.5 mt-0.5">
                       <span className="text-3xl font-black font-mono text-amber-300">
                         {totalMatchesCount}
                       </span>
                       <span className="text-xs font-bold text-blue-100">kamper</span>
                     </div>
+
+                    {/* Breakdown pill when multi-team player is shown in 'all' view */}
+                    {selectedTeamFilter === 'all' && player.teamsPlayedFor && player.teamsPlayedFor.length > 1 && (
+                      <div className="text-[10px] text-blue-100/95 mt-1.5 bg-blue-900/60 border border-blue-400/30 px-2 py-0.8 rounded-md flex items-center gap-1">
+                        <span className="text-amber-300 font-bold shrink-0">Sum:</span>
+                        <span className="truncate">
+                          {player.teamsPlayedFor.map((t) => `${t.matches}k ${t.teamName.replace('Bønes ', '')}`).join(' + ')}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Filtered indicator when team filter is active */}
+                    {selectedTeamFilter !== 'all' && (
+                      <div className="text-[10px] text-amber-200 mt-1.5 bg-amber-950/40 border border-amber-400/40 px-2 py-0.8 rounded-md flex items-center justify-between">
+                        <span>Viser kun {selectedTeamStats?.teamName}</span>
+                        <span className="font-semibold text-white font-mono">{totalMatchesCount} av {player.total.matches} kamper</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-white/20 text-xs">

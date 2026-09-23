@@ -22,6 +22,10 @@ import { useMatchNotifications } from './hooks/useMatchNotifications.js';
 import { OfflineBanner } from './components/OfflineBanner.js';
 import { buildPlayerProfile } from './utils/playerHistory.js';
 import { calculateTopScorersFromSeasonLog, calculateCardsFromSeasonLog } from './utils/playerStatsCalculator.js';
+import { getClubData } from './data/bonesData.js';
+import { MatchdayHeroBanner } from './components/MatchdayHeroBanner.js';
+import { PlayerOfTheMatchModal } from './components/PlayerOfTheMatchModal.js';
+import { LaglederModal } from './components/LaglederModal.js';
 import {
   Calendar,
   Trophy,
@@ -46,12 +50,28 @@ import {
   ChevronUp,
   X,
   Check,
-  Filter
+  Filter,
+  Palette
 } from 'lucide-react';
 
+
 export default function App() {
-  const [data, setData] = useState<BonesClubData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<BonesClubData | null>(() => {
+    try {
+      const cached = localStorage.getItem('bones_club_data_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && Array.isArray(parsed.matches) && Array.isArray(parsed.teams) && parsed.teams.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // Ignore localStorage error
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(() => !data);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('all');
   const [showFullTeamSelector, setShowFullTeamSelector] = useState(false);
@@ -99,22 +119,79 @@ export default function App() {
     setSelectedPlayerTeamId(teamId);
   };
 
+  // Player of the match modal state
+  const [potmModalMatch, setPotmModalMatch] = useState<Match | null>(null);
+  const [isPotmModalOpen, setIsPotmModalOpen] = useState(false);
+
+  // Lagleder live reporter modal state
+  const [isLaglederModalOpen, setIsLaglederModalOpen] = useState(false);
+  const [laglederMatch, setLaglederMatch] = useState<Match | null>(null);
+
+  const handleOpenPOTM = (match: Match) => {
+    setPotmModalMatch(match);
+    setIsPotmModalOpen(true);
+  };
+
   // Show temporary toast message
   const showToast = (msg: string) => {
+
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4500);
   };
 
-  // Fetch full data from backend
-  const fetchData = async () => {
+  // Fetch full data from backend with safe content-type verification and auto-retry
+  const fetchData = async (retryCount = 0): Promise<boolean> => {
     try {
       const res = await fetch('/api/bones/data');
-      if (res.ok) {
-        const json: BonesClubData = await res.json();
-        setData(json);
+      const contentType = res.headers.get('content-type') || '';
+
+      // If server returned non-200 or returned HTML (e.g. warmup.html during server spinup)
+      if (!res.ok || !contentType.includes('application/json')) {
+        console.warn(`[API] /api/bones/data returned non-JSON response (status: ${res.status}, type: ${contentType})`);
+
+        // Auto-retry up to 5 times while server is warming up
+        if (retryCount < 5) {
+          const delay = Math.min(1000 * Math.pow(1.5, retryCount), 4000);
+          setTimeout(() => {
+            fetchData(retryCount + 1);
+          }, delay);
+          return false;
+        }
+
+        // Retries exhausted: fallback to bundled club database if no data present
+        if (!data) {
+          const fallback = getClubData();
+          setData(fallback);
+          setFetchError('Klarte ikke å koble til sanntidsserver. Viser lokal klubbdatabase.');
+        }
+        return false;
       }
-    } catch (err) {
-      console.error('Failed to fetch Bønes club data:', err);
+
+      const json: BonesClubData = await res.json();
+      if (json && Array.isArray(json.matches)) {
+        setData(json);
+        setFetchError(null);
+        try {
+          localStorage.setItem('bones_club_data_cache', JSON.stringify(json));
+        } catch {
+          // LocalStorage quota
+        }
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      console.warn('[API] Failed to fetch Bønes club data:', err?.message || err);
+      if (retryCount < 5) {
+        const delay = Math.min(1000 * Math.pow(1.5, retryCount), 4000);
+        setTimeout(() => {
+          fetchData(retryCount + 1);
+        }, delay);
+      } else if (!data) {
+        const fallback = getClubData();
+        setData(fallback);
+        setFetchError('Tilkoblingsfeil mot server. Viser lokal klubbdatabase.');
+      }
+      return false;
     } finally {
       setLoading(false);
     }
@@ -125,7 +202,8 @@ export default function App() {
     setIsRealScraping(true);
     try {
       const res = await fetch('/api/bones/scrape-real', { method: 'POST' });
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const result = await res.json();
         setData(result.data);
         showToast('Fersk scraping fullført! Alle 16 Bønes-lag, tabeller og kamper er lagret til databasen.');
@@ -144,10 +222,13 @@ export default function App() {
     setIsScanning(true);
     try {
       const res = await fetch('/api/bones/scan', { method: 'POST' });
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const result = await res.json();
         setData(result.data);
         showToast('NFF-kontroll fullført! Resultater og tabeller er oppdatert.');
+      } else {
+        showToast('Kunne ikke fullføre manuell skanning akkurat nå.');
       }
     } catch (err) {
       showToast('Kunne ikke fullføre manuell skanning akkurat nå.');
@@ -160,7 +241,8 @@ export default function App() {
   const handleToggleAutoScan = async () => {
     try {
       const res = await fetch('/api/bones/scanner-toggle', { method: 'POST' });
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const result = await res.json();
         fetchData();
         showToast(`Autoskanner satt til ${result.autoScanEnabled ? 'PÅ' : 'AV'}.`);
@@ -193,7 +275,8 @@ export default function App() {
     const checkInterval = setInterval(async () => {
       try {
         const res = await fetch('/api/bones/data/check');
-        if (res.ok) {
+        const ct = res.headers.get('content-type') || '';
+        if (res.ok && ct.includes('application/json')) {
           const check = await res.json();
           // If data version increased or active match window is ongoing, pull full data
           if (check.dataVersion !== lastKnownVersion || check.activeMatchWindow) {
@@ -222,9 +305,9 @@ export default function App() {
     return calculateCardsFromSeasonLog(data);
   }, [data]);
 
-  if (loading || !data) {
+  if (loading && !data) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white space-y-4">
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white space-y-4 px-4 text-center">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-600 to-blue-900 flex items-center justify-center animate-pulse">
           <Shield className="w-7 h-7 text-white" />
         </div>
@@ -237,6 +320,43 @@ export default function App() {
     );
   }
 
+  if (!data) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white space-y-4 px-4 text-center">
+        <div className="w-12 h-12 rounded-xl bg-red-600/20 border border-red-500/40 flex items-center justify-center">
+          <AlertTriangle className="w-7 h-7 text-red-400" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold tracking-tight">Kunne ikke koble til serveren</h2>
+          <p className="text-xs text-slate-400 mt-1 max-w-md">
+            Sanntidsserveren starter opp eller svarte med ugyldig format. Klikk nedenfor for å prøve igjen eller åpne lokal database.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              setLoading(true);
+              fetchData(0);
+            }}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors shadow-md flex items-center gap-1.5"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Prøv igjen nå</span>
+          </button>
+          <button
+            onClick={() => {
+              const fallback = getClubData();
+              setData(fallback);
+            }}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg cursor-pointer transition-colors border border-slate-700"
+          >
+            Bruk lokal database
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Ongoing live match
   const liveMatch = data.matches.find(m => m.status === 'live');
 
@@ -245,7 +365,7 @@ export default function App() {
   const upcomingHomeCount = data.matches.filter(m => m.isHome && m.status !== 'finished').length;
 
   return (
-    <div className="min-h-screen bg-[#f4f5f8] text-slate-900 flex flex-col font-sans selection:bg-[#165094] selection:text-white">
+    <div className="min-h-screen flex flex-col font-sans bg-[#f4f5f8] text-slate-900 selection:bg-[#165094] selection:text-white theme-matchday">
       
       {/* Toast Notification */}
       {toastMessage && (
@@ -270,6 +390,7 @@ export default function App() {
         hasLiveMatch={Boolean(liveMatch)}
       />
 
+
       {/* Network & Offline Status Banner */}
       <OfflineBanner
         isRealData={true}
@@ -285,7 +406,13 @@ export default function App() {
       <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4">
         
         {/* FotMob Club Profile Header */}
-        <section id="fotmob-club-header" className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs">
+        <section id="fotmob-club-header" className="relative overflow-hidden bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs">
+          {/* Bønes ILs lagfarger: diskré aksentlinje (Kongeblå & Rød) */}
+          <div
+            id="bones-club-header-accent-strip"
+            className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#165094] via-[#dc2626] to-[#165094]"
+            title="Bønes IL klubbfarger: Kongeblå & Rød"
+          />
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             
             {/* Club Crest and Titles */}
@@ -305,6 +432,15 @@ export default function App() {
                   <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
                     Bønes IL
                   </h1>
+                  {/* Bønes IL Club Colors Sub-badge */}
+                  <span
+                    className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200"
+                    title="Bønes IL offisielle klubbfarger"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-[#165094]"></span>
+                    <span className="w-2 h-2 rounded-full bg-[#dc2626]"></span>
+                    <span className="font-semibold text-slate-600">Blå & Rød</span>
+                  </span>
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-[#165094] border border-blue-200">
                     16 lag
                   </span>
@@ -338,12 +474,22 @@ export default function App() {
 
             {/* FotMob Header Action Chips */}
             <div className="flex items-center flex-wrap gap-2 shrink-0 self-start sm:self-center">
+              <div
+                id="badge-matchday-design"
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-900 to-[#165094] text-white text-xs font-bold shadow-2xs border border-blue-800"
+                title="Design: Matchday Fjellsdalen"
+              >
+                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                <span>Matchday Fjellsdalen</span>
+              </div>
+
               <button
                 id="btn-fotmob-notifications"
                 onClick={() => {
                   setIsNotificationModalOpen(true);
                   markAllAsRead();
                 }}
+
                 className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition-colors cursor-pointer border border-slate-200"
                 title="Mål- og kampstartvarsler"
               >
@@ -718,6 +864,13 @@ export default function App() {
           </div>
         </section>
 
+        {/* Matchday Fjellsdalen Arena Hero (Permanent og eneste design) */}
+        <MatchdayHeroBanner
+          matches={data.matches}
+          onOpenMatch={(m) => handleViewLineup(m)}
+          onOpenPOTM={(m) => handleOpenPOTM(m)}
+        />
+
         {/* View Panes */}
         {activeTab === 'livescore' && (
           <LivescoreDashboard
@@ -725,16 +878,20 @@ export default function App() {
             onRefreshData={fetchData}
             onSelectPlayer={handleSelectPlayer}
             onViewLineup={handleViewLineup}
+            onOpenPOTM={(m) => handleOpenPOTM(m)}
           />
         )}
+
 
         {activeTab === 'feed' && (
           <LiveFeedView
             feed={data.feed || []}
+            matches={data.matches || []}
             selectedTeamId={selectedTeamId}
             onManualScan={handleManualScan}
             isScanning={isScanning}
             scanner={data.scanner}
+            onOpenPOTM={(m) => handleOpenPOTM(m)}
           />
         )}
 
@@ -742,6 +899,7 @@ export default function App() {
           <MatchesView
             matches={data.matches}
             selectedTeamId={selectedTeamId}
+            teams={data.teams}
             tables={data.tables}
             onSyncComplete={fetchData}
             onSelectPlayer={handleSelectPlayer}
@@ -907,6 +1065,53 @@ export default function App() {
         }}
       />
 
+      {/* Player of the Match Modal (Algorating + Publikum live-stemmer) */}
+      {potmModalMatch && (
+        <PlayerOfTheMatchModal
+          isOpen={isPotmModalOpen}
+          onClose={() => {
+            setIsPotmModalOpen(false);
+            setPotmModalMatch(null);
+          }}
+          match={potmModalMatch}
+          onVoteSuccess={(updated) => {
+            setData((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                matches: prev.matches.map((m) => (m.id === updated.id ? updated : m))
+              };
+            });
+            showToast(`Stemme registrert på Banens Beste i ${updated.homeTeam} vs ${updated.awayTeam}!`);
+          }}
+        />
+      )}
+
+      {/* Lagleder Modal for Match Events */}
+      {isLaglederModalOpen && (
+        <LaglederModal
+          isOpen={isLaglederModalOpen}
+          onClose={() => {
+            setIsLaglederModalOpen(false);
+            setLaglederMatch(null);
+          }}
+          matches={data.matches}
+          initialMatch={laglederMatch || undefined}
+          players={data.teams.flatMap((t) => t.players)}
+          onReportSuccess={(updated, msg) => {
+            setData((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                matches: prev.matches.map((m) => (m.id === updated.id ? updated : m))
+              };
+            });
+            showToast(msg);
+          }}
+        />
+      )}
+
     </div>
   );
 }
+

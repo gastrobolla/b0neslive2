@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { DivisionTable, TeamInfo, Match } from '../types.js';
-import { Trophy, ArrowUpRight, TrendingUp, ExternalLink, Shield, Calendar, Clock, ChevronRight, MapPin, CheckCircle2 } from 'lucide-react';
+import { Trophy, ArrowUpRight, TrendingUp, ExternalLink, Shield, Calendar, Clock, ChevronRight, MapPin, CheckCircle2, Activity } from 'lucide-react';
+import { TeamFormChart } from './TeamFormChart.js';
+import { getTeamForm } from './TeamSelector.js';
 
 interface TablesViewProps {
   tables: Record<string, DivisionTable>;
@@ -170,12 +172,26 @@ export const TablesView: React.FC<TablesViewProps> = ({
             </div>
 
             {activeTeamInfo && (
-              <div className="flex items-center space-x-2 text-xs bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-lg self-start sm:self-auto shadow-xs">
-                <span className="text-slate-400 font-medium">Bønes plassering:</span>
-                <span className="font-bold text-amber-400 font-mono text-sm">
-                  #{currentBonesRank}
-                </span>
-                <span className="text-slate-400">av {activeTable.rows.length} lag</span>
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                <div className="flex items-center space-x-2 text-xs bg-slate-800/90 border border-slate-700/80 px-3 py-1.5 rounded-lg shadow-xs">
+                  <span className="text-slate-400 font-medium">Bønes plassering:</span>
+                  <span className="font-bold text-amber-400 font-mono text-sm">
+                    #{currentBonesRank}
+                  </span>
+                  <span className="text-slate-400">av {activeTable.rows.length} lag</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById(`team-form-chart-${activeTeamInfo.id}`);
+                    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
+                  className="flex items-center space-x-1.5 text-xs bg-blue-600/90 hover:bg-blue-600 text-white font-bold px-3 py-1.5 rounded-lg transition-all shadow-xs cursor-pointer border border-blue-500/40"
+                  title="Gå direkte til grafisk formkurve over siste 5 kamper"
+                >
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>Formkurve (5k)</span>
+                </button>
               </div>
             )}
           </div>
@@ -289,23 +305,44 @@ export const TablesView: React.FC<TablesViewProps> = ({
 
                       {/* Form Guide */}
                       <td className="py-3 px-3 sm:px-4 text-center hidden lg:table-cell">
-                        <div className="flex items-center justify-center space-x-1">
-                          {row.form.map((res, i) => (
-                            <span
-                              key={i}
-                              className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white ${
-                                res === 'W'
-                                  ? 'bg-emerald-600'
-                                  : res === 'D'
-                                  ? 'bg-amber-500'
-                                  : 'bg-red-600'
-                              }`}
-                              title={res === 'W' ? 'Seier' : res === 'D' ? 'Uavgjort' : 'Tap'}
+                        {(() => {
+                          const formList = (row.form && row.form.length > 0)
+                            ? row.form
+                            : (isBones && activeTeamInfo ? getTeamForm(activeTeamInfo, tables, matches) : []);
+
+                          if (formList.length === 0) {
+                            return <span className="text-slate-400 text-[11px]">-</span>;
+                          }
+
+                          return (
+                            <div
+                              onClick={isBones ? () => {
+                                const el = document.getElementById(`team-form-chart-${activeTeamInfo?.id}`);
+                                el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              } : undefined}
+                              className={`flex items-center justify-center space-x-1 ${isBones ? 'cursor-pointer group' : ''}`}
+                              title={isBones ? 'Klikk for å se detaljert formkurve' : undefined}
                             >
-                              {res === 'W' ? 'S' : res === 'D' ? 'U' : 'T'}
-                            </span>
-                          ))}
-                        </div>
+                              {formList.map((res, i) => (
+                                <span
+                                  key={i}
+                                  className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white transition-transform ${
+                                    isBones ? 'group-hover:scale-105' : ''
+                                  } ${
+                                    res === 'W'
+                                      ? 'bg-emerald-600'
+                                      : res === 'D'
+                                      ? 'bg-amber-500'
+                                      : 'bg-red-600'
+                                  }`}
+                                  title={res === 'W' ? 'Seier' : res === 'D' ? 'Uavgjort' : 'Tap'}
+                                >
+                                  {res === 'W' ? 'S' : res === 'D' ? 'U' : 'T'}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                     </tr>
@@ -339,10 +376,26 @@ export const TablesView: React.FC<TablesViewProps> = ({
         </div>
       )}
 
+      {/* Graphical Team Form Representation for Last 5 Matches (D3 & Recharts) */}
+      {activeTeamInfo && (
+        <TeamFormChart
+          team={activeTeamInfo}
+          season={selectedSeason}
+          matches={matches}
+          onSelectMatch={onSelectMatch}
+        />
+      )}
+
       {/* Team Match Results & Upcoming Fixtures */}
       {(() => {
         const teamMatches = matches.filter(
-          (m) => m.teamId === activeDivisionKey || m.homeTeam.toLowerCase().includes(activeTeamInfo?.name.toLowerCase() || '') || m.awayTeam.toLowerCase().includes(activeTeamInfo?.name.toLowerCase() || '')
+          (m) =>
+            m.teamId === activeDivisionKey ||
+            m.homeTeam.toLowerCase().includes(activeTeamInfo?.name.toLowerCase() || '') ||
+            m.awayTeam.toLowerCase().includes(activeTeamInfo?.name.toLowerCase() || '') ||
+            (activeTeamInfo?.shortName &&
+              (m.homeTeam.toLowerCase().includes(activeTeamInfo.shortName.toLowerCase()) ||
+                m.awayTeam.toLowerCase().includes(activeTeamInfo.shortName.toLowerCase())))
         );
         const finishedMatches = teamMatches
           .filter((m) => m.status === 'finished')

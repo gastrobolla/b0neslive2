@@ -1,6 +1,7 @@
 import {
   Match,
   MatchEvent,
+  MatchEventType,
   MatchLineup,
   LaglederReportRequest,
 } from '../../src/types.js';
@@ -48,28 +49,109 @@ export class MatchService {
       throw new Error('Navn og rolle på rapportør er påkrevd.');
     }
 
-    // DISALLOW public creation of goals and cards
-    if (req.action === 'goal' as any) {
-      throw new Error(
-        'Innlegging av mål er forbeholdt offisielle NFF-rapporter for å sikre nøyaktig statistikk. Du kan legge inn en kommentar eller målgivende pasning.'
-      );
-    }
-    if (req.action === 'card' as any) {
-      throw new Error(
-        'Innlegging av gule og røde kort er forbeholdt offisielle NFF-rapporter for å sikre nøyaktig statistikk. Du kan legge inn en situasjonskommentar.'
-      );
-    }
-    if (req.action === 'score_adjust' as any) {
-      throw new Error(
-        'Manuell endring av kampscore er ikke tillatt. Resultat beregnes utelukkende fra offisielle kamphendelser.'
-      );
-    }
-
     const reporter = req.reporterName.trim();
     const minute = Math.max(0, Math.min(120, Number(req.minute) || 0));
     const now = new Date().toISOString();
 
-    // 1. Status change (pause, andre omgang, ferdig)
+    // 1. Goal reporting (direct live goal registration with scorer and optional assist)
+    if (req.action === 'goal') {
+      const isHome = req.team === match.homeTeam || req.team.toLowerCase().includes(match.homeTeam.toLowerCase());
+      if (isHome) {
+        match.homeScore = (match.homeScore ?? 0) + 1;
+      } else {
+        match.awayScore = (match.awayScore ?? 0) + 1;
+      }
+      match.status = 'live';
+      match.currentMinute = minute > 0 ? minute : match.currentMinute;
+      match.lastUpdatedAt = now;
+      match.lastUpdatedSource = 'lagleder';
+      match.reportedBy = reporter;
+
+      const scorerName = req.player || 'Ukjent spiller';
+      const assistName = req.assistPlayer || undefined;
+      let goalDesc = `⚽ Mål for ${req.team}: ${scorerName}`;
+      if (req.goalType === 'penalty') goalDesc += ' (Straffespark)';
+      else if (req.goalType === 'own_goal') goalDesc += ' (Selvmål)';
+      else if (req.goalType === 'freekick') goalDesc += ' (Frispark)';
+      else if (req.goalType === 'header') goalDesc += ' (Heading)';
+
+      if (assistName) {
+        goalDesc += ` (Målgivende: ${assistName})`;
+      }
+      if (req.description) {
+        goalDesc += ` - ${req.description}`;
+      }
+
+      const goalEvent: MatchEvent = {
+        id: generateDeterministicEventId(
+          match.id,
+          minute,
+          'goal',
+          sanitizeSlug(scorerName),
+          req.team || match.teamName
+        ),
+        matchId: match.id,
+        minute,
+        type: 'goal',
+        player: scorerName,
+        assistPlayer: assistName,
+        team: req.team || match.teamName,
+        teamId: match.teamId,
+        description: goalDesc,
+        source: 'lagleder',
+        reportedBy: reporter,
+        createdAt: now,
+      };
+
+      const updated = await this.repo.addSupplementaryComment(match.id, goalEvent);
+      return {
+        match: updated,
+        message: `Mål for ${req.team} (${scorerName}${assistName ? ' / assist: ' + assistName : ''}) i det ${minute}. minutt ble registrert! Ny stilling: ${match.homeScore ?? 0} - ${match.awayScore ?? 0}.`,
+      };
+    }
+
+    // 2. Card reporting (yellow or red card directly linked to player and reason)
+    if (req.action === 'card') {
+      const isRed = req.cardType === 'red';
+      const eventType: MatchEventType = isRed ? 'red_card' : 'yellow_card';
+      const playerName = req.player || 'Ukjent spiller';
+      let cardDesc = `${isRed ? '🟥 Rødt kort' : '🟨 Gult kort'} til ${playerName} (${req.team})`;
+      if (req.cardReason) {
+        cardDesc += `: ${req.cardReason}`;
+      }
+      if (req.description) {
+        cardDesc += ` (${req.description})`;
+      }
+
+      const cardEvent: MatchEvent = {
+        id: generateDeterministicEventId(
+          match.id,
+          minute,
+          eventType,
+          sanitizeSlug(playerName),
+          req.team || match.teamName
+        ),
+        matchId: match.id,
+        minute,
+        type: eventType,
+        player: playerName,
+        team: req.team || match.teamName,
+        teamId: match.teamId,
+        description: cardDesc,
+        linkedEventId: req.targetEventId,
+        source: 'lagleder',
+        reportedBy: reporter,
+        createdAt: now,
+      };
+
+      const updated = await this.repo.addSupplementaryComment(match.id, cardEvent);
+      return {
+        match: updated,
+        message: `${isRed ? 'Rødt kort' : 'Gult kort'} til ${playerName} i det ${minute}. minutt ble registrert.`,
+      };
+    }
+
+    // 3. Status change (pause, andre omgang, ferdig)
     if (req.action === 'status_change') {
       const targetStatus = req.matchStatus || 'live';
       match.status = targetStatus;
@@ -78,7 +160,12 @@ export class MatchService {
       match.lastUpdatedSource = 'lagleder';
       match.reportedBy = reporter;
 
-      const commentText = req.description || `Kampstatus oppdatert til ${targetStatus} av ${reporter}`;
+      let statusLabel = targetStatus === 'live' ? 'Pågår nå (Live)' : targetStatus === 'finished' ? 'Ferdigspilt' : 'Ikke startet';
+      if (req.matchPeriod === 'halftime') statusLabel = 'Pause';
+      else if (req.matchPeriod === '2nd_half') statusLabel = '2. omgang i gang';
+      else if (req.matchPeriod === 'fulltime') statusLabel = 'Sluttresultat';
+
+      const commentText = req.description || `Kampstatus oppdatert til ${statusLabel} (${minute}') av ${reporter}`;
       const statusEvent: MatchEvent = {
         id: generateDeterministicEventId(
           match.id,
@@ -102,25 +189,29 @@ export class MatchService {
       const updated = await this.repo.addSupplementaryComment(match.id, statusEvent);
       return {
         match: updated,
-        message: `Kampstatus ble oppdatert til ${targetStatus}.`,
+        message: `Kampstatus ble oppdatert til ${statusLabel}.`,
       };
     }
 
-    // 2. Sub / bytte
+    // 4. Sub / bytte (linked to player out and player in)
     if (req.action === 'sub') {
-      const subDesc = req.description || `Spillerbytte for ${req.team || match.teamName}: ${req.player || 'Ukjent spiller'}`;
+      const inPlayer = req.subInPlayer || req.player || 'Ukjent spiller';
+      const outPlayer = req.subOutPlayer || 'Ukjent spiller';
+      const subDesc = req.description || `🔄 Bytte for ${req.team || match.teamName}: Ut: ${outPlayer} ➔ Inn: ${inPlayer}`;
       const subEvent: MatchEvent = {
         id: generateDeterministicEventId(
           match.id,
           minute,
           'sub',
-          sanitizeSlug(req.player || reporter),
+          sanitizeSlug(inPlayer),
           req.team || match.teamName
         ),
         matchId: match.id,
         minute,
         type: 'sub',
-        player: req.player || reporter,
+        player: inPlayer,
+        subInPlayer: inPlayer,
+        subOutPlayer: outPlayer,
         team: req.team || match.teamName,
         teamId: match.teamId,
         description: subDesc,
@@ -132,37 +223,53 @@ export class MatchService {
       const updated = await this.repo.addSupplementaryComment(match.id, subEvent);
       return {
         match: updated,
-        message: `Bytte i det ${minute}. minutt ble registrert.`,
+        message: `Bytte (${outPlayer} ut, ${inPlayer} inn) i det ${minute}. minutt ble registrert.`,
       };
     }
 
-    // 3. Assist comment / comment to existing goal
+    // 5. Assist comment / link assist to specific goal
     if ((req.action as string) === 'assist_comment' || (req.action as string) === 'event_comment') {
-      // Find latest goal for the team or attach assist
-      const teamGoals = (match.events || []).filter(
-        (e) => e.type === 'goal' && (e.team === req.team || (!req.team && e.team?.includes('Bønes')))
-      );
-      const targetGoal = teamGoals.length > 0 ? teamGoals[teamGoals.length - 1] : null;
+      let targetGoal = req.targetGoalId
+        ? (match.events || []).find((e) => e.id === req.targetGoalId && e.type === 'goal')
+        : null;
 
-      if (targetGoal && req.player) {
-        // Enrich the existing official goal with assist details without modifying goal count
-        targetGoal.assistPlayer = req.player;
+      if (!targetGoal) {
+        const teamGoals = (match.events || []).filter(
+          (e) => e.type === 'goal' && (e.team === req.team || (!req.team && e.team?.includes('Bønes')))
+        );
+        targetGoal = teamGoals.length > 0 ? teamGoals[teamGoals.length - 1] : null;
+      }
+
+      const assistPlayerName = req.assistPlayer || req.player;
+
+      if (targetGoal && assistPlayerName) {
+        targetGoal.assistPlayer = assistPlayerName;
         targetGoal.reportedBy = reporter;
         if (req.description) {
-          targetGoal.description = `${targetGoal.description} (Målgivende: ${req.player}. ${req.description})`;
-        } else {
-          targetGoal.description = `${targetGoal.description} (Målgivende: ${req.player})`;
+          targetGoal.description = `${targetGoal.description} (Målgivende: ${assistPlayerName}. ${req.description})`;
+        } else if (!targetGoal.description.includes(`Målgivende: ${assistPlayerName}`)) {
+          targetGoal.description = `${targetGoal.description} (Målgivende: ${assistPlayerName})`;
         }
         await this.repo.updateMatchEvents(match.id, match.events || []);
         return {
           match,
-          message: `Målgivende pasning (${req.player}) ble lagt til på målet.`,
+          message: `Målgivende pasning (${assistPlayerName}) ble knyttet til ${targetGoal.player || 'målet'} (${targetGoal.minute}')!`,
         };
       }
     }
 
-    // 4. General match commentary or supplementary observation
-    const commentDesc = req.description || `Kommentar fra ${reporter}: ${req.player ? req.player + ' - ' : ''}`;
+    // 6. General match commentary or event observation (can be linked to goal or card)
+    const linkedEvent = req.targetEventId || req.targetGoalId
+      ? (match.events || []).find((e) => e.id === (req.targetEventId || req.targetGoalId))
+      : undefined;
+
+    let commentDesc = req.description || `Kommentar fra ${reporter}`;
+    if (req.player) {
+      commentDesc = `[${req.player}] ${commentDesc}`;
+    }
+    if (linkedEvent) {
+      commentDesc += ` (Knyttet til: ${linkedEvent.type === 'goal' ? '⚽ Mål' : linkedEvent.type === 'red_card' ? '🟥 Rødt kort' : '🟨 Gult kort'} i det ${linkedEvent.minute}. minutt)`;
+    }
     const commentEvent: MatchEvent = {
       id: generateDeterministicEventId(
         match.id,

@@ -7,6 +7,7 @@ import { loadPersistedData, savePersistedData, upsertMatches, queryMatches } fro
 import { ALL_BONES_SQUADS, ALL_BONES_PLAYERS, getSquadForTeam, getMatchLineup } from './src/data/bonesSquads.js';
 import { matchService } from './server/services/matchService.js';
 import { generateOpponentScoutReport } from './server/scoutService.js';
+import { calculateMatchPOTM } from './src/utils/potmCalculator.js';
 import {
   getOfficialPlayerStats,
   scrapeOfficialPlayerStats,
@@ -32,6 +33,9 @@ for (const m of currentData.matches) {
   }
   if (!m.lineup) {
     m.lineup = getMatchLineup(m.teamId);
+  }
+  if (!m.playerOfTheMatch && (m.status === 'finished' || (m.status as string) === 'live')) {
+    m.playerOfTheMatch = calculateMatchPOTM(m);
   }
 }
 savePersistedData(currentData);
@@ -387,7 +391,7 @@ setInterval(async () => {
 // API ROUTES
 
 // 1. Full data retrieval
-app.get('/api/bones/data', (req, res) => {
+app.get(['/api/bones/data', '/api/bones/data/'], (req, res) => {
   if (currentData.matches && currentData.matches.length > 0) {
     rebuildScorersAndCardsFromEvents(currentData.matches);
   }
@@ -395,7 +399,7 @@ app.get('/api/bones/data', (req, res) => {
 });
 
 // 1a. Lightweight version check endpoint for adaptive polling
-app.get('/api/bones/data/check', (req, res) => {
+app.get(['/api/bones/data/check', '/api/bones/data/check/'], (req, res) => {
   const windowInfo = checkMatchWindow();
   res.json({
     success: true,
@@ -910,6 +914,7 @@ app.post(['/api/bones/match/:matchId/report', '/api/lagleder/report'], async (re
     if (matchIdx !== -1) {
       currentData.matches[matchIdx] = result.match;
     }
+    savePersistedData(currentData);
 
     addScanLog(
       'info',
@@ -926,6 +931,49 @@ app.post(['/api/bones/match/:matchId/report', '/api/lagleder/report'], async (re
     res.status(400).json({ error: err.message || 'Kunne ikke registrere rapport.' });
   }
 });
+
+// 4b. Banens Beste (Player of the Match) voting and jury rating endpoint
+app.post('/api/bones/match/:matchId/vote-potm', (req, res) => {
+  const { matchId } = req.params;
+  const { playerName, team, juryPlayer, juryNotes } = req.body;
+
+  const match = currentData.matches.find(m => m.id === matchId);
+  if (!match) {
+    return res.status(404).json({ error: 'Kamp ikke funnet' });
+  }
+
+  // Get current or newly calculated POTM
+  let incomingVotes: Record<string, number> = {};
+  if (match.playerOfTheMatch?.candidates) {
+    for (const c of match.playerOfTheMatch.candidates) {
+      incomingVotes[c.playerName] = c.votes || 0;
+    }
+  }
+
+  if (playerName) {
+    incomingVotes[playerName] = (incomingVotes[playerName] || 0) + 1;
+  }
+
+  const updatedPOTM = calculateMatchPOTM(match, incomingVotes, juryPlayer, juryNotes);
+  match.playerOfTheMatch = updatedPOTM;
+
+  savePersistedData(currentData);
+
+  addScanLog(
+    'info',
+    'Banens Beste',
+    playerName
+      ? `Publikumsstemme på ${playerName} registrert for ${match.homeTeam} vs ${match.awayTeam}. Totalt ${updatedPOTM.totalVotes} stemmer.`
+      : `Juryvalg for ${match.homeTeam} vs ${match.awayTeam} registrert: ${juryPlayer}.`
+  );
+
+  res.json({
+    success: true,
+    playerOfTheMatch: updatedPOTM,
+    match
+  });
+});
+
 
 // 5. Trigger scraping of events for a specific match from NFF
 app.post('/api/bones/match/:matchId/events', async (req, res) => {
@@ -1141,23 +1189,27 @@ Svar på norsk med en presis, profesjonell og engasjert analyse av lagene, topps
   }
 });
 
+// Guarantee all unhandled /api/* calls return JSON and NEVER fall through to HTML
+app.all('/api/*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: `API route not found: ${req.method} ${req.originalUrl}`
+  });
+});
+
+// API error middleware
+app.use('/api', (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[API Server Error]', err);
+  res.status(500).json({
+    success: false,
+    error: err?.message || 'Intern serverfeil'
+  });
+});
+
 // Setup Vite or static serving
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
+  // Listen on PORT 3000 immediately so /api/* is available in milliseconds,
+  // preventing nginx 502/warmup.html responses
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Bønes IL Fotball Live Server running on port ${PORT}`);
     
@@ -1201,6 +1253,21 @@ async function startServer() {
       syncRealData().catch(err => console.error('[Daily Scheduler] Periodic scrape failed:', err));
     }, TWENTY_FOUR_HOURS);
   });
+
+  if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
 }
 
 startServer();
