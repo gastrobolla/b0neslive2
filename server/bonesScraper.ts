@@ -1,4 +1,5 @@
 import { DivisionTable, Match, MatchEvent, TopScorer, CardStatistic, FeedItem, TableRow, MatchLineup, Player } from '../src/types.js';
+import { calculateMatchScore } from '../src/utils/derivedStats.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -470,8 +471,13 @@ export async function enrichMatchResultFromFiks(match: Match): Promise<{ match: 
         playerName = undefined;
       }
 
+      const fidMatch = block.match(/href="[^"]*fiksId=(\d+)/i) || block.match(/fiksId=(\d+)/i);
+      const eventFiksId = fidMatch ? parseInt(fidMatch[1], 10) : undefined;
+
       const typeMatch = block.match(/<div class="timelineEventContent">[\s\S]*?<div>([^<]+)<\/div>/i);
       const rawType = typeMatch ? decodeEntities(typeMatch[1].trim()) : block;
+
+      const isSelvmaal = /selvmål|selvmaal|own[ _-]goal|\(sm\)/i.test(rawType) || /selvmål|selvmaal|own[ _-]goal|\(sm\)/i.test(block);
 
       let type: 'goal' | 'yellow_card' | 'red_card' | 'sub' = 'goal';
       if (/advarsel|gult/i.test(rawType)) {
@@ -480,13 +486,19 @@ export async function enrichMatchResultFromFiks(match: Match): Promise<{ match: 
         type = 'red_card';
       } else if (/bytte|innbytte/i.test(rawType)) {
         type = 'sub';
-      } else if (/mål|spillemål|straffespark|straffemål|scoring/i.test(rawType)) {
+      } else if (/mål|spillemål|straffespark|straffemål|scoring|selvmål/i.test(rawType) || isSelvmaal) {
         type = 'goal';
       }
 
       if (type === 'goal') {
-        if (isHome) homeGoals++;
-        else awayGoals++;
+        if (isSelvmaal) {
+          // In football, an own goal is credited to the opponent on the scoreboard!
+          if (isHome) awayGoals++;
+          else homeGoals++;
+        } else {
+          if (isHome) homeGoals++;
+          else awayGoals++;
+        }
       }
 
       const description = `${minute}' ${rawType || type}${playerName ? `: ${playerName}` : ''} (${teamName})`;
@@ -497,7 +509,10 @@ export async function enrichMatchResultFromFiks(match: Match): Promise<{ match: 
         matchId: match.id,
         minute,
         type,
+        goalType: isSelvmaal ? 'own_goal' : undefined,
         player: playerName,
+        fiksId: eventFiksId,
+        playerId: eventFiksId ? `fiks-${eventFiksId}` : undefined,
         team: teamName,
         description,
         source: 'NFF',
@@ -508,7 +523,16 @@ export async function enrichMatchResultFromFiks(match: Match): Promise<{ match: 
 
     if (hasTimelineEvents) {
       match.status = 'finished';
-      if (match.homeScore === null || match.homeScore === undefined) {
+      const goalEvents = events.filter((e) => e.type === 'goal');
+      if (goalEvents.length > 0) {
+        // Authoritatively derive scores directly from timeline events.
+        // In matches with own goals (e.g. FIKS 9064472), NFF's raw endResult or statsBox
+        // attributes own goals to the offending player's team instead of crediting the opponent,
+        // turning 5-0 wins into incorrect 3-2 losses.
+        const derived = calculateMatchScore(events, match.homeScore, match.awayScore, match.homeTeam, match.awayTeam);
+        match.homeScore = derived.homeScore;
+        match.awayScore = derived.awayScore;
+      } else if (match.homeScore === null || match.homeScore === undefined) {
         match.homeScore = homeGoals;
         match.awayScore = awayGoals;
       }
@@ -583,6 +607,11 @@ export async function runFullClubScrape(): Promise<ScrapedClubData> {
             m.status = 'finished';
             m.homeScore = enriched.homeScore;
             m.awayScore = enriched.awayScore;
+          }
+          if (m.events && m.events.length > 0 && m.events.some((e) => e.type === 'goal')) {
+            const derived = calculateMatchScore(m.events, m.homeScore, m.awayScore, m.homeTeam, m.awayTeam);
+            m.homeScore = derived.homeScore;
+            m.awayScore = derived.awayScore;
           }
         } catch (e: any) {
           console.warn(`[Scraper] Failed to enrich match ${m.id}:`, e.message);
@@ -676,6 +705,8 @@ export async function scrapeMatchEvents(match: Match): Promise<MatchEvent[]> {
           const typeMatch = block.match(/<div class="timelineEventContent">[\s\S]*?<div>([^<]+)<\/div>/i);
           const rawType = typeMatch ? decodeEntities(typeMatch[1].trim()) : block;
 
+          const isSelvmaal = /selvmål|selvmaal|own[ _-]goal|\(sm\)/i.test(rawType) || /selvmål|selvmaal|own[ _-]goal|\(sm\)/i.test(block);
+
           let type: 'goal' | 'yellow_card' | 'red_card' | 'sub' = 'goal';
           if (/advarsel|gult/i.test(rawType)) {
             type = 'yellow_card';
@@ -683,7 +714,7 @@ export async function scrapeMatchEvents(match: Match): Promise<MatchEvent[]> {
             type = 'red_card';
           } else if (/bytte|innbytte/i.test(rawType)) {
             type = 'sub';
-          } else if (/mål|spillemål|straffespark|straffemål|scoring/i.test(rawType)) {
+          } else if (/mål|spillemål|straffespark|straffemål|scoring|selvmål/i.test(rawType) || isSelvmaal) {
             type = 'goal';
           }
 
@@ -695,6 +726,7 @@ export async function scrapeMatchEvents(match: Match): Promise<MatchEvent[]> {
             matchId: match.id,
             minute,
             type,
+            goalType: isSelvmaal ? 'own_goal' : undefined,
             player: playerName,
             fiksId: eventFiksId,
             playerId: eventFiksId ? `fiks-${eventFiksId}` : undefined,
@@ -712,6 +744,11 @@ export async function scrapeMatchEvents(match: Match): Promise<MatchEvent[]> {
   }
 
   // Strictly preserve genuine events only. Never invent fabricated events or names.
+  if (events.some((e) => e.type === 'goal')) {
+    const derived = calculateMatchScore(events, match.homeScore, match.awayScore, match.homeTeam, match.awayTeam);
+    match.homeScore = derived.homeScore;
+    match.awayScore = derived.awayScore;
+  }
   return events;
 }
 
@@ -780,7 +817,7 @@ export async function scrapeMatchLineup(fiksIdOrMatch: string | number | Match):
         const hasYellow = /YellowCard/i.test(block);
         const hasRed = /RedCard/i.test(block);
 
-        const isExplicitKeeper = /keeper|målvakt|goalie/i.test(block) || (number === 1 && idx === 0);
+        const isExplicitKeeper = /keeper|målvakt|goalie/i.test(block);
         const position = isExplicitKeeper ? 'Keeper' : 'Ukjent';
         const positionSource = isExplicitKeeper ? 'NFF' : 'unknown';
 

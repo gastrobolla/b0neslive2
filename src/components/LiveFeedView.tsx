@@ -90,7 +90,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
             },
             impact: {
               type: 'potm',
-              detail: `Banens Beste: ${winner.playerName} (★ ${winner.algoRating.toFixed(1)})`
+              detail: `Banens Beste: ${winner.playerName} (★ ${(winner.algoRating ?? (winner as any).rating ?? 0).toFixed(1)})`
             }
           });
         }
@@ -250,7 +250,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
                   <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 font-mono font-black">
                     <Star className="w-2.5 h-2.5 fill-current" />
-                    {item.rating.toFixed(1)}
+                    {(item.rating ?? 0).toFixed(1)}
                   </span>
                   <span className="text-slate-500 font-semibold">
                     {item.votes} stemmer
@@ -521,7 +521,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                                   </span>
                                   <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-xs font-mono font-black shadow-2xs">
                                     <Star className="w-3 h-3 fill-slate-950" />
-                                    {potmWinner.rating.toFixed(1)} Børs-score
+                                    {(potmWinner.rating ?? 0).toFixed(1)} Børs-score
                                   </span>
                                 </div>
                                 <h5 className="font-black text-slate-950 text-sm sm:text-base truncate mt-0.5">

@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Match, MatchEvent, DivisionTable, Player, MatchLineup } from '../types.js';
+import { Match, MatchEvent, DivisionTable, Player, MatchLineup, PlayerOfTheMatchCandidate } from '../types.js';
 import { BtMatchSummary } from './BtMatchSummary.js';
 import { WeatherWidget } from './WeatherWidget.js';
 import { ScoutReportView } from './ScoutReportModal.js';
 import { PlayerOfTheMatchModal } from './PlayerOfTheMatchModal.js';
 import { calculateMatchPOTM } from '../utils/potmCalculator.js';
+import { AttackMomentumChart } from './AttackMomentumChart.js';
 import {
   X,
   MapPin,
@@ -88,6 +89,22 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
   const isBonesAway = currentMatch ? currentMatch.awayTeam.toLowerCase().includes('bønes') : false;
   const opponentName = currentMatch ? (isBonesHome ? currentMatch.awayTeam : currentMatch.homeTeam) : '';
   const events = currentMatch?.events || [];
+
+  // Algorithmic POTM and Game-State Player Ratings
+  const potm = useMemo(() => {
+    if (!currentMatch) return null;
+    return currentMatch.playerOfTheMatch || calculateMatchPOTM(currentMatch);
+  }, [currentMatch]);
+
+  const candidateMap = useMemo(() => {
+    const map = new Map<string, PlayerOfTheMatchCandidate>();
+    if (potm?.candidates) {
+      for (const c of potm.candidates) {
+        map.set(c.playerName.trim().toLowerCase(), c);
+      }
+    }
+    return map;
+  }, [potm]);
 
   const [showVenueMapEmbed, setShowVenueMapEmbed] = useState(false);
 
@@ -622,7 +639,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                           {leader && (
                             <span className="inline-flex items-center gap-1 bg-amber-400 text-slate-950 font-black text-xs px-2 py-0.5 rounded-md shadow-2xs font-mono">
                               <Star className="w-3 h-3 fill-slate-950" />
-                              {leader.algoRating.toFixed(1)}
+                              {(leader.algoRating ?? (leader as any).rating ?? 0).toFixed(1)}
                             </span>
                           )}
                         </div>
@@ -738,16 +755,21 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                     </button>
                   </div>
                 </>
-              ) : events.length === 0 ? (
-                <div className="text-center py-10 px-4 bg-slate-50 rounded-xl border border-slate-200/80">
-                  <Activity className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-bold text-slate-700">Ingen hendelser registrert enda</p>
-                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                    Klikk «Oppdater NFF» eller bruk «Rapporter live» for å føre mål og kort.
-                  </p>
-                </div>
               ) : (
-                <div className="space-y-2.5">
+                <div className="space-y-4">
+                  {/* SofaScore-Style Synthetic Attack Momentum Graph */}
+                  <AttackMomentumChart match={currentMatch} />
+
+                  {events.length === 0 ? (
+                    <div className="text-center py-10 px-4 bg-slate-50 rounded-xl border border-slate-200/80">
+                      <Activity className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm font-bold text-slate-700">Ingen hendelser registrert enda</p>
+                      <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                        Klikk «Oppdater NFF» eller bruk «Rapporter live» for å føre mål og kort.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
                   {events.map((ev, idx) => {
                     const isGoal = ev.type === 'goal';
                     const isYellow = ev.type === 'yellow_card';
@@ -858,6 +880,8 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                       </div>
                     );
                   })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1106,6 +1130,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                         <SofascorePlayerPin
                           key={`fwd-${p.id || p.name}-${idx}`}
                           player={p}
+                          candidate={candidateMap.get(p.name.trim().toLowerCase())}
                           onClick={() => onSelectPlayer && onSelectPlayer(p.name, currentMatch.teamId)}
                         />
                       ))}
@@ -1117,6 +1142,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                         <SofascorePlayerPin
                           key={`mid-${p.id || p.name}-${idx}`}
                           player={p}
+                          candidate={candidateMap.get(p.name.trim().toLowerCase())}
                           onClick={() => onSelectPlayer && onSelectPlayer(p.name, currentMatch.teamId)}
                         />
                       ))}
@@ -1128,6 +1154,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                         <SofascorePlayerPin
                           key={`def-${p.id || p.name}-${idx}`}
                           player={p}
+                          candidate={candidateMap.get(p.name.trim().toLowerCase())}
                           onClick={() => onSelectPlayer && onSelectPlayer(p.name, currentMatch.teamId)}
                         />
                       ))}
@@ -1140,6 +1167,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                           key={`gk-${p.id || p.name}-${idx}`}
                           player={p}
                           isKeeper
+                          candidate={candidateMap.get(p.name.trim().toLowerCase())}
                           onClick={() => onSelectPlayer && onSelectPlayer(p.name, currentMatch.teamId)}
                         />
                       ))}
@@ -1206,9 +1234,31 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                               <span>{p.goals > 1 ? `${p.goals} mål` : 'Mål'}</span>
                             </span>
                           )}
-                          <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                            {p.position === 'Keeper' ? '7.3' : '7.5'}
-                          </span>
+                          {(() => {
+                            const cand = candidateMap.get(p.name.trim().toLowerCase());
+                            const r = cand?.algoRating ?? (p.position === 'Keeper' ? 7.3 : 7.2);
+                            const tag = cand?.tags?.[0];
+                            return (
+                              <div className="flex items-center gap-1.5">
+                                {tag && (
+                                  <span className="hidden sm:inline-block text-[10px] font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-md truncate max-w-[180px]">
+                                    {tag}
+                                  </span>
+                                )}
+                                <span
+                                  className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
+                                    (r ?? 0) >= 8.5
+                                      ? 'bg-amber-400 text-slate-950 font-black'
+                                      : (r ?? 0) >= 7.5
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  ★ {(r ?? 0).toFixed(1)}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     );
@@ -1267,6 +1317,15 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                               </span>
                             )}
                             <span className="text-xs text-slate-400">{p.position || 'Innbytter'}</span>
+                            {(() => {
+                              const cand = candidateMap.get(p.name.trim().toLowerCase());
+                              if (!cand) return null;
+                              return (
+                                <span className="text-xs font-mono font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                                  ★ {(cand.algoRating ?? (cand as any).rating ?? 0).toFixed(1)}
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
                       );
@@ -1296,6 +1355,9 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                   <span className={isBonesAway ? 'text-[#165094]' : 'text-slate-700'}>{match.awayTeam}</span>
                 </div>
               </div>
+
+              {/* SofaScore-Style Synthetic Attack Momentum Graph */}
+              <AttackMomentumChart match={currentMatch} />
 
               {!matchStats ? (
                 <div className="text-center py-10 px-4 bg-slate-50 rounded-xl border border-slate-200">
@@ -1588,17 +1650,30 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
 const SofascorePlayerPin: React.FC<{
   player: Player;
   isKeeper?: boolean;
+  candidate?: PlayerOfTheMatchCandidate;
   onClick: () => void;
-}> = ({ player, isKeeper, onClick }) => {
+}> = ({ player, isKeeper, candidate, onClick }) => {
   const pNum = (player as any).jerseyNumber ?? player.number ?? '?';
-  const numVal = typeof pNum === 'number' ? pNum : parseInt(pNum, 10) || 7;
-  const rating = player.position === 'Keeper' ? '7.3' : (7.2 + (numVal % 15) * 0.1).toFixed(1);
+  const ratingNum = candidate?.algoRating ?? (candidate as any)?.rating ?? (isKeeper ? 7.3 : 7.2);
+  const ratingStr = (typeof ratingNum === 'number' && !isNaN(ratingNum) ? ratingNum : 7.2).toFixed(1);
+
+  // Performance tier color coding
+  let ratingBadgeStyle = 'bg-blue-600 text-white';
+  if (ratingNum >= 8.5) {
+    ratingBadgeStyle = 'bg-amber-400 text-slate-950 font-black ring-1 ring-amber-300';
+  } else if (ratingNum >= 7.5) {
+    ratingBadgeStyle = 'bg-emerald-600 text-white font-black';
+  } else if (ratingNum <= 6.2) {
+    ratingBadgeStyle = 'bg-orange-600 text-white font-medium';
+  }
+
+  const tagText = candidate?.tags?.[0];
 
   return (
     <button
       onClick={onClick}
       className="flex flex-col items-center group cursor-pointer focus:outline-hidden min-w-[56px] px-1 py-0.5 rounded-lg active:scale-95 transition-transform"
-      title={`${player.name} (#${pNum}) - Klikk for spillerprofil`}
+      title={`${player.name} (#${pNum}) - Børs: ${ratingStr}/10${tagText ? ` • ${tagText}` : ''}`}
     >
       <div className="relative">
         <div
@@ -1610,9 +1685,11 @@ const SofascorePlayerPin: React.FC<{
         >
           {pNum}
         </div>
-        {/* Rating chip */}
-        <span className="absolute -bottom-1.5 -right-2 bg-emerald-500 text-white font-black text-[9px] px-1 py-0.1 rounded-full shadow-xs border border-white">
-          {rating}
+        {/* Dynamic Context-Aware Rating chip */}
+        <span
+          className={`absolute -bottom-1.5 -right-2 text-[9px] px-1.5 py-0.1 rounded-full shadow-xs border border-white font-mono ${ratingBadgeStyle}`}
+        >
+          {ratingStr}
         </span>
       </div>
       <span className="text-[10px] font-bold text-white drop-shadow-sm mt-1.5 max-w-[68px] truncate text-center bg-slate-950/70 px-1.5 py-0.2 rounded">

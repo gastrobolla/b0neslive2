@@ -26,7 +26,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Herman Mæhle Wiese Bergene",
     "players": [
       {
-        "id": "p-3761464",
+        "id": "fiks-3761464",
         "fiksId": 3761464,
         "name": "Philip Westre Hjortland",
         "teamId": "menn-1",
@@ -40,7 +40,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3724562",
+        "id": "fiks-3724562",
         "fiksId": 3724562,
         "name": "Ulrik Misje Eliassen",
         "teamId": "menn-1",
@@ -55,7 +55,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-3761460",
+        "id": "fiks-3761460",
         "fiksId": 3761460,
         "name": "Johannes Kvamme Kloster",
         "teamId": "menn-1",
@@ -69,7 +69,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3761457",
+        "id": "fiks-3761457",
         "fiksId": 3761457,
         "name": "Alexander Mikalsen",
         "teamId": "menn-1",
@@ -83,7 +83,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3444805",
+        "id": "fiks-3444805",
         "fiksId": 3444805,
         "name": "Jonas Lien Hetland",
         "teamId": "menn-1",
@@ -97,7 +97,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3687059",
+        "id": "fiks-3687059",
         "fiksId": 3687059,
         "name": "Oskar Sundvor Bakr",
         "teamId": "menn-1",
@@ -112,7 +112,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-3196617",
+        "id": "fiks-3196617",
         "fiksId": 3196617,
         "name": "Jonas Skår Kvilhaug",
         "teamId": "menn-1",
@@ -126,7 +126,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3332325",
+        "id": "fiks-3332325",
         "fiksId": 3332325,
         "name": "Emil Haaland",
         "teamId": "menn-1",
@@ -140,7 +140,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3379935",
+        "id": "fiks-3379935",
         "fiksId": 3379935,
         "name": "David Daae Kildahl",
         "teamId": "menn-1",
@@ -154,7 +154,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3196620",
+        "id": "fiks-3196620",
         "fiksId": 3196620,
         "name": "Marius Gustavsen",
         "teamId": "menn-1",
@@ -168,7 +168,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4070858",
+        "id": "fiks-4070858",
         "fiksId": 4070858,
         "name": "Kim Marius Davidsen",
         "teamId": "menn-1",
@@ -182,7 +182,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3332311",
+        "id": "fiks-3332311",
         "fiksId": 3332311,
         "name": "Henrik Fjæren",
         "teamId": "menn-1",
@@ -196,7 +196,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3880057",
+        "id": "fiks-3880057",
         "fiksId": 3880057,
         "name": "Sindre Øye",
         "teamId": "menn-1",
@@ -210,7 +210,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3440156",
+        "id": "fiks-3440156",
         "fiksId": 3440156,
         "name": "Torben Johannessen",
         "teamId": "menn-1",
@@ -224,7 +224,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3707617",
+        "id": "fiks-3707617",
         "fiksId": 3707617,
         "name": "Andreas Skjelten Henneli",
         "teamId": "menn-1",
@@ -238,7 +238,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3761458",
+        "id": "fiks-3761458",
         "fiksId": 3761458,
         "name": "Martinus Bryne Mohn",
         "teamId": "menn-1",
@@ -263,7 +263,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Lars Erik Thorsen",
     "players": [
       {
-        "id": "p-2927291",
+        "id": "fiks-2927291",
         "fiksId": 2927291,
         "name": "Annette Rimestad",
         "teamId": "bones-1",
@@ -277,7 +277,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3338206",
+        "id": "fiks-3338206",
         "fiksId": 3338206,
         "name": "Lene Strøm",
         "teamId": "bones-1",
@@ -292,7 +292,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-1828294",
+        "id": "fiks-1828294",
         "fiksId": 1828294,
         "name": "Maria Winther Gunnes",
         "teamId": "bones-1",
@@ -306,7 +306,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3394131",
+        "id": "fiks-3394131",
         "fiksId": 3394131,
         "name": "Sina Marie Solås Furnes",
         "teamId": "bones-1",
@@ -320,7 +320,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-1820081",
+        "id": "fiks-1820081",
         "fiksId": 1820081,
         "name": "Beate Gjærde Tryggestad",
         "teamId": "bones-1",
@@ -334,7 +334,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-2555161",
+        "id": "fiks-2555161",
         "fiksId": 2555161,
         "name": "Jori Neteland-Kyte",
         "teamId": "bones-1",
@@ -349,7 +349,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-2919154",
+        "id": "fiks-2919154",
         "fiksId": 2919154,
         "name": "Silje Børtveit Blindheim",
         "teamId": "bones-1",
@@ -363,7 +363,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-2018252",
+        "id": "fiks-2018252",
         "fiksId": 2018252,
         "name": "Gry Eriksen",
         "teamId": "bones-1",
@@ -377,7 +377,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4019187",
+        "id": "fiks-4019187",
         "fiksId": 4019187,
         "name": "Anett Haukås",
         "teamId": "bones-1",
@@ -391,7 +391,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-2347662",
+        "id": "fiks-2347662",
         "fiksId": 2347662,
         "name": "Anette Løland Eldegard",
         "teamId": "bones-1",
@@ -405,7 +405,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-1996195",
+        "id": "fiks-1996195",
         "fiksId": 1996195,
         "name": "Mari-Kristine Morberg",
         "teamId": "bones-1",
@@ -419,7 +419,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3630609",
+        "id": "fiks-3630609",
         "fiksId": 3630609,
         "name": "Katrine Abel Iversen",
         "teamId": "bones-1",
@@ -433,7 +433,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-2777311",
+        "id": "fiks-2777311",
         "fiksId": 2777311,
         "name": "May Linn Sæverud",
         "teamId": "bones-1",
@@ -447,7 +447,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3987229",
+        "id": "fiks-3987229",
         "fiksId": 3987229,
         "name": "Cathrine Nielsen",
         "teamId": "bones-1",
@@ -461,7 +461,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3675634",
+        "id": "fiks-3675634",
         "fiksId": 3675634,
         "name": "Anna Josefine Hansen Svarstad",
         "teamId": "bones-1",
@@ -475,7 +475,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-2372685",
+        "id": "fiks-2372685",
         "fiksId": 2372685,
         "name": "Vilde Blomhoff Pedersen",
         "teamId": "bones-1",
@@ -489,7 +489,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3633255",
+        "id": "fiks-3633255",
         "fiksId": 3633255,
         "name": "Nina Namtvedt",
         "teamId": "bones-1",
@@ -514,7 +514,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Jørgen Stava",
     "players": [
       {
-        "id": "p-3732122",
+        "id": "fiks-3732122",
         "fiksId": 3732122,
         "name": "Espen Langåker",
         "teamId": "g19-1",
@@ -528,7 +528,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3332736",
+        "id": "fiks-3332736",
         "fiksId": 3332736,
         "name": "Henrik Sæle",
         "teamId": "g19-1",
@@ -543,7 +543,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-3410760",
+        "id": "fiks-3410760",
         "fiksId": 3410760,
         "name": "Henrik Gulbrandsøy",
         "teamId": "g19-1",
@@ -557,7 +557,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3629065",
+        "id": "fiks-3629065",
         "fiksId": 3629065,
         "name": "Henrik Rønhovde Østensen",
         "teamId": "g19-1",
@@ -571,7 +571,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3332389",
+        "id": "fiks-3332389",
         "fiksId": 3332389,
         "name": "Jonas Jacobsen",
         "teamId": "g19-1",
@@ -585,7 +585,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3332443",
+        "id": "fiks-3332443",
         "fiksId": 3332443,
         "name": "Magnus Mogenstad",
         "teamId": "g19-1",
@@ -600,7 +600,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-3898451",
+        "id": "fiks-3898451",
         "fiksId": 3898451,
         "name": "Magnus Stavrum",
         "teamId": "g19-1",
@@ -614,7 +614,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3410769",
+        "id": "fiks-3410769",
         "fiksId": 3410769,
         "name": "Mathias Heggenes Brandsdal",
         "teamId": "g19-1",
@@ -628,7 +628,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3630207",
+        "id": "fiks-3630207",
         "fiksId": 3630207,
         "name": "Mathias Poole Underhaug",
         "teamId": "g19-1",
@@ -642,7 +642,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3332385",
+        "id": "fiks-3332385",
         "fiksId": 3332385,
         "name": "Olav Håskjold",
         "teamId": "g19-1",
@@ -656,7 +656,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3879901",
+        "id": "fiks-3879901",
         "fiksId": 3879901,
         "name": "Luka Nestorovic",
         "teamId": "g19-1",
@@ -670,7 +670,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3942636",
+        "id": "fiks-3942636",
         "fiksId": 3942636,
         "name": "Nicolas Telseth",
         "teamId": "g19-1",
@@ -684,7 +684,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3898455",
+        "id": "fiks-3898455",
         "fiksId": 3898455,
         "name": "Sander Herstad Ogne",
         "teamId": "g19-1",
@@ -698,7 +698,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3318695",
+        "id": "fiks-3318695",
         "fiksId": 3318695,
         "name": "Noah Hunskår",
         "teamId": "g19-1",
@@ -712,7 +712,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3805584",
+        "id": "fiks-3805584",
         "fiksId": 3805584,
         "name": "Julian Emil Namtvedt Hunskår",
         "teamId": "g19-1",
@@ -726,7 +726,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3989636",
+        "id": "fiks-3989636",
         "fiksId": 3989636,
         "name": "Ernests Jukonis",
         "teamId": "g19-1",
@@ -740,7 +740,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3898447",
+        "id": "fiks-3898447",
         "fiksId": 3898447,
         "name": "Heine Andre Ask",
         "teamId": "g19-1",
@@ -754,7 +754,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3761458",
+        "id": "fiks-3761458",
         "fiksId": 3761458,
         "name": "Martinus Bryne Mohn",
         "teamId": "g19-1",
@@ -768,7 +768,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3410758",
+        "id": "fiks-3410758",
         "fiksId": 3410758,
         "name": "Julian Alexander Verneuil Liseth Hansen",
         "teamId": "g19-1",
@@ -782,7 +782,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3994364",
+        "id": "fiks-3994364",
         "fiksId": 3994364,
         "name": "Noah Atoshim Weldeab",
         "teamId": "g19-1",
@@ -796,7 +796,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3942634",
+        "id": "fiks-3942634",
         "fiksId": 3942634,
         "name": "Elias Sælemyr Banne",
         "teamId": "g19-1",
@@ -810,7 +810,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3277612",
+        "id": "fiks-3277612",
         "fiksId": 3277612,
         "name": "Enrique Myrli Montenegro",
         "teamId": "g19-1",
@@ -824,7 +824,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3879870",
+        "id": "fiks-3879870",
         "fiksId": 3879870,
         "name": "Vegard Flotve",
         "teamId": "g19-1",
@@ -838,7 +838,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3444805",
+        "id": "fiks-3444805",
         "fiksId": 3444805,
         "name": "Jonas Lien Hetland",
         "teamId": "g19-1",
@@ -852,7 +852,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3990452",
+        "id": "fiks-3990452",
         "fiksId": 3990452,
         "name": "Mathias Vala-Førland",
         "teamId": "g19-1",
@@ -866,7 +866,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3942640",
+        "id": "fiks-3942640",
         "fiksId": 3942640,
         "name": "Jacob Roald-H&#xE4;rdig",
         "teamId": "g19-1",
@@ -880,7 +880,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3942946",
+        "id": "fiks-3942946",
         "fiksId": 3942946,
         "name": "Ludvig Theodorsen Mong",
         "teamId": "g19-1",
@@ -894,7 +894,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3942637",
+        "id": "fiks-3942637",
         "fiksId": 3942637,
         "name": "Theodor Sælemyr Vangen",
         "teamId": "g19-1",
@@ -919,7 +919,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Stian Sæle",
     "players": [
       {
-        "id": "p-3972574",
+        "id": "fiks-3972574",
         "fiksId": 3972574,
         "name": "Benjamin Camilo Figueroa Kalsnes",
         "teamId": "g19-2",
@@ -933,7 +933,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3879871",
+        "id": "fiks-3879871",
         "fiksId": 3879871,
         "name": "Jostein Falkenberg",
         "teamId": "g19-2",
@@ -948,7 +948,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-3898450",
+        "id": "fiks-3898450",
         "fiksId": 3898450,
         "name": "Lavrans Gavle Dale",
         "teamId": "g19-2",
@@ -962,7 +962,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3942640",
+        "id": "fiks-3942640",
         "fiksId": 3942640,
         "name": "Jacob Roald-H&#xE4;rdig",
         "teamId": "g19-2",
@@ -976,7 +976,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3942637",
+        "id": "fiks-3942637",
         "fiksId": 3942637,
         "name": "Theodor Sælemyr Vangen",
         "teamId": "g19-2",
@@ -990,7 +990,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3879870",
+        "id": "fiks-3879870",
         "fiksId": 3879870,
         "name": "Vegard Flotve",
         "teamId": "g19-2",
@@ -1005,7 +1005,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-3898459",
+        "id": "fiks-3898459",
         "fiksId": 3898459,
         "name": "Ulrik Piltingsrud",
         "teamId": "g19-2",
@@ -1019,7 +1019,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3942634",
+        "id": "fiks-3942634",
         "fiksId": 3942634,
         "name": "Elias Sælemyr Banne",
         "teamId": "g19-2",
@@ -1033,7 +1033,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3898447",
+        "id": "fiks-3898447",
         "fiksId": 3898447,
         "name": "Heine Andre Ask",
         "teamId": "g19-2",
@@ -1047,7 +1047,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3414034",
+        "id": "fiks-3414034",
         "fiksId": 3414034,
         "name": "Robert Søilen Rem",
         "teamId": "g19-2",
@@ -1061,7 +1061,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3898456",
+        "id": "fiks-3898456",
         "fiksId": 3898456,
         "name": "Simon Aadnanes Walseth",
         "teamId": "g19-2",
@@ -1075,7 +1075,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3942946",
+        "id": "fiks-3942946",
         "fiksId": 3942946,
         "name": "Ludvig Theodorsen Mong",
         "teamId": "g19-2",
@@ -1089,7 +1089,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3990459",
+        "id": "fiks-3990459",
         "fiksId": 3990459,
         "name": "Marius Stene",
         "teamId": "g19-2",
@@ -1103,7 +1103,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3898446",
+        "id": "fiks-3898446",
         "fiksId": 3898446,
         "name": "Gard Rønstad Johnsen",
         "teamId": "g19-2",
@@ -1117,7 +1117,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3332389",
+        "id": "fiks-3332389",
         "fiksId": 3332389,
         "name": "Jonas Jacobsen",
         "teamId": "g19-2",
@@ -1131,7 +1131,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3677967",
+        "id": "fiks-3677967",
         "fiksId": 3677967,
         "name": "Lucas Matheo Fredheim Hjertaker",
         "teamId": "g19-2",
@@ -1145,7 +1145,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3990452",
+        "id": "fiks-3990452",
         "fiksId": 3990452,
         "name": "Mathias Vala-Førland",
         "teamId": "g19-2",
@@ -1159,7 +1159,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3976688",
+        "id": "fiks-3976688",
         "fiksId": 3976688,
         "name": "Sivert Engen Holgersen",
         "teamId": "g19-2",
@@ -1173,7 +1173,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3410758",
+        "id": "fiks-3410758",
         "fiksId": 3410758,
         "name": "Julian Alexander Verneuil Liseth Hansen",
         "teamId": "g19-2",
@@ -1187,7 +1187,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3879901",
+        "id": "fiks-3879901",
         "fiksId": 3879901,
         "name": "Luka Nestorovic",
         "teamId": "g19-2",
@@ -1201,7 +1201,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3318695",
+        "id": "fiks-3318695",
         "fiksId": 3318695,
         "name": "Noah Hunskår",
         "teamId": "g19-2",
@@ -1215,7 +1215,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3989636",
+        "id": "fiks-3989636",
         "fiksId": 3989636,
         "name": "Ernests Jukonis",
         "teamId": "g19-2",
@@ -1229,7 +1229,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3332293",
+        "id": "fiks-3332293",
         "fiksId": 3332293,
         "name": "Noah Rem Eide",
         "teamId": "g19-2",
@@ -1243,7 +1243,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3990461",
+        "id": "fiks-3990461",
         "fiksId": 3990461,
         "name": "Ole Nedal",
         "teamId": "g19-2",
@@ -1257,7 +1257,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3277612",
+        "id": "fiks-3277612",
         "fiksId": 3277612,
         "name": "Enrique Myrli Montenegro",
         "teamId": "g19-2",
@@ -1271,7 +1271,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3942639",
+        "id": "fiks-3942639",
         "fiksId": 3942639,
         "name": "Kim Thai Bui",
         "teamId": "g19-2",
@@ -1285,7 +1285,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3994364",
+        "id": "fiks-3994364",
         "fiksId": 3994364,
         "name": "Noah Atoshim Weldeab",
         "teamId": "g19-2",
@@ -1299,7 +1299,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3655009",
+        "id": "fiks-3655009",
         "fiksId": 3655009,
         "name": "Oliver Matheo Sandal Heier",
         "teamId": "g19-2",
@@ -1313,7 +1313,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3630207",
+        "id": "fiks-3630207",
         "fiksId": 3630207,
         "name": "Mathias Poole Underhaug",
         "teamId": "g19-2",
@@ -1327,7 +1327,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3898455",
+        "id": "fiks-3898455",
         "fiksId": 3898455,
         "name": "Sander Herstad Ogne",
         "teamId": "g19-2",
@@ -1341,7 +1341,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3898451",
+        "id": "fiks-3898451",
         "fiksId": 3898451,
         "name": "Magnus Stavrum",
         "teamId": "g19-2",
@@ -1355,7 +1355,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3332443",
+        "id": "fiks-3332443",
         "fiksId": 3332443,
         "name": "Magnus Mogenstad",
         "teamId": "g19-2",
@@ -1369,7 +1369,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3805584",
+        "id": "fiks-3805584",
         "fiksId": 3805584,
         "name": "Julian Emil Namtvedt Hunskår",
         "teamId": "g19-2",
@@ -1383,7 +1383,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3332385",
+        "id": "fiks-3332385",
         "fiksId": 3332385,
         "name": "Olav Håskjold",
         "teamId": "g19-2",
@@ -1397,7 +1397,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3332592",
+        "id": "fiks-3332592",
         "fiksId": 3332592,
         "name": "Sverre Pedersen",
         "teamId": "g19-2",
@@ -1411,7 +1411,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3332736",
+        "id": "fiks-3332736",
         "fiksId": 3332736,
         "name": "Henrik Sæle",
         "teamId": "g19-2",
@@ -1436,7 +1436,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Christer Brandsdal",
     "players": [
       {
-        "id": "p-3805584",
+        "id": "fiks-3805584",
         "fiksId": 3805584,
         "name": "Julian Emil Namtvedt Hunskår",
         "teamId": "g16-1",
@@ -1450,7 +1450,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3677967",
+        "id": "fiks-3677967",
         "fiksId": 3677967,
         "name": "Lucas Matheo Fredheim Hjertaker",
         "teamId": "g16-1",
@@ -1465,7 +1465,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-3277612",
+        "id": "fiks-3277612",
         "fiksId": 3277612,
         "name": "Enrique Myrli Montenegro",
         "teamId": "g16-1",
@@ -1479,7 +1479,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3318695",
+        "id": "fiks-3318695",
         "fiksId": 3318695,
         "name": "Noah Hunskår",
         "teamId": "g16-1",
@@ -1493,7 +1493,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3630198",
+        "id": "fiks-3630198",
         "fiksId": 3630198,
         "name": "Jesper Rage Skurtveit",
         "teamId": "g16-1",
@@ -1507,7 +1507,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3655009",
+        "id": "fiks-3655009",
         "fiksId": 3655009,
         "name": "Oliver Matheo Sandal Heier",
         "teamId": "g16-1",
@@ -1522,7 +1522,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-3410760",
+        "id": "fiks-3410760",
         "fiksId": 3410760,
         "name": "Henrik Gulbrandsøy",
         "teamId": "g16-1",
@@ -1536,7 +1536,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3410769",
+        "id": "fiks-3410769",
         "fiksId": 3410769,
         "name": "Mathias Heggenes Brandsdal",
         "teamId": "g16-1",
@@ -1550,7 +1550,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4021456",
+        "id": "fiks-4021456",
         "fiksId": 4021456,
         "name": "Stein Emanuel Mohn",
         "teamId": "g16-1",
@@ -1564,7 +1564,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3976688",
+        "id": "fiks-3976688",
         "fiksId": 3976688,
         "name": "Sivert Engen Holgersen",
         "teamId": "g16-1",
@@ -1578,7 +1578,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3990452",
+        "id": "fiks-3990452",
         "fiksId": 3990452,
         "name": "Mathias Vala-Førland",
         "teamId": "g16-1",
@@ -1592,7 +1592,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3990461",
+        "id": "fiks-3990461",
         "fiksId": 3990461,
         "name": "Ole Nedal",
         "teamId": "g16-1",
@@ -1606,7 +1606,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4050120",
+        "id": "fiks-4050120",
         "fiksId": 4050120,
         "name": "Jakob Norderval",
         "teamId": "g16-1",
@@ -1631,7 +1631,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Christer Brandsdal",
     "players": [
       {
-        "id": "p-3990459",
+        "id": "fiks-3990459",
         "fiksId": 3990459,
         "name": "Marius Stene",
         "teamId": "g16-2",
@@ -1645,7 +1645,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4054809",
+        "id": "fiks-4054809",
         "fiksId": 4054809,
         "name": "Magnus Olsen Thorseth",
         "teamId": "g16-2",
@@ -1660,7 +1660,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-3863002",
+        "id": "fiks-3863002",
         "fiksId": 3863002,
         "name": "Aleksander Nathaniel Gundersen",
         "teamId": "g16-2",
@@ -1674,7 +1674,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4054812",
+        "id": "fiks-4054812",
         "fiksId": 4054812,
         "name": "Karsten Olsen Thorseth",
         "teamId": "g16-2",
@@ -1688,7 +1688,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4052167",
+        "id": "fiks-4052167",
         "fiksId": 4052167,
         "name": "Isak Sælemyr Banne",
         "teamId": "g16-2",
@@ -1702,7 +1702,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4056987",
+        "id": "fiks-4056987",
         "fiksId": 4056987,
         "name": "Philip Hummervoll Alræk",
         "teamId": "g16-2",
@@ -1717,7 +1717,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-3332756",
+        "id": "fiks-3332756",
         "fiksId": 3332756,
         "name": "Bård Vangdal-Jensen",
         "teamId": "g16-2",
@@ -1731,7 +1731,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4071012",
+        "id": "fiks-4071012",
         "fiksId": 4071012,
         "name": "Noah Valentinsen Sætre",
         "teamId": "g16-2",
@@ -1745,7 +1745,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4054763",
+        "id": "fiks-4054763",
         "fiksId": 4054763,
         "name": "Levi Løvik",
         "teamId": "g16-2",
@@ -1759,7 +1759,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3332737",
+        "id": "fiks-3332737",
         "fiksId": 3332737,
         "name": "Mats Sæle",
         "teamId": "g16-2",
@@ -1773,7 +1773,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3990451",
+        "id": "fiks-3990451",
         "fiksId": 3990451,
         "name": "Heine Folkestad",
         "teamId": "g16-2",
@@ -1787,7 +1787,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3990463",
+        "id": "fiks-3990463",
         "fiksId": 3990463,
         "name": "Oliver Thorsen",
         "teamId": "g16-2",
@@ -1801,7 +1801,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3990455",
+        "id": "fiks-3990455",
         "fiksId": 3990455,
         "name": "Jakob Sørhaug",
         "teamId": "g16-2",
@@ -1815,7 +1815,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3990454",
+        "id": "fiks-3990454",
         "fiksId": 3990454,
         "name": "Even Alexander Farsethås",
         "teamId": "g16-2",
@@ -1840,7 +1840,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Christer Brandsdal",
     "players": [
       {
-        "id": "p-3990455",
+        "id": "fiks-3990455",
         "fiksId": 3990455,
         "name": "Jakob Sørhaug",
         "teamId": "g16-3",
@@ -1854,7 +1854,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4050083",
+        "id": "fiks-4050083",
         "fiksId": 4050083,
         "name": "Aksel Fiskum Lyssand",
         "teamId": "g16-3",
@@ -1869,7 +1869,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-4050450",
+        "id": "fiks-4050450",
         "fiksId": 4050450,
         "name": "Noah Andr&#xE8; Bergstrøm Røttingen",
         "teamId": "g16-3",
@@ -1883,7 +1883,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3990459",
+        "id": "fiks-3990459",
         "fiksId": 3990459,
         "name": "Marius Stene",
         "teamId": "g16-3",
@@ -1897,7 +1897,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4054812",
+        "id": "fiks-4054812",
         "fiksId": 4054812,
         "name": "Karsten Olsen Thorseth",
         "teamId": "g16-3",
@@ -1911,7 +1911,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4056987",
+        "id": "fiks-4056987",
         "fiksId": 4056987,
         "name": "Philip Hummervoll Alræk",
         "teamId": "g16-3",
@@ -1926,7 +1926,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-3332576",
+        "id": "fiks-3332576",
         "fiksId": 3332576,
         "name": "Håkon Osberg-Jacobsen",
         "teamId": "g16-3",
@@ -1940,7 +1940,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3677967",
+        "id": "fiks-3677967",
         "fiksId": 3677967,
         "name": "Lucas Matheo Fredheim Hjertaker",
         "teamId": "g16-3",
@@ -1954,7 +1954,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3332756",
+        "id": "fiks-3332756",
         "fiksId": 3332756,
         "name": "Bård Vangdal-Jensen",
         "teamId": "g16-3",
@@ -1968,7 +1968,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4058443",
+        "id": "fiks-4058443",
         "fiksId": 4058443,
         "name": "Torje Sæter Reigstad",
         "teamId": "g16-3",
@@ -1982,7 +1982,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3990451",
+        "id": "fiks-3990451",
         "fiksId": 3990451,
         "name": "Heine Folkestad",
         "teamId": "g16-3",
@@ -1996,7 +1996,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3990463",
+        "id": "fiks-3990463",
         "fiksId": 3990463,
         "name": "Oliver Thorsen",
         "teamId": "g16-3",
@@ -2010,7 +2010,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4053123",
+        "id": "fiks-4053123",
         "fiksId": 4053123,
         "name": "Tobias Gripsgård-Iversen",
         "teamId": "g16-3",
@@ -2024,7 +2024,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4050100",
+        "id": "fiks-4050100",
         "fiksId": 4050100,
         "name": "Aksel Engenes",
         "teamId": "g16-3",
@@ -2038,7 +2038,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4055842",
+        "id": "fiks-4055842",
         "fiksId": 4055842,
         "name": "Halvor Holme Sandvik",
         "teamId": "g16-3",
@@ -2052,7 +2052,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3990460",
+        "id": "fiks-3990460",
         "fiksId": 3990460,
         "name": "Martin Hack-Haldorsen",
         "teamId": "g16-3",
@@ -2066,7 +2066,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3332748",
+        "id": "fiks-3332748",
         "fiksId": 3332748,
         "name": "Brage Bull Thomassen",
         "teamId": "g16-3",
@@ -2080,7 +2080,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3990456",
+        "id": "fiks-3990456",
         "fiksId": 3990456,
         "name": "Jonas Vinje",
         "teamId": "g16-3",
@@ -2094,7 +2094,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3990454",
+        "id": "fiks-3990454",
         "fiksId": 3990454,
         "name": "Even Alexander Farsethås",
         "teamId": "g16-3",
@@ -2108,7 +2108,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4130682",
+        "id": "fiks-4130682",
         "fiksId": 4130682,
         "name": "Leander Aksnes",
         "teamId": "g16-3",
@@ -2122,7 +2122,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4050098",
+        "id": "fiks-4050098",
         "fiksId": 4050098,
         "name": "Emil Forstrønen Sørensen",
         "teamId": "g16-3",
@@ -2136,7 +2136,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3332771",
+        "id": "fiks-3332771",
         "fiksId": 3332771,
         "name": "Oscar Godøy Øverland",
         "teamId": "g16-3",
@@ -2161,7 +2161,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Mads Nordby",
     "players": [
       {
-        "id": "p-3990323",
+        "id": "fiks-3990323",
         "fiksId": 3990323,
         "name": "Sunniva Stavrum",
         "teamId": "j16-1",
@@ -2175,7 +2175,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3888492",
+        "id": "fiks-3888492",
         "fiksId": 3888492,
         "name": "Anne-Lene Barmen",
         "teamId": "j16-1",
@@ -2190,7 +2190,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-3990410",
+        "id": "fiks-3990410",
         "fiksId": 3990410,
         "name": "Aurora Lorenzo-Elstad",
         "teamId": "j16-1",
@@ -2204,7 +2204,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3990414",
+        "id": "fiks-3990414",
         "fiksId": 3990414,
         "name": "Ingrid Gavle Dale",
         "teamId": "j16-1",
@@ -2218,7 +2218,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3771592",
+        "id": "fiks-3771592",
         "fiksId": 3771592,
         "name": "Amelie Gundersen Barsnes",
         "teamId": "j16-1",
@@ -2232,7 +2232,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3990411",
+        "id": "fiks-3990411",
         "fiksId": 3990411,
         "name": "Helena Lorenzo-Elstad",
         "teamId": "j16-1",
@@ -2247,7 +2247,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-3410736",
+        "id": "fiks-3410736",
         "fiksId": 3410736,
         "name": "Iselinn Kobbeltvedt Storesund",
         "teamId": "j16-1",
@@ -2261,7 +2261,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4009621",
+        "id": "fiks-4009621",
         "fiksId": 4009621,
         "name": "Maja Sadownik Bruvik",
         "teamId": "j16-1",
@@ -2275,7 +2275,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3990409",
+        "id": "fiks-3990409",
         "fiksId": 3990409,
         "name": "Andrine Moldøen Nordby",
         "teamId": "j16-1",
@@ -2289,7 +2289,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3852334",
+        "id": "fiks-3852334",
         "fiksId": 3852334,
         "name": "Sunniva Sundby-Halvorsen",
         "teamId": "j16-1",
@@ -2303,7 +2303,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3650700",
+        "id": "fiks-3650700",
         "fiksId": 3650700,
         "name": "Helena Solheim Gåsvær Hansen",
         "teamId": "j16-1",
@@ -2317,7 +2317,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3990413",
+        "id": "fiks-3990413",
         "fiksId": 3990413,
         "name": "Hedda Mikalsen",
         "teamId": "j16-1",
@@ -2331,7 +2331,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3862970",
+        "id": "fiks-3862970",
         "fiksId": 3862970,
         "name": "Emma Bjelde Cortez",
         "teamId": "j16-1",
@@ -2345,7 +2345,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3990419",
+        "id": "fiks-3990419",
         "fiksId": 3990419,
         "name": "Solveig Sætre Ramberg",
         "teamId": "j16-1",
@@ -2359,7 +2359,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3775043",
+        "id": "fiks-3775043",
         "fiksId": 3775043,
         "name": "Vilde Kolstad Dimmen",
         "teamId": "j16-1",
@@ -2373,7 +2373,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3990412",
+        "id": "fiks-3990412",
         "fiksId": 3990412,
         "name": "Guro Verlo",
         "teamId": "j16-1",
@@ -2387,7 +2387,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3862972",
+        "id": "fiks-3862972",
         "fiksId": 3862972,
         "name": "Helle Eikhaug Åsli",
         "teamId": "j16-1",
@@ -2401,7 +2401,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3776765",
+        "id": "fiks-3776765",
         "fiksId": 3776765,
         "name": "Josephine Emilie Valkner",
         "teamId": "j16-1",
@@ -2415,7 +2415,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3934728",
+        "id": "fiks-3934728",
         "fiksId": 3934728,
         "name": "Erika Johanne Rasmussen Ødegård",
         "teamId": "j16-1",
@@ -2429,7 +2429,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3920386",
+        "id": "fiks-3920386",
         "fiksId": 3920386,
         "name": "Alma Dahlsrud",
         "teamId": "j16-1",
@@ -2443,7 +2443,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3410761",
+        "id": "fiks-3410761",
         "fiksId": 3410761,
         "name": "Oda Sylta Haugland",
         "teamId": "j16-1",
@@ -2457,7 +2457,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3775053",
+        "id": "fiks-3775053",
         "fiksId": 3775053,
         "name": "Hedda Krakhellen Kirkebø",
         "teamId": "j16-1",
@@ -2471,7 +2471,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4100532",
+        "id": "fiks-4100532",
         "fiksId": 4100532,
         "name": "Madeleine Blindheim-Hansen",
         "teamId": "j16-1",
@@ -2485,7 +2485,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3862974",
+        "id": "fiks-3862974",
         "fiksId": 3862974,
         "name": "Ingrid Martine Farsethås",
         "teamId": "j16-1",
@@ -2510,7 +2510,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Ståle Heskestad",
     "players": [
       {
-        "id": "p-4096452",
+        "id": "fiks-4096452",
         "fiksId": 4096452,
         "name": "Marius Hansen",
         "teamId": "g14-1",
@@ -2524,7 +2524,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4096448",
+        "id": "fiks-4096448",
         "fiksId": 4096448,
         "name": "William Nunn-Thorsen",
         "teamId": "g14-1",
@@ -2539,7 +2539,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-4096451",
+        "id": "fiks-4096451",
         "fiksId": 4096451,
         "name": "Henrik Sølvberg",
         "teamId": "g14-1",
@@ -2553,7 +2553,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3764749",
+        "id": "fiks-3764749",
         "fiksId": 3764749,
         "name": "Jonas Soltveit Bakkebø",
         "teamId": "g14-1",
@@ -2567,7 +2567,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3764760",
+        "id": "fiks-3764760",
         "fiksId": 3764760,
         "name": "Martin Poole Underhaug",
         "teamId": "g14-1",
@@ -2581,7 +2581,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4101326",
+        "id": "fiks-4101326",
         "fiksId": 4101326,
         "name": "Magnus Sundli-H&#xE4;rdig",
         "teamId": "g14-1",
@@ -2596,7 +2596,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-4097200",
+        "id": "fiks-4097200",
         "fiksId": 4097200,
         "name": "Amund Velken Tveit",
         "teamId": "g14-1",
@@ -2610,7 +2610,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4096590",
+        "id": "fiks-4096590",
         "fiksId": 4096590,
         "name": "Alexander Power",
         "teamId": "g14-1",
@@ -2624,7 +2624,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3852090",
+        "id": "fiks-3852090",
         "fiksId": 3852090,
         "name": "Tobias Haugen Møller",
         "teamId": "g14-1",
@@ -2638,7 +2638,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4096445",
+        "id": "fiks-4096445",
         "fiksId": 4096445,
         "name": "Sigurd Stavrum",
         "teamId": "g14-1",
@@ -2652,7 +2652,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4096815",
+        "id": "fiks-4096815",
         "fiksId": 4096815,
         "name": "Vincent Milian Eri Menes",
         "teamId": "g14-1",
@@ -2666,7 +2666,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4099871",
+        "id": "fiks-4099871",
         "fiksId": 4099871,
         "name": "Nicholas Gjeitrem",
         "teamId": "g14-1",
@@ -2680,7 +2680,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3770724",
+        "id": "fiks-3770724",
         "fiksId": 3770724,
         "name": "Jakob Eidesen Heskestad",
         "teamId": "g14-1",
@@ -2694,7 +2694,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3764755",
+        "id": "fiks-3764755",
         "fiksId": 3764755,
         "name": "Lucas Rage Skurtveit",
         "teamId": "g14-1",
@@ -2719,7 +2719,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Stian Engum",
     "players": [
       {
-        "id": "p-4103191",
+        "id": "fiks-4103191",
         "fiksId": 4103191,
         "name": "Tobias Hovden Steffensen",
         "teamId": "g14-2",
@@ -2733,7 +2733,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3764757",
+        "id": "fiks-3764757",
         "fiksId": 3764757,
         "name": "Markus Strøm",
         "teamId": "g14-2",
@@ -2748,7 +2748,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-3764759",
+        "id": "fiks-3764759",
         "fiksId": 3764759,
         "name": "Jonas Terfort",
         "teamId": "g14-2",
@@ -2762,7 +2762,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3771172",
+        "id": "fiks-3771172",
         "fiksId": 3771172,
         "name": "Aksel Søgnen Sanden",
         "teamId": "g14-2",
@@ -2776,7 +2776,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3832343",
+        "id": "fiks-3832343",
         "fiksId": 3832343,
         "name": "Benjamin Sæthre Rindarøy",
         "teamId": "g14-2",
@@ -2790,7 +2790,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3852089",
+        "id": "fiks-3852089",
         "fiksId": 3852089,
         "name": "Erling Muca Nordahl",
         "teamId": "g14-2",
@@ -2805,7 +2805,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-3869530",
+        "id": "fiks-3869530",
         "fiksId": 3869530,
         "name": "Billy Nikolai Dysvik-Brandt",
         "teamId": "g14-2",
@@ -2819,7 +2819,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3922123",
+        "id": "fiks-3922123",
         "fiksId": 3922123,
         "name": "Theo-Sander Johnsen Lyngbø",
         "teamId": "g14-2",
@@ -2833,7 +2833,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3981354",
+        "id": "fiks-3981354",
         "fiksId": 3981354,
         "name": "Liam Nonaas Vilstrup",
         "teamId": "g14-2",
@@ -2847,7 +2847,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4096446",
+        "id": "fiks-4096446",
         "fiksId": 4096446,
         "name": "Armand Aas Kvalheim",
         "teamId": "g14-2",
@@ -2861,7 +2861,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4096816",
+        "id": "fiks-4096816",
         "fiksId": 4096816,
         "name": "Oskar Bøe Stevnebø",
         "teamId": "g14-2",
@@ -2875,7 +2875,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4096450",
+        "id": "fiks-4096450",
         "fiksId": 4096450,
         "name": "Tobias Sælemyr Vangen",
         "teamId": "g14-2",
@@ -2889,7 +2889,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4096610",
+        "id": "fiks-4096610",
         "fiksId": 4096610,
         "name": "Theo Engum",
         "teamId": "g14-2",
@@ -2903,7 +2903,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4096817",
+        "id": "fiks-4096817",
         "fiksId": 4096817,
         "name": "Olav Reigstad",
         "teamId": "g14-2",
@@ -2917,7 +2917,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4103188",
+        "id": "fiks-4103188",
         "fiksId": 4103188,
         "name": "Viktor Andre Birkeland",
         "teamId": "g14-2",
@@ -2942,7 +2942,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Jon Ingar Eikhaug",
     "players": [
       {
-        "id": "p-3410736",
+        "id": "fiks-3410736",
         "fiksId": 3410736,
         "name": "Iselinn Kobbeltvedt Storesund",
         "teamId": "j14-1",
@@ -2956,7 +2956,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3410761",
+        "id": "fiks-3410761",
         "fiksId": 3410761,
         "name": "Oda Sylta Haugland",
         "teamId": "j14-1",
@@ -2971,7 +2971,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-3775039",
+        "id": "fiks-3775039",
         "fiksId": 3775039,
         "name": "Johanne Gjærde Tryggestad",
         "teamId": "j14-1",
@@ -2985,7 +2985,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4149760",
+        "id": "fiks-4149760",
         "fiksId": 4149760,
         "name": "Elise Solheim Gåsvær Hansen",
         "teamId": "j14-1",
@@ -2999,7 +2999,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3888492",
+        "id": "fiks-3888492",
         "fiksId": 3888492,
         "name": "Anne-Lene Barmen",
         "teamId": "j14-1",
@@ -3013,7 +3013,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3889582",
+        "id": "fiks-3889582",
         "fiksId": 3889582,
         "name": "Malena Vangdal-Jensen",
         "teamId": "j14-1",
@@ -3028,7 +3028,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-4100532",
+        "id": "fiks-4100532",
         "fiksId": 4100532,
         "name": "Madeleine Blindheim-Hansen",
         "teamId": "j14-1",
@@ -3042,7 +3042,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4154324",
+        "id": "fiks-4154324",
         "fiksId": 4154324,
         "name": "Hanna Gjøstein Bergstrøm",
         "teamId": "j14-1",
@@ -3056,7 +3056,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3862970",
+        "id": "fiks-3862970",
         "fiksId": 3862970,
         "name": "Emma Bjelde Cortez",
         "teamId": "j14-1",
@@ -3070,7 +3070,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4154323",
+        "id": "fiks-4154323",
         "fiksId": 4154323,
         "name": "Gyda Venås Midtun",
         "teamId": "j14-1",
@@ -3084,7 +3084,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3934728",
+        "id": "fiks-3934728",
         "fiksId": 3934728,
         "name": "Erika Johanne Rasmussen Ødegård",
         "teamId": "j14-1",
@@ -3098,7 +3098,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3862971",
+        "id": "fiks-3862971",
         "fiksId": 3862971,
         "name": "Mathilde Bjelde Cortez",
         "teamId": "j14-1",
@@ -3112,7 +3112,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3913440",
+        "id": "fiks-3913440",
         "fiksId": 3913440,
         "name": "Marielle Svanevik Bauge",
         "teamId": "j14-1",
@@ -3126,7 +3126,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3775043",
+        "id": "fiks-3775043",
         "fiksId": 3775043,
         "name": "Vilde Kolstad Dimmen",
         "teamId": "j14-1",
@@ -3140,7 +3140,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3862978",
+        "id": "fiks-3862978",
         "fiksId": 3862978,
         "name": "Marie Skyhøj-Holba",
         "teamId": "j14-1",
@@ -3154,7 +3154,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3862972",
+        "id": "fiks-3862972",
         "fiksId": 3862972,
         "name": "Helle Eikhaug Åsli",
         "teamId": "j14-1",
@@ -3168,7 +3168,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3775053",
+        "id": "fiks-3775053",
         "fiksId": 3775053,
         "name": "Hedda Krakhellen Kirkebø",
         "teamId": "j14-1",
@@ -3182,7 +3182,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4154328",
+        "id": "fiks-4154328",
         "fiksId": 4154328,
         "name": "Maren Fasting Bråten",
         "teamId": "j14-1",
@@ -3196,7 +3196,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3920386",
+        "id": "fiks-3920386",
         "fiksId": 3920386,
         "name": "Alma Dahlsrud",
         "teamId": "j14-1",
@@ -3210,7 +3210,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4154325",
+        "id": "fiks-4154325",
         "fiksId": 4154325,
         "name": "Helene Vala-førland",
         "teamId": "j14-1",
@@ -3224,7 +3224,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3776765",
+        "id": "fiks-3776765",
         "fiksId": 3776765,
         "name": "Josephine Emilie Valkner",
         "teamId": "j14-1",
@@ -3238,7 +3238,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3862974",
+        "id": "fiks-3862974",
         "fiksId": 3862974,
         "name": "Ingrid Martine Farsethås",
         "teamId": "j14-1",
@@ -3252,7 +3252,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4154331",
+        "id": "fiks-4154331",
         "fiksId": 4154331,
         "name": "Elin Alkurd",
         "teamId": "j14-1",
@@ -3266,7 +3266,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4154330",
+        "id": "fiks-4154330",
         "fiksId": 4154330,
         "name": "Vilma Tellevik",
         "teamId": "j14-1",
@@ -3280,7 +3280,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4154326",
+        "id": "fiks-4154326",
         "fiksId": 4154326,
         "name": "Iva Roald-h&#xE4;rdig",
         "teamId": "j14-1",
@@ -3294,7 +3294,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4131855",
+        "id": "fiks-4131855",
         "fiksId": 4131855,
         "name": "Guro Winsnes Holme",
         "teamId": "j14-1",
@@ -3308,7 +3308,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3852086",
+        "id": "fiks-3852086",
         "fiksId": 3852086,
         "name": "Martine Larsen Østerbø",
         "teamId": "j14-1",
@@ -3333,7 +3333,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Knut Wilhelm Barmen",
     "players": [
       {
-        "id": "p-4148559",
+        "id": "fiks-4148559",
         "fiksId": 4148559,
         "name": "Jone Folkestad",
         "teamId": "g13-1",
@@ -3347,7 +3347,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4035128",
+        "id": "fiks-4035128",
         "fiksId": 4035128,
         "name": "Sebastian Nikolai Gundersen",
         "teamId": "g13-1",
@@ -3362,7 +3362,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-3842024",
+        "id": "fiks-3842024",
         "fiksId": 3842024,
         "name": "Jonas Mardal Dale",
         "teamId": "g13-1",
@@ -3376,7 +3376,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3842037",
+        "id": "fiks-3842037",
         "fiksId": 3842037,
         "name": "Olav Høgseth Hauge",
         "teamId": "g13-1",
@@ -3390,7 +3390,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3842028",
+        "id": "fiks-3842028",
         "fiksId": 3842028,
         "name": "Noah Baugstø Hammersland",
         "teamId": "g13-1",
@@ -3404,7 +3404,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4148565",
+        "id": "fiks-4148565",
         "fiksId": 4148565,
         "name": "Sebastian Børø De Lange",
         "teamId": "g13-1",
@@ -3419,7 +3419,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-3842039",
+        "id": "fiks-3842039",
         "fiksId": 3842039,
         "name": "Jørgen Barmen",
         "teamId": "g13-1",
@@ -3433,7 +3433,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3843658",
+        "id": "fiks-3843658",
         "fiksId": 3843658,
         "name": "Gard Høydal Lunden",
         "teamId": "g13-1",
@@ -3447,7 +3447,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4156826",
+        "id": "fiks-4156826",
         "fiksId": 4156826,
         "name": "Elijah Emilian Jansen",
         "teamId": "g13-1",
@@ -3461,7 +3461,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3842158",
+        "id": "fiks-3842158",
         "fiksId": 3842158,
         "name": "Brage Knutsen-Berge",
         "teamId": "g13-1",
@@ -3475,7 +3475,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3844756",
+        "id": "fiks-3844756",
         "fiksId": 3844756,
         "name": "Steffen Tonheim",
         "teamId": "g13-1",
@@ -3489,7 +3489,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4148557",
+        "id": "fiks-4148557",
         "fiksId": 4148557,
         "name": "Endre Nordvik",
         "teamId": "g13-1",
@@ -3503,7 +3503,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4148568",
+        "id": "fiks-4148568",
         "fiksId": 4148568,
         "name": "Vegard Holme Sandvik",
         "teamId": "g13-1",
@@ -3517,7 +3517,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4148558",
+        "id": "fiks-4148558",
         "fiksId": 4148558,
         "name": "Jakob Lie",
         "teamId": "g13-1",
@@ -3531,7 +3531,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4148564",
+        "id": "fiks-4148564",
         "fiksId": 4148564,
         "name": "Samuel Sævik Dyrhovden",
         "teamId": "g13-1",
@@ -3556,7 +3556,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Knut Wilhelm Barmen",
     "players": [
       {
-        "id": "p-4156826",
+        "id": "fiks-4156826",
         "fiksId": 4156826,
         "name": "Elijah Emilian Jansen",
         "teamId": "g13-2",
@@ -3570,7 +3570,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4148559",
+        "id": "fiks-4148559",
         "fiksId": 4148559,
         "name": "Jone Folkestad",
         "teamId": "g13-2",
@@ -3585,7 +3585,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-4035128",
+        "id": "fiks-4035128",
         "fiksId": 4035128,
         "name": "Sebastian Nikolai Gundersen",
         "teamId": "g13-2",
@@ -3599,7 +3599,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3842024",
+        "id": "fiks-3842024",
         "fiksId": 3842024,
         "name": "Jonas Mardal Dale",
         "teamId": "g13-2",
@@ -3613,7 +3613,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3842037",
+        "id": "fiks-3842037",
         "fiksId": 3842037,
         "name": "Olav Høgseth Hauge",
         "teamId": "g13-2",
@@ -3627,7 +3627,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3842028",
+        "id": "fiks-3842028",
         "fiksId": 3842028,
         "name": "Noah Baugstø Hammersland",
         "teamId": "g13-2",
@@ -3642,7 +3642,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-4148565",
+        "id": "fiks-4148565",
         "fiksId": 4148565,
         "name": "Sebastian Børø De Lange",
         "teamId": "g13-2",
@@ -3656,7 +3656,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3842039",
+        "id": "fiks-3842039",
         "fiksId": 3842039,
         "name": "Jørgen Barmen",
         "teamId": "g13-2",
@@ -3670,7 +3670,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3843658",
+        "id": "fiks-3843658",
         "fiksId": 3843658,
         "name": "Gard Høydal Lunden",
         "teamId": "g13-2",
@@ -3684,7 +3684,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3842158",
+        "id": "fiks-3842158",
         "fiksId": 3842158,
         "name": "Brage Knutsen-Berge",
         "teamId": "g13-2",
@@ -3698,7 +3698,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3844756",
+        "id": "fiks-3844756",
         "fiksId": 3844756,
         "name": "Steffen Tonheim",
         "teamId": "g13-2",
@@ -3712,7 +3712,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4148557",
+        "id": "fiks-4148557",
         "fiksId": 4148557,
         "name": "Endre Nordvik",
         "teamId": "g13-2",
@@ -3726,7 +3726,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4148568",
+        "id": "fiks-4148568",
         "fiksId": 4148568,
         "name": "Vegard Holme Sandvik",
         "teamId": "g13-2",
@@ -3740,7 +3740,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4148558",
+        "id": "fiks-4148558",
         "fiksId": 4148558,
         "name": "Jakob Lie",
         "teamId": "g13-2",
@@ -3754,7 +3754,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4148564",
+        "id": "fiks-4148564",
         "fiksId": 4148564,
         "name": "Samuel Sævik Dyrhovden",
         "teamId": "g13-2",
@@ -3779,7 +3779,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Knut Wilhelm Barmen",
     "players": [
       {
-        "id": "p-4148559",
+        "id": "fiks-4148559",
         "fiksId": 4148559,
         "name": "Jone Folkestad",
         "teamId": "g13-3",
@@ -3793,7 +3793,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4035128",
+        "id": "fiks-4035128",
         "fiksId": 4035128,
         "name": "Sebastian Nikolai Gundersen",
         "teamId": "g13-3",
@@ -3808,7 +3808,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-3842024",
+        "id": "fiks-3842024",
         "fiksId": 3842024,
         "name": "Jonas Mardal Dale",
         "teamId": "g13-3",
@@ -3822,7 +3822,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3842037",
+        "id": "fiks-3842037",
         "fiksId": 3842037,
         "name": "Olav Høgseth Hauge",
         "teamId": "g13-3",
@@ -3836,7 +3836,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3842028",
+        "id": "fiks-3842028",
         "fiksId": 3842028,
         "name": "Noah Baugstø Hammersland",
         "teamId": "g13-3",
@@ -3850,7 +3850,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4148565",
+        "id": "fiks-4148565",
         "fiksId": 4148565,
         "name": "Sebastian Børø De Lange",
         "teamId": "g13-3",
@@ -3865,7 +3865,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-3842039",
+        "id": "fiks-3842039",
         "fiksId": 3842039,
         "name": "Jørgen Barmen",
         "teamId": "g13-3",
@@ -3879,7 +3879,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3843658",
+        "id": "fiks-3843658",
         "fiksId": 3843658,
         "name": "Gard Høydal Lunden",
         "teamId": "g13-3",
@@ -3893,7 +3893,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4156826",
+        "id": "fiks-4156826",
         "fiksId": 4156826,
         "name": "Elijah Emilian Jansen",
         "teamId": "g13-3",
@@ -3907,7 +3907,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3842158",
+        "id": "fiks-3842158",
         "fiksId": 3842158,
         "name": "Brage Knutsen-Berge",
         "teamId": "g13-3",
@@ -3921,7 +3921,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3844756",
+        "id": "fiks-3844756",
         "fiksId": 3844756,
         "name": "Steffen Tonheim",
         "teamId": "g13-3",
@@ -3935,7 +3935,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4148557",
+        "id": "fiks-4148557",
         "fiksId": 4148557,
         "name": "Endre Nordvik",
         "teamId": "g13-3",
@@ -3949,7 +3949,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4148568",
+        "id": "fiks-4148568",
         "fiksId": 4148568,
         "name": "Vegard Holme Sandvik",
         "teamId": "g13-3",
@@ -3963,7 +3963,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4148558",
+        "id": "fiks-4148558",
         "fiksId": 4148558,
         "name": "Jakob Lie",
         "teamId": "g13-3",
@@ -3977,7 +3977,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4148564",
+        "id": "fiks-4148564",
         "fiksId": 4148564,
         "name": "Samuel Sævik Dyrhovden",
         "teamId": "g13-3",
@@ -4002,7 +4002,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Christian Borkner",
     "players": [
       {
-        "id": "p-4131855",
+        "id": "fiks-4131855",
         "fiksId": 4131855,
         "name": "Guro Winsnes Holme",
         "teamId": "j13-1",
@@ -4016,7 +4016,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3775053",
+        "id": "fiks-3775053",
         "fiksId": 3775053,
         "name": "Hedda Krakhellen Kirkebø",
         "teamId": "j13-1",
@@ -4031,7 +4031,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-3776765",
+        "id": "fiks-3776765",
         "fiksId": 3776765,
         "name": "Josephine Emilie Valkner",
         "teamId": "j13-1",
@@ -4045,7 +4045,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3862971",
+        "id": "fiks-3862971",
         "fiksId": 3862971,
         "name": "Mathilde Bjelde Cortez",
         "teamId": "j13-1",
@@ -4059,7 +4059,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3862974",
+        "id": "fiks-3862974",
         "fiksId": 3862974,
         "name": "Ingrid Martine Farsethås",
         "teamId": "j13-1",
@@ -4073,7 +4073,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3889582",
+        "id": "fiks-3889582",
         "fiksId": 3889582,
         "name": "Malena Vangdal-Jensen",
         "teamId": "j13-1",
@@ -4088,7 +4088,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-3934728",
+        "id": "fiks-3934728",
         "fiksId": 3934728,
         "name": "Erika Johanne Rasmussen Ødegård",
         "teamId": "j13-1",
@@ -4102,7 +4102,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4154323",
+        "id": "fiks-4154323",
         "fiksId": 4154323,
         "name": "Gyda Venås Midtun",
         "teamId": "j13-1",
@@ -4116,7 +4116,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3913440",
+        "id": "fiks-3913440",
         "fiksId": 3913440,
         "name": "Marielle Svanevik Bauge",
         "teamId": "j13-1",
@@ -4130,7 +4130,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4154324",
+        "id": "fiks-4154324",
         "fiksId": 4154324,
         "name": "Hanna Gjøstein Bergstrøm",
         "teamId": "j13-1",
@@ -4144,7 +4144,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4149760",
+        "id": "fiks-4149760",
         "fiksId": 4149760,
         "name": "Elise Solheim Gåsvær Hansen",
         "teamId": "j13-1",
@@ -4158,7 +4158,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3852086",
+        "id": "fiks-3852086",
         "fiksId": 3852086,
         "name": "Martine Larsen Østerbø",
         "teamId": "j13-1",
@@ -4172,7 +4172,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4154328",
+        "id": "fiks-4154328",
         "fiksId": 4154328,
         "name": "Maren Fasting Bråten",
         "teamId": "j13-1",
@@ -4186,7 +4186,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4154325",
+        "id": "fiks-4154325",
         "fiksId": 4154325,
         "name": "Helene Vala-førland",
         "teamId": "j13-1",
@@ -4200,7 +4200,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4154331",
+        "id": "fiks-4154331",
         "fiksId": 4154331,
         "name": "Elin Alkurd",
         "teamId": "j13-1",
@@ -4214,7 +4214,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4154330",
+        "id": "fiks-4154330",
         "fiksId": 4154330,
         "name": "Vilma Tellevik",
         "teamId": "j13-1",
@@ -4228,7 +4228,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4100532",
+        "id": "fiks-4100532",
         "fiksId": 4100532,
         "name": "Madeleine Blindheim-Hansen",
         "teamId": "j13-1",
@@ -4242,7 +4242,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4154326",
+        "id": "fiks-4154326",
         "fiksId": 4154326,
         "name": "Iva Roald-h&#xE4;rdig",
         "teamId": "j13-1",
@@ -4256,7 +4256,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3775039",
+        "id": "fiks-3775039",
         "fiksId": 3775039,
         "name": "Johanne Gjærde Tryggestad",
         "teamId": "j13-1",
@@ -4281,7 +4281,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
     "assistantCoach": "Christian Borkner",
     "players": [
       {
-        "id": "p-3889582",
+        "id": "fiks-3889582",
         "fiksId": 3889582,
         "name": "Malena Vangdal-Jensen",
         "teamId": "j13-2",
@@ -4295,7 +4295,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4154323",
+        "id": "fiks-4154323",
         "fiksId": 4154323,
         "name": "Gyda Venås Midtun",
         "teamId": "j13-2",
@@ -4310,7 +4310,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Kaptein"
       },
       {
-        "id": "p-3913440",
+        "id": "fiks-3913440",
         "fiksId": 3913440,
         "name": "Marielle Svanevik Bauge",
         "teamId": "j13-2",
@@ -4324,7 +4324,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4154325",
+        "id": "fiks-4154325",
         "fiksId": 4154325,
         "name": "Helene Vala-førland",
         "teamId": "j13-2",
@@ -4338,7 +4338,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4154330",
+        "id": "fiks-4154330",
         "fiksId": 4154330,
         "name": "Vilma Tellevik",
         "teamId": "j13-2",
@@ -4352,7 +4352,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3775039",
+        "id": "fiks-3775039",
         "fiksId": 3775039,
         "name": "Johanne Gjærde Tryggestad",
         "teamId": "j13-2",
@@ -4367,7 +4367,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "role": "Visekaptein"
       },
       {
-        "id": "p-4131855",
+        "id": "fiks-4131855",
         "fiksId": 4131855,
         "name": "Guro Winsnes Holme",
         "teamId": "j13-2",
@@ -4381,7 +4381,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4154324",
+        "id": "fiks-4154324",
         "fiksId": 4154324,
         "name": "Hanna Gjøstein Bergstrøm",
         "teamId": "j13-2",
@@ -4395,7 +4395,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4149760",
+        "id": "fiks-4149760",
         "fiksId": 4149760,
         "name": "Elise Solheim Gåsvær Hansen",
         "teamId": "j13-2",
@@ -4409,7 +4409,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-3852086",
+        "id": "fiks-3852086",
         "fiksId": 3852086,
         "name": "Martine Larsen Østerbø",
         "teamId": "j13-2",
@@ -4423,7 +4423,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4154331",
+        "id": "fiks-4154331",
         "fiksId": 4154331,
         "name": "Elin Alkurd",
         "teamId": "j13-2",
@@ -4437,7 +4437,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": true
       },
       {
-        "id": "p-4154328",
+        "id": "fiks-4154328",
         "fiksId": 4154328,
         "name": "Maren Fasting Bråten",
         "teamId": "j13-2",
@@ -4451,7 +4451,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4154326",
+        "id": "fiks-4154326",
         "fiksId": 4154326,
         "name": "Iva Roald-h&#xE4;rdig",
         "teamId": "j13-2",
@@ -4465,7 +4465,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3775043",
+        "id": "fiks-3775043",
         "fiksId": 3775043,
         "name": "Vilde Kolstad Dimmen",
         "teamId": "j13-2",
@@ -4479,7 +4479,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3775053",
+        "id": "fiks-3775053",
         "fiksId": 3775053,
         "name": "Hedda Krakhellen Kirkebø",
         "teamId": "j13-2",
@@ -4493,7 +4493,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3920386",
+        "id": "fiks-3920386",
         "fiksId": 3920386,
         "name": "Alma Dahlsrud",
         "teamId": "j13-2",
@@ -4507,7 +4507,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3776765",
+        "id": "fiks-3776765",
         "fiksId": 3776765,
         "name": "Josephine Emilie Valkner",
         "teamId": "j13-2",
@@ -4521,7 +4521,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3862971",
+        "id": "fiks-3862971",
         "fiksId": 3862971,
         "name": "Mathilde Bjelde Cortez",
         "teamId": "j13-2",
@@ -4535,7 +4535,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3862972",
+        "id": "fiks-3862972",
         "fiksId": 3862972,
         "name": "Helle Eikhaug Åsli",
         "teamId": "j13-2",
@@ -4549,7 +4549,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3862974",
+        "id": "fiks-3862974",
         "fiksId": 3862974,
         "name": "Ingrid Martine Farsethås",
         "teamId": "j13-2",
@@ -4563,7 +4563,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3862978",
+        "id": "fiks-3862978",
         "fiksId": 3862978,
         "name": "Marie Skyhøj-Holba",
         "teamId": "j13-2",
@@ -4577,7 +4577,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3934728",
+        "id": "fiks-3934728",
         "fiksId": 3934728,
         "name": "Erika Johanne Rasmussen Ødegård",
         "teamId": "j13-2",
@@ -4591,7 +4591,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4100532",
+        "id": "fiks-4100532",
         "fiksId": 4100532,
         "name": "Madeleine Blindheim-Hansen",
         "teamId": "j13-2",
@@ -4605,7 +4605,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-4164101",
+        "id": "fiks-4164101",
         "fiksId": 4164101,
         "name": "Emma Eide Alvær",
         "teamId": "j13-2",
@@ -4619,7 +4619,7 @@ export const ALL_BONES_SQUADS: TeamSquad[] = [
         "isStarter": false
       },
       {
-        "id": "p-3862970",
+        "id": "fiks-3862970",
         "fiksId": 3862970,
         "name": "Emma Bjelde Cortez",
         "teamId": "j13-2",

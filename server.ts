@@ -8,6 +8,9 @@ import { ALL_BONES_SQUADS, ALL_BONES_PLAYERS, getSquadForTeam, getMatchLineup } 
 import { matchService } from './server/services/matchService.js';
 import { generateOpponentScoutReport } from './server/scoutService.js';
 import { calculateMatchPOTM } from './src/utils/potmCalculator.js';
+import { calculateMatchScore, calculateTopScorers, calculateCardStatistics, isOwnGoalEvent } from './src/utils/derivedStats.js';
+import { runPlayerIdentityDiagnostics } from './src/utils/playerResolver.js';
+import { enrichPlayersWithMostPlayedPosition } from './src/utils/positionEngine.js';
 import {
   getOfficialPlayerStats,
   scrapeOfficialPlayerStats,
@@ -31,10 +34,21 @@ for (const m of currentData.matches) {
     if (m.homeScore === undefined || m.homeScore === null) m.homeScore = 0;
     if (m.awayScore === undefined || m.awayScore === null) m.awayScore = 1;
   }
+  if (m.events && m.events.length > 0 && m.events.some(e => e.type === 'goal')) {
+    const derived = calculateMatchScore(m.events, m.homeScore, m.awayScore, m.homeTeam, m.awayTeam);
+    m.homeScore = derived.homeScore;
+    m.awayScore = derived.awayScore;
+  }
   if (!m.lineup) {
     m.lineup = getMatchLineup(m.teamId);
   }
-  if (!m.playerOfTheMatch && (m.status === 'finished' || (m.status as string) === 'live')) {
+
+  const hasOwnGoal = (m.events || []).some(isOwnGoalEvent);
+  const potmWinnerScoredOG = m.playerOfTheMatch && (m.events || []).some(e =>
+    isOwnGoalEvent(e) && e.player && e.player.trim().toLowerCase() === m.playerOfTheMatch?.winnerName?.trim().toLowerCase()
+  );
+
+  if ((!m.playerOfTheMatch || hasOwnGoal || potmWinnerScoredOG) && (m.status === 'finished' || (m.status as string) === 'live')) {
     m.playerOfTheMatch = calculateMatchPOTM(m);
   }
 }
@@ -75,98 +89,10 @@ function checkMatchWindow(): { isActive: boolean; activeMatches: Match[]; detail
   };
 }
 
-// Function to rebuild scorers and cards purely from real match events
+// Function to rebuild scorers and cards purely from real match events using canonical identity
 function rebuildScorersAndCardsFromEvents(matches: Match[]): { totalScorers: number; totalCards: number; totalGoals: number } {
-  const scorersMap = new Map<string, TopScorer>();
-  const cardsMap = new Map<string, CardStatistic>();
-
-  for (const match of matches) {
-    if (!match.events || match.events.length === 0) continue;
-
-    for (const ev of match.events) {
-      if (!ev.player) continue;
-      const playerName = ev.player.trim();
-      if (!playerName) continue;
-      if (playerName.toLowerCase().includes('personinfo') || playerName.toLowerCase().includes('ikke tilgjengelig')) {
-        continue;
-      }
-
-      const isBonesEvent =
-        (ev.team && ev.team.toLowerCase().includes('bønes')) ||
-        (match.homeTeam.toLowerCase().includes('bønes') && ev.team === match.homeTeam) ||
-        (match.awayTeam.toLowerCase().includes('bønes') && ev.team === match.awayTeam) ||
-        (!ev.team && (match.homeTeam.toLowerCase().includes('bønes') || match.awayTeam.toLowerCase().includes('bønes')));
-
-      if (!isBonesEvent) continue;
-
-      const playerKey = playerName.toLowerCase();
-
-      const playerSlug = playerName.toLowerCase().replace(/[^a-z0-9]/gi, '_');
-      const teamSlug = (match.teamId || '').toLowerCase().replace(/[^a-z0-9]/gi, '_');
-
-      if (ev.type === 'goal') {
-        const isPenalty = (ev.description || '').toLowerCase().includes('straffe');
-        const existing = scorersMap.get(playerKey);
-        if (existing) {
-          existing.goals += 1;
-          if (isPenalty) existing.penalties += 1;
-        } else {
-          scorersMap.set(playerKey, {
-            id: `ts-${playerSlug}-${teamSlug}`,
-            name: playerName,
-            teamId: match.teamId,
-            teamName: match.teamName,
-            goals: 1,
-            matches: 1,
-            penalties: isPenalty ? 1 : 0,
-            goalsPerMatch: 1.0,
-            isBonesPlayer: true
-          });
-        }
-      } else if (ev.type === 'yellow_card' || ev.type === 'red_card') {
-        const isRed = ev.type === 'red_card';
-        const existing = cardsMap.get(playerKey);
-        if (existing) {
-          if (isRed) existing.redCards += 1;
-          else existing.yellowCards += 1;
-          existing.points = existing.yellowCards + (existing.redCards * 3);
-          existing.status =
-            existing.redCards > 0 || existing.yellowCards >= 4
-              ? 'Karantene'
-              : existing.yellowCards === 3
-              ? 'Advarsel (1 fra soning)'
-              : 'Klar';
-        } else {
-          cardsMap.set(playerKey, {
-            id: `card-${playerSlug}-${teamSlug}`,
-            name: playerName,
-            teamId: match.teamId,
-            teamName: match.teamName,
-            yellowCards: isRed ? 0 : 1,
-            redCards: isRed ? 1 : 0,
-            points: isRed ? 3 : 1,
-            status: isRed ? 'Karantene' : 'Klar',
-            matches: 1,
-            isBonesPlayer: true
-          });
-        }
-      }
-    }
-  }
-
-  // Calculate actual match counts
-  for (const s of scorersMap.values()) {
-    const count = matches.filter(m => m.events?.some(e => e.player?.toLowerCase() === s.name.toLowerCase())).length;
-    s.matches = Math.max(1, count);
-    s.goalsPerMatch = Number((s.goals / s.matches).toFixed(2));
-  }
-  for (const c of cardsMap.values()) {
-    const count = matches.filter(m => m.events?.some(e => e.player?.toLowerCase() === c.name.toLowerCase())).length;
-    c.matches = Math.max(1, count);
-  }
-
-  const realScorers = Array.from(scorersMap.values()).sort((a, b) => b.goals - a.goals);
-  const realCards = Array.from(cardsMap.values()).sort((a, b) => b.points - a.points);
+  const realScorers = calculateTopScorers(matches, currentData.players || ALL_BONES_PLAYERS, { bonesOnly: true });
+  const realCards = calculateCardStatistics(matches, currentData.players || ALL_BONES_PLAYERS, { bonesOnly: true });
 
   currentData.topScorers = realScorers;
   currentData.cards = realCards;
@@ -620,10 +546,15 @@ app.get('/api/weather', async (req, res) => {
 
 // 1f. Squads and player rosters endpoints
 app.get('/api/bones/squads', (req, res) => {
+  const enrichedSquads = ALL_BONES_SQUADS.map((sq) => ({
+    ...sq,
+    players: enrichPlayersWithMostPlayedPosition(sq.players, currentData.matches || []),
+  }));
+
   res.json({
     success: true,
-    count: ALL_BONES_SQUADS.length,
-    squads: ALL_BONES_SQUADS
+    count: enrichedSquads.length,
+    squads: enrichedSquads
   });
 });
 
@@ -632,9 +563,15 @@ app.get('/api/bones/squads/:teamId', (req, res) => {
   if (!squad) {
     return res.status(404).json({ success: false, error: 'Lag ble ikke funnet' });
   }
+
+  const enrichedSquad = {
+    ...squad,
+    players: enrichPlayersWithMostPlayedPosition(squad.players, currentData.matches || []),
+  };
+
   res.json({
     success: true,
-    squad
+    squad: enrichedSquad
   });
 });
 
@@ -742,6 +679,21 @@ app.post('/api/bones/players/nff-stats/sync', async (req, res) => {
   syncAllPlayerStats(fiksIds, 6).catch(err => {
     console.error('Error during background player sync:', err);
   });
+});
+
+// 1h. Player Identity Architecture Diagnostics (Strict read-only analysis)
+app.get('/api/bones/identity/diagnostics', (req, res) => {
+  try {
+    const cachedOfficial = getAllCachedPlayerStats();
+    const diagnostics = runPlayerIdentityDiagnostics(currentData, [], cachedOfficial);
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      diagnostics
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 app.get('/api/bones/matches/:id/lineup', async (req, res) => {

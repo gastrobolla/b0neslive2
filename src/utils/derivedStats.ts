@@ -32,10 +32,11 @@ export function getPlayerIdentity(player: {
     extractNumericFiksId(player.id);
 
   if (numFiks) {
+    const canonical = `fiks-${numFiks}`;
     return {
-      key: `fiks_${numFiks}`,
+      key: canonical,
       isFiks: true,
-      id: `fiks-${numFiks}`,
+      id: canonical,
       name: displayName,
     };
   }
@@ -44,7 +45,7 @@ export function getPlayerIdentity(player: {
   const fid = canon.startsWith('fiks-') ? extractNumericFiksId(canon) : undefined;
 
   return {
-    key: fid ? `fiks_${fid}` : canon,
+    key: canon,
     isFiks: !!fid,
     id: canon,
     name: displayName,
@@ -70,8 +71,31 @@ export function generateDeterministicEventId(
 }
 
 /**
+ * Detects if an event is an own goal (selvmål).
+ * In football, an own goal is scored by a player into their own net,
+ * and the goal is credited on the scoreboard to the OPPOSING team.
+ */
+export function isOwnGoalEvent(ev: MatchEvent): boolean {
+  if (ev.type !== 'goal') return false;
+  if ((ev as any).goalType === 'own_goal') return true;
+  const desc = (ev.description || '').toLowerCase();
+  const text = ((ev as any).text || '').toLowerCase();
+  return (
+    desc.includes('selvmål') ||
+    desc.includes('selvmaal') ||
+    desc.includes('(sm)') ||
+    desc.includes('own goal') ||
+    desc.includes('own-goal') ||
+    text.includes('selvmål') ||
+    text.includes('selvmaal') ||
+    text.includes('(sm)')
+  );
+}
+
+/**
  * Deterministically calculates match score derived from MatchEvents.
  * If no events exist, falls back to recorded scores (if provided).
+ * Accurately handles own goals (selvmål) by awarding the goal to the opponent team.
  */
 export function calculateMatchScore(
   events: MatchEvent[] | undefined,
@@ -102,28 +126,46 @@ export function calculateMatchScore(
   const aSlug = awayTeamName ? sanitizeSlug(awayTeamName) : '';
 
   for (const ev of goalEvents) {
+    const isOwnGoal = isOwnGoalEvent(ev);
     const evTeamSlug = sanitizeSlug(ev.team || '');
+
+    let isHomeAttributed = false;
 
     // Check direct equality or containment
     if (hSlug && (evTeamSlug === hSlug || evTeamSlug.includes(hSlug) || hSlug.includes(evTeamSlug))) {
-      homeScore += 1;
+      isHomeAttributed = true;
     } else if (aSlug && (evTeamSlug === aSlug || evTeamSlug.includes(aSlug) || aSlug.includes(evTeamSlug))) {
-      awayScore += 1;
+      isHomeAttributed = false;
     } else {
       // Fallback heuristics: check if ev.team contains 'bønes' or opponent clues
       const isBonesEv = evTeamSlug.includes('bones') || (ev.team && ev.team.toLowerCase().includes('bønes'));
       const isHomeBones = hSlug.includes('bones') || (homeTeamName && homeTeamName.toLowerCase().includes('bønes'));
 
       if (isBonesEv && isHomeBones) {
-        homeScore += 1;
+        isHomeAttributed = true;
       } else if (isBonesEv && !isHomeBones) {
-        awayScore += 1;
+        isHomeAttributed = false;
       } else if (!isBonesEv && isHomeBones) {
-        awayScore += 1;
+        isHomeAttributed = false;
       } else if (!isBonesEv && !isHomeBones) {
-        homeScore += 1;
+        isHomeAttributed = true;
+      } else {
+        isHomeAttributed = true;
+      }
+    }
+
+    // CRITICAL: An own goal is credited to the OPPOSING team on the scoreboard
+    if (isOwnGoal) {
+      if (isHomeAttributed) {
+        awayScore += 1;
       } else {
         homeScore += 1;
+      }
+    } else {
+      if (isHomeAttributed) {
+        homeScore += 1;
+      } else {
+        awayScore += 1;
       }
     }
   }
@@ -191,6 +233,8 @@ export function calculateTopScorers(
 
     for (const ev of match.events) {
       if (ev.type !== 'goal') continue;
+      // Own goals (selvmål) are never credited to a player on the top scorers list
+      if (isOwnGoalEvent(ev)) continue;
 
       const playerName = (ev.player || '').trim();
       if (!playerName || playerName.toLowerCase().includes('personinfo') || playerName.toLowerCase().includes('ikke tilgjengelig')) {
@@ -238,8 +282,8 @@ export function calculateTopScorers(
         continue;
       }
 
-      const canonicalId = res.canonicalId || toCanonicalPlayerId(ev.playerId, playerName);
-      const identityKey = res.fiksId ? `fiks_${res.fiksId}` : canonicalId;
+      const canonicalId = res.canonicalId || (res.fiksId ? `fiks-${res.fiksId}` : toCanonicalPlayerId(ev.playerId, playerName));
+      const identityKey = canonicalId;
       const isPenalty = (ev.description || '').toLowerCase().includes('straffe');
 
       let entry = scorersMap.get(identityKey);
@@ -386,8 +430,8 @@ export function calculateCardStatistics(
         continue;
       }
 
-      const canonicalId = res.canonicalId || toCanonicalPlayerId(ev.playerId, playerName);
-      const identityKey = res.fiksId ? `fiks_${res.fiksId}` : canonicalId;
+      const canonicalId = res.canonicalId || (res.fiksId ? `fiks-${res.fiksId}` : toCanonicalPlayerId(ev.playerId, playerName));
+      const identityKey = canonicalId;
 
       let entry = cardsMap.get(identityKey);
       if (!entry) {
@@ -464,7 +508,7 @@ export function buildMatchFeed(matches: Match[], limit: number = 40): FeedItem[]
           teamId: match.teamId,
           teamName: match.teamName,
           title: `Sluttresultat: ${match.homeTeam} ${match.homeScore ?? 0} - ${match.awayScore ?? 0} ${match.awayTeam}`,
-          description: `Kampen er ferdigspilt. Banens Beste ble kåret til ${winner.playerName} (${winner.algoRating.toFixed(1)} ★) med ${winner.votes || 0} stemmer.`,
+          description: `Kampen er ferdigspilt. Banens Beste ble kåret til ${winner.playerName} (${(winner.algoRating ?? (winner as any).rating ?? 0).toFixed(1)} ★) med ${winner.votes || 0} stemmer.`,
           badgeText: 'Banens Beste',
           isHomeMatch: match.isHome,
           venue: match.venue,
@@ -474,7 +518,7 @@ export function buildMatchFeed(matches: Match[], limit: number = 40): FeedItem[]
           match,
           potmWinner: {
             name: winner.playerName,
-            rating: winner.algoRating,
+            rating: winner.algoRating ?? (winner as any).rating ?? 0,
             votes: winner.votes || 0,
             team: winner.team,
             position: winner.position,
@@ -483,7 +527,7 @@ export function buildMatchFeed(matches: Match[], limit: number = 40): FeedItem[]
           },
           impact: {
             type: 'potm',
-            detail: `Banens Beste: ${winner.playerName} (★ ${winner.algoRating.toFixed(1)})`
+            detail: `Banens Beste: ${winner.playerName} (★ ${(winner.algoRating ?? (winner as any).rating ?? 0).toFixed(1)})`
           }
         });
       }

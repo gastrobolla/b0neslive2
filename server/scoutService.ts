@@ -585,43 +585,18 @@ async function scrapeOpponentTeamFromNff(
       if (!pName || seenPersons.has(pName)) continue;
       seenPersons.add(pName);
 
-      let position: 'Keeper' | 'Forsvar' | 'Midtbane' | 'Angrep' = 'Midtbane';
+      let position: 'Keeper' | 'Forsvar' | 'Midtbane' | 'Angrep' | 'Ukjent' = 'Ukjent';
       let role = 'Spiller';
       let goals = 0;
       let threatLevel: 'Ekstrem' | 'Høy' | 'Middels' = 'Middels';
 
-      if (players.length === 0) {
-        position = 'Keeper';
-        role = 'Førstekeeper';
-      } else if (players.length === 1) {
-        position = 'Forsvar';
-        role = 'Kaptein & Forsvarssjef';
-      } else if (players.length === 2) {
-        position = 'Angrep';
-        role = 'Toppscorer';
-        goals = 4 + (hashString(pName) % 5);
-        threatLevel = 'Ekstrem';
-      } else if (players.length === 3) {
-        position = 'Midtbane';
-        role = 'Spillopplegger';
-        goals = 2 + (hashString(pName) % 3);
-        threatLevel = 'Høy';
-      } else if (players.length === 4) {
-        position = 'Angrep';
-        role = 'Kantspiller / Fart';
-        goals = 2 + (hashString(pName) % 3);
-        threatLevel = 'Høy';
-      } else {
-        position = players.length % 2 === 0 ? 'Forsvar' : 'Midtbane';
-      }
-
       players.push({
-        id: `scout-p-${pFiks}`,
+        id: `fiks-${pFiks}`,
         name: pName,
         position,
-        jerseyNumber: players.length + 1,
+        jerseyNumber: undefined,
         goals,
-        matches: 4 + (hashString(pName) % 3),
+        matches: 1,
         role,
         threatLevel,
         fiksId: pFiks

@@ -61,15 +61,6 @@ export const TopScorersView: React.FC<TopScorersViewProps> = ({
             </p>
           </div>
         </div>
-
-        <div
-          id="scorers-autosync-indicator"
-          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/80 border border-emerald-300/80 text-emerald-800 font-semibold text-xs shadow-2xs shrink-0 self-start sm:self-auto"
-          title="Toppscorerlisten holdes kontinuerlig oppdatert fra NFF fotball.no"
-        >
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>Autosynk hvert 5. min</span>
-        </div>
       </div>
 
       {/* Top 3 Featured Podiums (if viewing all or enough scorers) */}
@@ -127,7 +118,7 @@ export const TopScorersView: React.FC<TopScorersViewProps> = ({
                     <Target className="w-3 h-3 text-red-500" />
                     <span>{scorer.matches} kamper</span>
                     <span>•</span>
-                    <span>{scorer.goalsPerMatch.toFixed(2)} mål/kamp</span>
+                    <span>{(scorer.goalsPerMatch ?? (scorer.matches ? scorer.goals / scorer.matches : 0)).toFixed(2)} mål/kamp</span>
                   </p>
                 </div>
 
@@ -303,7 +294,7 @@ export const TopScorersView: React.FC<TopScorersViewProps> = ({
                     </td>
 
                     <td className="py-3 px-3 text-center font-mono text-slate-600 hidden md:table-cell">
-                      {scorer.goalsPerMatch.toFixed(2)}
+                      {(scorer.goalsPerMatch ?? (scorer.matches ? scorer.goals / scorer.matches : 0)).toFixed(2)}
                     </td>
 
                     <td className="py-3 px-4 text-center">

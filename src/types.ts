@@ -17,6 +17,8 @@ export interface TeamInfo {
   rankTrend?: 'up' | 'down' | 'same';
 }
 
+export type Team = TeamInfo;
+
 export interface TableRow {
   rank: number;
   teamName: string;
@@ -100,6 +102,7 @@ export interface PlayerMatchLog {
   teamName?: string;
   division?: string;
   role?: string;
+  position?: PlayerPosition;
 }
 
 export interface PlayerSeasonStats {
@@ -123,6 +126,15 @@ export interface PlayerProfile {
   category: TeamCategory;
   jerseyNumber: number;
   position: string;
+  mostPlayedPosition?: PlayerPosition;
+  positionStats?: {
+    mostPlayedPosition: PlayerPosition;
+    totalTrackedMatches: number;
+    breakdown: { position: PlayerPosition; count: number; percentage: number; label: string }[];
+    primaryPositionLabel: string;
+    hasMultiplePositions: boolean;
+    positionSummaryText: string;
+  };
   isBonesPlayer: boolean;
   teamsPlayedFor?: PlayerTeamRepresentation[];
   spring: PlayerSeasonStats;
@@ -168,11 +180,14 @@ export interface IdentityResolutionResult {
   method: 'fiksId' | 'canonicalPlayerId' | 'legacyMapping' | 'scopedNameMatch' | 'unresolved';
   confidence: 'authoritative' | 'verified' | 'ambiguous' | 'unresolved';
   isAmbiguous: boolean;
+  unresolved?: boolean;
+  ambiguousName?: string;
   candidateCount?: number;
+  candidateFiksIds?: number[];
 }
 
 export interface Player {
-  id: string; // canonical format: "fiks-${fiksId}" or "p-${fiksId}" or "legacy_${nameSlug}"
+  id: string; // canonical format: "fiks-${fiksId}" or "legacy_${nameSlug}" (never "p-" or team-scoped)
   name: string;
   teamId?: string;
   teamName?: string;
@@ -210,6 +225,7 @@ export interface MatchEvent {
   matchId: string;
   minute: number;
   type: MatchEventType;
+  goalType?: 'own_goal' | 'penalty' | 'normal';
   playerId?: string; // Canonical person ID (e.g. "fiks-123456" or "legacy_sander_fjellstad")
   fiksId?: number; // Numeric FIKS person ID if available
   player?: string; // Display name
@@ -445,7 +461,7 @@ export interface ScoutRecentMatch {
 export interface ScoutKeyPlayer {
   id: string;
   name: string;
-  position: 'Keeper' | 'Forsvar' | 'Midtbane' | 'Angrep';
+  position: 'Keeper' | 'Forsvar' | 'Midtbane' | 'Angrep' | 'Ukjent';
   jerseyNumber?: number;
   goals: number;
   matches: number;
@@ -515,6 +531,17 @@ export interface OpponentScoutReport {
   source: string;
 }
 
+export interface PlayerRatingBreakdown {
+  base: number;
+  clutchDefense?: number;
+  cleanSheet?: number;
+  anchorStabilization?: number;
+  goalImpact?: number;
+  assistImpact?: number;
+  disciplinePenalty?: number;
+  tags?: string[];
+}
+
 export interface PlayerOfTheMatchCandidate {
   playerId?: string;
   playerName: string;
@@ -522,12 +549,17 @@ export interface PlayerOfTheMatchCandidate {
   jerseyNumber?: number;
   position?: string;
   goals: number;
+  ownGoals?: number;
+  disqualified?: boolean;
+  disqualificationReason?: string;
   assists: number;
   yellowCards: number;
   redCards: number;
-  algoRating: number; // 6.5 - 9.8 based on performance
+  algoRating: number; // 3.5 - 9.8 based on performance
   votes: number; // public spectator votes
   combinedScore: number; // composite of algoRating and public votes
+  ratingBreakdown?: PlayerRatingBreakdown;
+  tags?: string[];
 }
 
 export interface PlayerOfTheMatchData {
@@ -542,3 +574,35 @@ export interface PlayerOfTheMatchData {
   juryNotes?: string;
   lastVoteAt?: string;
 }
+
+export interface MomentumPoint {
+  minute: number;
+  homeMomentum: number; // 0 - 100
+  awayMomentum: number; // 0 - 100
+  netMomentum: number;  // -100 (Away dominance) to +100 (Home dominance)
+  scoreAtMinute?: { home: number; away: number };
+  events?: MatchEvent[];
+  narrative?: string;
+}
+
+export interface MatchMomentumSummary {
+  timeline: MomentumPoint[];
+  matchDuration: number;
+  halfTimeMinute: number;
+  homeDominancePct: number;
+  awayDominancePct: number;
+  firstHalfDominance: { home: number; away: number };
+  secondHalfDominance: { home: number; away: number };
+  clutchPhase?: {
+    startMinute: number;
+    dominantTeam: string;
+    description: string;
+  };
+  pressurePeaks: {
+    minute: number;
+    team: 'home' | 'away';
+    intensity: number;
+    label: string;
+  }[];
+}
+

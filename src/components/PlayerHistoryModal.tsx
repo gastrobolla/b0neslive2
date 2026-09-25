@@ -16,7 +16,8 @@ import {
   Activity,
   ArrowUpRight,
   MapPin,
-  ExternalLink
+  ExternalLink,
+  Compass
 } from 'lucide-react';
 
 interface PlayerHistoryModalProps {
@@ -212,12 +213,26 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
 
               <div>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-[#3E8A37] text-white">
-                    Bønes IL
+                  <span
+                    className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-900/80 text-blue-100 border border-blue-600/60 shadow-xs flex items-center gap-1"
+                    title={player.positionStats?.positionSummaryText || `Posisjon: ${player.position}`}
+                  >
+                    <span>{player.position}</span>
+                    {player.positionStats && player.positionStats.totalTrackedMatches > 0 && (
+                      <span className="text-[10px] text-blue-300 font-mono font-medium">
+                        ({player.positionStats.breakdown[0]?.count}/{player.positionStats.totalTrackedMatches} kamper)
+                      </span>
+                    )}
                   </span>
-                  <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-blue-900/60 text-blue-200 border border-blue-700/50">
-                    {player.position}
-                  </span>
+                  {player.positionStats?.hasMultiplePositions && (
+                    <span
+                      className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hidden sm:inline-flex items-center gap-1"
+                      title={player.positionStats.positionSummaryText}
+                    >
+                      <Compass className="w-3 h-3 text-emerald-400" />
+                      <span>Mest spilt: {player.position}</span>
+                    </span>
+                  )}
                   {player.fiksId && (
                     <a
                       href={player.fiksUrl || `https://www.fotball.no/fotballdata/person/profil/?fiksId=${player.fiksId}`}
@@ -257,25 +272,13 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                   <span className="font-semibold text-blue-200">{player.teamName}</span>
                   <span>•</span>
                   <span>{player.division}</span>
-                  {player.fiksUrl && (
-                    <a
-                      href={player.fiksUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center space-x-1 text-xs text-blue-300 hover:text-white bg-white/10 hover:bg-white/20 px-2 py-0.5 rounded transition-colors font-mono"
-                      title="Åpne offisiell spillerprofil på fotball.no"
-                    >
-                      <span>NFF FIKS #{player.fiksId}</span>
-                      <ArrowUpRight className="w-3 h-3" />
-                    </a>
-                  )}
                   {onSelectTeam && (
                     <button
                       onClick={() => {
                         onSelectTeam(player.teamId);
                         onClose();
                       }}
-                      className="inline-flex items-center text-xs text-amber-300 hover:text-amber-200 underline font-semibold ml-1"
+                      className="inline-flex items-center text-xs text-amber-300 hover:text-amber-200 underline font-semibold ml-1 cursor-pointer"
                     >
                       <span>Se lagets tabell</span>
                       <ChevronRight className="w-3 h-3" />
@@ -407,6 +410,95 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
             </section>
           )}
           
+          {/* Position Breakdown Section (Most played position analysis) */}
+          {player.positionStats && player.positionStats.totalTrackedMatches > 0 && (
+            <section id="position-distribution-section" className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xs text-white">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div className="flex items-center space-x-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-slate-950">
+                    Mest spilte posisjon
+                  </span>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                    <Compass className="w-4 h-4 text-emerald-400" />
+                    <span>Posisjonsanalyse i kamp</span>
+                  </h3>
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  Avgjøres av lagoppstilling og registrert posisjon per kamp
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {/* Visual Distribution Progress Bar */}
+                <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden flex">
+                  {player.positionStats.breakdown.map((item, idx) => {
+                    const color =
+                      item.position === 'Angrep'
+                        ? 'bg-amber-400'
+                        : item.position === 'Midtbane'
+                        ? 'bg-blue-500'
+                        : item.position === 'Forsvar'
+                        ? 'bg-emerald-500'
+                        : 'bg-purple-500';
+                    return (
+                      <div
+                        key={idx}
+                        className={`${color} h-full transition-all`}
+                        style={{ width: `${item.percentage}%` }}
+                        title={`${item.label}: ${item.count} kamper (${item.percentage}%)`}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Breakdown Badges Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  {player.positionStats.breakdown.map((item, idx) => {
+                    const isPrimary = item.position === player.positionStats?.mostPlayedPosition;
+                    const icon =
+                      item.position === 'Angrep'
+                        ? '⚽'
+                        : item.position === 'Midtbane'
+                        ? '🏃'
+                        : item.position === 'Forsvar'
+                        ? '🛡️'
+                        : '🧤';
+                    return (
+                      <div
+                        key={idx}
+                        className={`p-2.5 rounded-lg border flex flex-col justify-between ${
+                          isPrimary
+                            ? 'bg-emerald-950/40 border-emerald-500/60 ring-1 ring-emerald-500/30'
+                            : 'bg-slate-800/60 border-slate-700/60'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-white flex items-center gap-1">
+                            <span>{icon}</span>
+                            <span>{item.position}</span>
+                          </span>
+                          {isPrimary && (
+                            <span className="text-[9px] font-black uppercase tracking-wider bg-emerald-500 text-slate-950 px-1.5 py-0.2 rounded">
+                              Mest spilt
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1.5 flex items-baseline justify-between">
+                          <span className="text-sm font-black font-mono text-amber-300">
+                            {item.count} {item.count === 1 ? 'kamp' : 'kamper'}
+                          </span>
+                          <span className="text-xs text-slate-400 font-mono">
+                            {item.percentage}%
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Season Breakdown Cards: Vår vs Høst vs Totalt */}
           <section id="season-comparison-section" className="space-y-2">
             <div className="flex items-center justify-between">
@@ -1023,6 +1115,22 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                                 • {log.role}
                               </span>
                             )}
+                            {log.position && (
+                              <span
+                                className="text-[10px] font-bold px-1.5 py-0.2 rounded border bg-slate-50 text-slate-700 border-slate-200"
+                                title={`Registrert posisjon i denne kampen: ${log.position}`}
+                              >
+                                {log.position === 'Angrep'
+                                  ? '⚽ Spiss'
+                                  : log.position === 'Midtbane'
+                                  ? '🏃 Midtbane'
+                                  : log.position === 'Forsvar'
+                                  ? '🛡️ Forsvar'
+                                  : log.position === 'Keeper'
+                                  ? '🧤 Keeper'
+                                  : log.position}
+                              </span>
+                            )}
                             {log.highlight && log.highlight.startsWith('⚽') && (
                               <span className="text-[10px] font-bold text-red-600">
                                 • {log.highlight}
@@ -1086,7 +1194,7 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                                 : 'text-slate-600'
                             }`}
                           >
-                            {log.rating.toFixed(1)}
+                            {(log.rating ?? 0).toFixed(1)}
                           </span>
                         </td>
                       </tr>

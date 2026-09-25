@@ -1,6 +1,6 @@
 import React from 'react';
 import { Match } from '../types.js';
-import { Star, Shield, ChevronRight, Binoculars, PlusCircle, Trophy, Vote } from 'lucide-react';
+import { Star, Shield, ChevronRight, Binoculars, Trophy, Vote } from 'lucide-react';
 import { WeatherWidget } from './WeatherWidget.js';
 import { AddToCalendarButton } from './AddToCalendarButton.js';
 import { calculateMatchPOTM } from '../utils/potmCalculator.js';
@@ -78,83 +78,8 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
                 Tropp klar
               </span>
             )}
-            {/* Direct Banens Beste Star Badge in Header */}
-            {leader && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onOpenPOTM) onOpenPOTM(match);
-                  else onOpenDetail();
-                }}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black cursor-pointer transition-all shadow-2xs shrink-0 ${
-                  isPotmDecided
-                    ? 'bg-gradient-to-r from-amber-100 via-amber-200 to-amber-100 text-amber-950 border border-amber-300 hover:border-amber-400'
-                    : 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 hover:brightness-105 shadow-xs'
-                }`}
-                title={
-                  isPotmDecided
-                    ? `Banens Beste er kåret: ${leader.playerName} (Score ${leader.algoRating.toFixed(1)})`
-                    : `Stemmegivning er åpen! Leder: ${leader.playerName} (Score ${leader.algoRating.toFixed(1)})`
-                }
-              >
-                <Star
-                  className={`w-3 h-3 shrink-0 ${
-                    isPotmDecided ? 'fill-amber-500 text-amber-600' : 'fill-slate-950 text-slate-950'
-                  }`}
-                />
-                <span className="truncate max-w-[110px] sm:max-w-[160px]">
-                  {isPotmDecided ? 'Banens beste: ' : 'Leder: '}
-                  {leader.playerName}
-                </span>
-                <span className="font-mono text-[9px] bg-black/10 px-1 rounded font-black shrink-0">
-                  {leader.algoRating.toFixed(1)}
-                </span>
-              </button>
-            )}
           </div>
           <div className="flex items-center space-x-1 shrink-0">
-            {onOpenScout && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenScout(match);
-                }}
-                className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 transition-colors flex items-center gap-1"
-                title={`Speiderrapport for ${opponentName}`}
-              >
-                <Binoculars className="w-3 h-3 text-indigo-600" />
-                <span>Speider</span>
-              </button>
-            )}
-            {onOpenLineup && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenLineup();
-                }}
-                className="px-2 py-0.5 text-[10px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
-                title="Se lagoppstilling"
-              >
-                Oppstilling
-              </button>
-            )}
-            {onOpenReport && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenReport(match);
-                }}
-                className="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-50 hover:bg-blue-100 text-[#165094] border border-blue-200/80 transition-colors flex items-center gap-1 cursor-pointer"
-                title="Meld inn mål, assist, bytte, kort eller status"
-              >
-                <PlusCircle className="w-3 h-3 text-[#165094]" />
-                <span>Hendelse</span>
-              </button>
-            )}
             <AddToCalendarButton match={match} variant="compact" />
             <button
               onClick={onToggleFavorite}
@@ -194,31 +119,6 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
                 <span className="text-xs font-black text-[#165094]">{match.time}</span>
                 <span className="text-[10px] text-slate-400 font-medium">Kommende</span>
               </div>
-            )}
-
-            {/* Direct POTM star pill under status */}
-            {leader && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onOpenPOTM) onOpenPOTM(match);
-                  else onOpenDetail();
-                }}
-                className={`mt-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black cursor-pointer transition-all hover:scale-105 shadow-2xs ${
-                  isPotmDecided
-                    ? 'bg-amber-100 text-amber-950 border border-amber-300'
-                    : 'bg-amber-400 text-slate-950 animate-pulse'
-                }`}
-                title={
-                  isPotmDecided
-                    ? `Banens Beste: ${leader.playerName} (★ ${leader.algoRating.toFixed(1)})`
-                    : `Stemmegivning åpen! Leder: ${leader.playerName}`
-                }
-              >
-                <Star className="w-2.5 h-2.5 fill-current" />
-                <span>POTM</span>
-              </button>
             )}
           </div>
 
@@ -356,7 +256,7 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
                 </span>
                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 text-[10px] font-mono font-black shrink-0">
                   <Star className="w-2.5 h-2.5 fill-slate-950" />
-                  {leader.algoRating.toFixed(1)}
+                  {(leader.algoRating ?? (leader as any).rating ?? 0).toFixed(1)}
                 </span>
               </div>
             </div>

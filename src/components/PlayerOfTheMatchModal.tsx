@@ -51,7 +51,7 @@ const CustomVoteTooltip: React.FC<CustomVoteTooltipProps> = ({ active, payload }
         <div className="text-[11px] text-slate-300 flex items-center justify-between gap-3">
           <span>Algorating:</span>
           <span className="font-mono font-bold text-amber-400">
-            {data.algoRating.toFixed(1)} / 10
+            {(data.algoRating ?? 0).toFixed(1)} / 10
           </span>
         </div>
         {data.isWinner && (
@@ -326,13 +326,22 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
                       {winner.assists > 0 && <span>👟 {winner.assists} assist</span>}
                     </div>
                   )}
+                  {winner.tags && winner.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {winner.tags.map((t, idx) => (
+                        <span key={idx} className="text-[10px] font-bold text-amber-200 bg-white/10 px-2 py-0.5 rounded-md border border-white/20">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Rating Badge */}
                 <div className="flex flex-col items-center justify-center bg-amber-400 text-slate-950 px-3.5 py-2 rounded-xl shadow-lg shrink-0 ring-4 ring-amber-400/20">
                   <span className="text-[10px] font-black uppercase tracking-wider">Score</span>
                   <span className="text-2xl sm:text-3xl font-black tracking-tight leading-none">
-                    {winner.algoRating.toFixed(1)}
+                    {(winner.algoRating ?? (winner as any).rating ?? 0).toFixed(1)}
                   </span>
                   <span className="text-[9px] font-bold text-slate-800">av 10.0</span>
                 </div>
@@ -487,7 +496,29 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
                           <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
                             <span>{c.position || 'Spiller'}</span>
                             {c.goals > 0 && <span className="text-amber-700 font-bold">• ⚽ {c.goals} mål</span>}
+                            {(c.ownGoals || 0) > 0 && <span className="text-rose-700 font-bold">• ⚠️ {c.ownGoals} selvmål</span>}
                             {c.assists > 0 && <span className="text-blue-700 font-bold">• 👟 {c.assists} assist</span>}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-1 items-center">
+                            {c.disqualified && (
+                              <span className="text-[10px] font-bold text-rose-800 bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-md">
+                                🚫 Ikke valgbar til Banens beste ({c.disqualificationReason || 'Selvmål'})
+                              </span>
+                            )}
+                            {c.tags && c.tags.length > 0 && (
+                              c.tags.map((t, tidx) => (
+                                <span
+                                  key={tidx}
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                                    t.includes('selvmål')
+                                      ? 'text-rose-900 bg-rose-50 border border-rose-200'
+                                      : 'text-amber-900 bg-amber-100/90 border border-amber-200/80'
+                                  }`}
+                                >
+                                  {t}
+                                </span>
+                              ))
+                            )}
                           </div>
                         </div>
                       </div>
@@ -495,9 +526,13 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
                       <div className="flex items-center space-x-3 shrink-0">
                         {/* Rating pill */}
                         <div className="text-right">
-                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 font-mono text-xs font-bold text-slate-800">
-                            <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                            <span>{c.algoRating.toFixed(1)}</span>
+                          <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-mono text-xs font-bold ${
+                            (c.algoRating ?? 0) <= 5.0
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              : 'bg-slate-100 text-slate-800'
+                          }`}>
+                            <Star className={`w-3 h-3 ${(c.algoRating ?? 0) <= 5.0 ? 'text-rose-600 fill-rose-600' : 'text-amber-500 fill-amber-500'}`} />
+                            <span>{(c.algoRating ?? (c as any).rating ?? 0).toFixed(1)}</span>
                           </div>
                           <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
                             {c.votes} {c.votes === 1 ? 'stemme' : 'stemmer'} ({votePercentage}%)
@@ -505,28 +540,34 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
                         </div>
 
                         {/* Vote Button */}
-                        <button
-                          type="button"
-                          disabled={isSubmitting}
-                          onClick={() => handleCastVote(c)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 ${
-                            isSelected
-                              ? 'bg-emerald-600 text-white shadow-xs'
-                              : 'bg-[#165094] text-white hover:bg-[#0c1e38] shadow-xs'
-                          }`}
-                        >
-                          {isSelected ? (
-                            <>
-                              <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                              <span>Stemt</span>
-                            </>
-                          ) : (
-                            <>
-                              <Vote className="w-3.5 h-3.5 text-amber-300" />
-                              <span>Stem</span>
-                            </>
-                          )}
-                        </button>
+                        {c.disqualified ? (
+                          <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed text-center">
+                            Diskvalifisert
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() => handleCastVote(c)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 ${
+                              isSelected
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'bg-[#165094] text-white hover:bg-[#0c1e38] shadow-xs'
+                            }`}
+                          >
+                            {isSelected ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                                <span>Stemt</span>
+                              </>
+                            ) : (
+                              <>
+                                <Vote className="w-3.5 h-3.5 text-amber-300" />
+                                <span>Stem</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -571,9 +612,11 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
                     className="w-full px-3 py-2 text-xs font-bold rounded-lg border border-slate-300 bg-white"
                   >
                     <option value="">Velg spiller...</option>
-                    {potmData.candidates.map((c) => (
+                    {potmData.candidates
+                      .filter((c) => !c.disqualified && (c.ownGoals || 0) === 0)
+                      .map((c) => (
                       <option key={c.playerName} value={c.playerName}>
-                        {c.playerName} ({c.team}) - Rating {c.algoRating.toFixed(1)}
+                        {c.playerName} ({c.team}) - Rating {(c.algoRating ?? (c as any).rating ?? 0).toFixed(1)}
                       </option>
                     ))}
                   </select>

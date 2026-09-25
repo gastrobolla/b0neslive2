@@ -10,7 +10,6 @@ import {
   CloudRain,
   Navigation,
   Star,
-  Sparkles,
   ChevronRight,
   Vote
 } from 'lucide-react';
@@ -101,24 +100,6 @@ export const MatchdayHeroBanner: React.FC<MatchdayHeroBannerProps> = ({
           <span className="text-xs text-blue-200 font-medium">
             {nextMatch.division}
           </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {onOpenDesignSwitcher ? (
-            <button
-              onClick={onOpenDesignSwitcher}
-              className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/15 transition-colors cursor-pointer flex items-center gap-1"
-              title="UX-design"
-            >
-              <Sparkles className="w-3 h-3 text-amber-300" />
-              <span>Matchday Design</span>
-            </button>
-          ) : (
-            <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/10 text-blue-100 border border-white/20 flex items-center gap-1.5 shadow-2xs">
-              <Sparkles className="w-3 h-3 text-amber-300" />
-              <span>Matchday Design</span>
-            </span>
-          )}
         </div>
       </div>
 

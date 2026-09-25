@@ -18,7 +18,8 @@ export function sanitizePlayerNameSlug(name: string): string {
  * Normalizes any player ID to a canonical identity string.
  * RULES:
  * - FIKS ID is always formatted as "fiks-${fiksId}"
- * - teamId is NEVER included in the canonical ID
+ * - Parallel formats (p-, player-, fiks_, raw digits) are normalized to "fiks-${fiksId}"
+ * - teamId is strictly NEVER included in the canonical ID
  * - Legacy fallback is formatted as "legacy_${nameSlug}"
  */
 export function toCanonicalPlayerId(fiksIdOrId?: number | string | null, name?: string): string {
@@ -27,14 +28,14 @@ export function toCanonicalPlayerId(fiksIdOrId?: number | string | null, name?: 
   }
   if (typeof fiksIdOrId === 'string' && fiksIdOrId.trim()) {
     const clean = fiksIdOrId.trim();
-    // Handle "p-3761464" or "fiks-3761464" or pure digits "3761464"
-    const fiksMatch = clean.match(/^(?:fiks-|p-)?(\d+)$/i);
+    // Handle "p-3761464", "player-3761464", "fiks_3761464", "fiks-3761464" or pure digits "3761464"
+    const fiksMatch = clean.match(/^(?:fiks[-_]|p-|player-)?(\d+)$/i);
     if (fiksMatch) {
       return `fiks-${fiksMatch[1]}`;
     }
     // Handle existing legacy IDs: strip any accidental team suffix if present
     if (clean.startsWith('legacy_')) {
-      return clean;
+      return clean.replace(/_[a-z0-9]+-[0-9]+$/i, '');
     }
   }
   if (name && name.trim()) {
@@ -52,7 +53,7 @@ export function extractNumericFiksId(input?: number | string | null): number | u
     return input;
   }
   if (typeof input === 'string' && input.trim()) {
-    const m = input.trim().match(/^(?:fiks-|p-)?(\d+)$/i);
+    const m = input.trim().match(/^(?:fiks[-_]|p-|player-)?(\d+)$/i);
     if (m) {
       const num = parseInt(m[1], 10);
       if (!isNaN(num) && num > 0) return num;
@@ -155,7 +156,7 @@ export function resolvePlayerIdentity(
     };
   }
 
-  // 4. Scoped name matching (Lineup candidates first, then squad candidates)
+  // 4. Scoped name matching (Lineup candidates first, then squad candidates, then club-wide)
   const normTarget = displayName.toLowerCase();
 
   const searchInPool = (pool?: Player[]): Player[] => {
@@ -167,10 +168,23 @@ export function resolvePlayerIdentity(
     });
   };
 
+  const getUniquePersons = (candidates: Player[]): Map<string, Player> => {
+    const map = new Map<string, Player>();
+    for (const c of candidates) {
+      const cid = toCanonicalPlayerId(c.fiksId || c.id, c.name);
+      if (!map.has(cid)) {
+        map.set(cid, c);
+      }
+    }
+    return map;
+  };
+
   // Check lineup first (most tightly scoped to the match)
   const lineupCandidates = searchInPool(scope?.lineupPlayers);
-  if (lineupCandidates.length === 1) {
-    const candidate = lineupCandidates[0];
+  const uniqueLineup = getUniquePersons(lineupCandidates);
+
+  if (uniqueLineup.size === 1) {
+    const candidate = Array.from(uniqueLineup.values())[0];
     const fid = extractNumericFiksId(candidate.fiksId) || extractNumericFiksId(candidate.id);
     return {
       canonicalId: fid ? `fiks-${fid}` : toCanonicalPlayerId(candidate.id, candidate.name),
@@ -179,35 +193,47 @@ export function resolvePlayerIdentity(
       method: 'scopedNameMatch',
       confidence: fid ? 'verified' : 'verified',
       isAmbiguous: false,
+      unresolved: false,
       candidateCount: 1,
     };
-  } else if (lineupCandidates.length > 1) {
-    // Ambiguity Guardrail: Multiple players in the same lineup share the name -> DO NOT GUESS
+  } else if (uniqueLineup.size > 1) {
+    // Ambiguity Guardrail: Multiple distinct persons in the same lineup share the name -> DO NOT GUESS
     return {
       displayName,
+      ambiguousName: displayName,
+      canonicalId: undefined,
+      fiksId: undefined,
       method: 'unresolved',
       confidence: 'ambiguous',
       isAmbiguous: true,
-      candidateCount: lineupCandidates.length,
+      unresolved: true,
+      candidateCount: uniqueLineup.size,
+      candidateFiksIds: Array.from(uniqueLineup.values())
+        .map((p) => extractNumericFiksId(p.fiksId || p.id))
+        .filter((id): id is number => id !== undefined),
     };
   }
 
   // If this event belongs to an opponent team, do NOT search Bones club squad/players
   if (!isBonesTeam) {
     return {
-      canonicalId: toCanonicalPlayerId(undefined, displayName),
+      canonicalId: undefined,
+      fiksId: undefined,
       displayName,
       method: 'unresolved',
       confidence: 'unresolved',
       isAmbiguous: false,
+      unresolved: true,
       candidateCount: 0,
     };
   }
 
   // Check squad second
   const squadCandidates = searchInPool(scope?.squadPlayers);
-  if (squadCandidates.length === 1) {
-    const candidate = squadCandidates[0];
+  const uniqueSquad = getUniquePersons(squadCandidates);
+
+  if (uniqueSquad.size === 1) {
+    const candidate = Array.from(uniqueSquad.values())[0];
     const fid = extractNumericFiksId(candidate.fiksId) || extractNumericFiksId(candidate.id);
     return {
       canonicalId: fid ? `fiks-${fid}` : toCanonicalPlayerId(candidate.id, candidate.name),
@@ -216,29 +242,30 @@ export function resolvePlayerIdentity(
       method: 'scopedNameMatch',
       confidence: fid ? 'verified' : 'verified',
       isAmbiguous: false,
+      unresolved: false,
       candidateCount: 1,
     };
-  } else if (squadCandidates.length > 1) {
-    // Ambiguity Guardrail: Multiple players in the squad share the name -> DO NOT GUESS
+  } else if (uniqueSquad.size > 1) {
+    // Ambiguity Guardrail: Multiple distinct persons in the squad share the name -> DO NOT GUESS
     return {
       displayName,
+      ambiguousName: displayName,
+      canonicalId: undefined,
+      fiksId: undefined,
       method: 'unresolved',
       confidence: 'ambiguous',
       isAmbiguous: true,
-      candidateCount: squadCandidates.length,
+      unresolved: true,
+      candidateCount: uniqueSquad.size,
+      candidateFiksIds: Array.from(uniqueSquad.values())
+        .map((p) => extractNumericFiksId(p.fiksId || p.id))
+        .filter((id): id is number => id !== undefined),
     };
   }
 
   // Check club-wide pool if provided
   const clubCandidates = searchInPool(scope?.allClubPlayers);
-  // Group club candidates by unique person (same fiksId means same person)
-  const uniqueClubPersons = new Map<string, Player>();
-  for (const c of clubCandidates) {
-    const cid = toCanonicalPlayerId(c.fiksId || c.id, c.name);
-    if (!uniqueClubPersons.has(cid)) {
-      uniqueClubPersons.set(cid, c);
-    }
-  }
+  const uniqueClubPersons = getUniquePersons(clubCandidates);
 
   if (uniqueClubPersons.size === 1) {
     const candidate = Array.from(uniqueClubPersons.values())[0];
@@ -250,26 +277,36 @@ export function resolvePlayerIdentity(
       method: 'scopedNameMatch',
       confidence: fid ? 'verified' : 'verified',
       isAmbiguous: false,
+      unresolved: false,
       candidateCount: 1,
     };
   } else if (uniqueClubPersons.size > 1) {
-    // Ambiguity Guardrail: Multiple DIFFERENT persons in the club share the name
+    // Ambiguity Guardrail: Multiple DIFFERENT persons in the club share the name -> DO NOT GUESS
     return {
       displayName,
+      ambiguousName: displayName,
+      canonicalId: undefined,
+      fiksId: undefined,
       method: 'unresolved',
       confidence: 'ambiguous',
       isAmbiguous: true,
+      unresolved: true,
       candidateCount: uniqueClubPersons.size,
+      candidateFiksIds: Array.from(uniqueClubPersons.values())
+        .map((p) => extractNumericFiksId(p.fiksId || p.id))
+        .filter((id): id is number => id !== undefined),
     };
   }
 
   // Fallback: unresolved
   return {
-    canonicalId: toCanonicalPlayerId(undefined, displayName),
+    canonicalId: undefined,
+    fiksId: undefined,
     displayName,
     method: 'unresolved',
     confidence: 'unresolved',
     isAmbiguous: false,
+    unresolved: true,
     candidateCount: 0,
   };
 }
@@ -309,10 +346,11 @@ export function enrichMatchEventWithIdentity(
     };
   }
 
-  // If already authoritative with canonical fiksId, return as is
+  // If already authoritative with canonical fiksId, enforce invariant event.playerId === `fiks-${event.fiksId}`
   if (event.fiksId && event.playerId && event.playerId.startsWith('fiks-')) {
     return {
       ...event,
+      playerId: `fiks-${event.fiksId}`,
       resolutionMethod: event.resolutionMethod || 'fiksId',
       resolutionConfidence: event.resolutionConfidence || 'authoritative',
       ambiguous: false,
@@ -330,7 +368,7 @@ export function enrichMatchEventWithIdentity(
   );
 
   let assistRes: IdentityResolutionResult | undefined = undefined;
-  if (event.assistPlayer) {
+  if (event.assistPlayer || event.assistFiksId || event.assistPlayerId) {
     assistRes = resolvePlayerIdentity(
       {
         fiksId: event.assistFiksId,
@@ -341,16 +379,30 @@ export function enrichMatchEventWithIdentity(
     );
   }
 
+  const isAmbiguous = res.isAmbiguous;
+  const isUnresolved = res.confidence === 'unresolved' || isAmbiguous;
+  const resolvedFiksId = isAmbiguous ? undefined : (res.fiksId || extractNumericFiksId(event.fiksId));
+  const resolvedPlayerId = isAmbiguous
+    ? undefined
+    : (resolvedFiksId ? `fiks-${resolvedFiksId}` : (res.canonicalId || (event.playerId?.startsWith('fiks-') ? event.playerId : undefined)));
+
+  const assistFiksId = assistRes
+    ? (assistRes.isAmbiguous ? undefined : (assistRes.fiksId || extractNumericFiksId(event.assistFiksId)))
+    : extractNumericFiksId(event.assistFiksId);
+  const assistPlayerId = assistRes
+    ? (assistRes.isAmbiguous ? undefined : (assistFiksId ? `fiks-${assistFiksId}` : assistRes.canonicalId))
+    : (assistFiksId ? `fiks-${assistFiksId}` : event.assistPlayerId);
+
   return {
     ...event,
-    playerId: res.isAmbiguous ? undefined : (res.canonicalId || event.playerId),
-    fiksId: res.isAmbiguous ? undefined : (res.fiksId || event.fiksId),
-    ambiguous: res.isAmbiguous,
-    unresolved: res.confidence === 'unresolved',
+    playerId: resolvedPlayerId,
+    fiksId: resolvedFiksId,
+    ambiguous: isAmbiguous,
+    unresolved: isUnresolved,
     resolutionMethod: res.method,
     resolutionConfidence: res.confidence,
-    assistPlayerId: assistRes ? (assistRes.isAmbiguous ? undefined : assistRes.canonicalId) : event.assistPlayerId,
-    assistFiksId: assistRes ? (assistRes.isAmbiguous ? undefined : assistRes.fiksId) : event.assistFiksId,
+    assistPlayerId: assistPlayerId,
+    assistFiksId: assistFiksId,
     assistAmbiguous: assistRes ? assistRes.isAmbiguous : false,
   };
 }
@@ -378,6 +430,26 @@ export interface PlayerIdentityDiagnostics {
     name: string;
     legacyId: string;
     matchedFiksId: number;
+  }>;
+  inconsistentIds: Array<{
+    playerId: string;
+    expectedCanonicalId: string;
+    fiksId?: number;
+    name: string;
+  }>;
+  eventsWithoutIdentity: Array<{
+    eventId: string;
+    matchId: string;
+    minute: number;
+    type: string;
+    player?: string;
+  }>;
+  officialNffDiscrepancies: Array<{
+    fiksId: number;
+    name: string;
+    officialNffGoals: number;
+    internalEventGoals: number;
+    difference: number;
   }>;
   eventsDiagnostics: {
     totalEvents: number;
@@ -410,12 +482,23 @@ export function runPlayerIdentityDiagnostics(
   const fiksToPlayers = new Map<number, Player[]>();
   const nameToFiks = new Map<string, Set<number>>();
   const legacyPlayers: Player[] = [];
+  const inconsistentIds: Array<{ playerId: string; expectedCanonicalId: string; fiksId?: number; name: string }> = [];
 
   for (const p of playerList) {
     const fid = extractNumericFiksId(p.fiksId) || extractNumericFiksId(p.id);
     if (fid) {
       if (!fiksToPlayers.has(fid)) fiksToPlayers.set(fid, []);
       fiksToPlayers.get(fid)!.push(p);
+
+      // Check invariant: player.id === `fiks-${fid}`
+      if (p.id !== `fiks-${fid}`) {
+        inconsistentIds.push({
+          playerId: p.id,
+          expectedCanonicalId: `fiks-${fid}`,
+          fiksId: fid,
+          name: p.name,
+        });
+      }
     } else {
       legacyPlayers.push(p);
     }
@@ -475,10 +558,17 @@ export function runPlayerIdentityDiagnostics(
     }
   }
 
-  // 4. Events diagnostic
+  // 4. Events diagnostic & events without identity
   let authoritativeEvents = 0;
   let unresolvedEvents = 0;
   let ambiguousEvents = 0;
+  const eventsWithoutIdentity: Array<{
+    eventId: string;
+    matchId: string;
+    minute: number;
+    type: string;
+    player?: string;
+  }> = [];
 
   for (const ev of eventList) {
     if (ev.ambiguous) {
@@ -487,6 +577,53 @@ export function runPlayerIdentityDiagnostics(
       authoritativeEvents++;
     } else {
       unresolvedEvents++;
+      if (ev.type === 'goal' || ev.type === 'yellow_card' || ev.type === 'red_card') {
+        eventsWithoutIdentity.push({
+          eventId: ev.id,
+          matchId: ev.matchId,
+          minute: ev.minute,
+          type: ev.type,
+          player: ev.player,
+        });
+      }
+    }
+  }
+
+  // 5. Official NFF discrepancies (comparing derived event goals with official NFF stats)
+  const officialNffDiscrepancies: Array<{
+    fiksId: number;
+    name: string;
+    officialNffGoals: number;
+    internalEventGoals: number;
+    difference: number;
+  }> = [];
+
+  if (officialStats && Object.keys(officialStats).length > 0) {
+    // Count internal event goals per fiksId
+    const eventGoalsByFiks = new Map<number, number>();
+    for (const ev of eventList) {
+      if (ev.type === 'goal' && !ev.ambiguous) {
+        const fid = ev.fiksId || extractNumericFiksId(ev.playerId);
+        if (fid) {
+          eventGoalsByFiks.set(fid, (eventGoalsByFiks.get(fid) || 0) + 1);
+        }
+      }
+    }
+
+    for (const [fidStr, stat] of Object.entries(officialStats)) {
+      const fid = parseInt(fidStr, 10);
+      if (isNaN(fid)) continue;
+      const offGoals = stat.season2026?.totalGoals ?? stat.career?.totalGoals ?? 0;
+      const intGoals = eventGoalsByFiks.get(fid) || 0;
+      if (offGoals !== intGoals && (offGoals > 0 || intGoals > 0)) {
+        officialNffDiscrepancies.push({
+          fiksId: fid,
+          name: stat.name || `Spiller #${fid}`,
+          officialNffGoals: offGoals,
+          internalEventGoals: intGoals,
+          difference: intGoals - offGoals,
+        });
+      }
     }
   }
 
@@ -497,6 +634,9 @@ export function runPlayerIdentityDiagnostics(
     conflictingNamesForSameFiks,
     sameNameWithDifferentFiks,
     legacyPlayersEligibleForUpgrade,
+    inconsistentIds,
+    eventsWithoutIdentity,
+    officialNffDiscrepancies,
     eventsDiagnostics: {
       totalEvents: eventList.length,
       authoritativeEvents,

@@ -1,17 +1,20 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Users, Search, RefreshCw, ChevronRight, ExternalLink, CheckCircle2 } from 'lucide-react';
 import { ALL_BONES_SQUADS, TeamSquad } from '../data/bonesSquads.js';
-import { Player, PlayerPosition, TeamInfo } from '../types.js';
+import { Player, PlayerPosition, TeamInfo, Match } from '../types.js';
 import { getOfficialStatsForPlayer } from '../services/playerStatsApi.js';
+import { enrichPlayersWithMostPlayedPosition } from '../utils/positionEngine.js';
 
 interface SquadRosterTabProps {
   teams: TeamInfo[];
+  matches?: Match[];
   selectedTeamId: string;
   onSelectTeamId: (teamId: string) => void;
   onSelectPlayer: (playerName: string, teamIdHint?: string) => void;
 }
 
 export const SquadRosterTab: React.FC<SquadRosterTabProps> = ({
+  matches,
   selectedTeamId,
   onSelectTeamId,
   onSelectPlayer,
@@ -65,19 +68,28 @@ export const SquadRosterTab: React.FC<SquadRosterTabProps> = ({
     }
   };
 
+  // Enrich all squads with dynamically calculated most-played positions across real match lineups
+  const effectiveSquads = useMemo(() => {
+    if (!matches || matches.length === 0) return squads;
+    return squads.map((sq) => ({
+      ...sq,
+      players: enrichPlayersWithMostPlayedPosition(sq.players, matches),
+    }));
+  }, [squads, matches]);
+
   // Currently active squad (defaults to menn-1 if not found)
   const currentSquad = useMemo(() => {
     return (
-      squads.find((s) => s.teamId === selectedTeamId) ||
-      squads.find((s) => s.teamId === 'menn-1') ||
-      squads[0]
+      effectiveSquads.find((s) => s.teamId === selectedTeamId) ||
+      effectiveSquads.find((s) => s.teamId === 'menn-1') ||
+      effectiveSquads[0]
     );
-  }, [squads, selectedTeamId]);
+  }, [effectiveSquads, selectedTeamId]);
 
   // Total player count across all 16 real teams
   const totalClubPlayers = useMemo(() => {
-    return squads.reduce((acc, s) => acc + s.players.length, 0);
-  }, [squads]);
+    return effectiveSquads.reduce((acc, s) => acc + s.players.length, 0);
+  }, [effectiveSquads]);
 
   // Filtered players (by squad, position, and search query)
   const filteredPlayers = useMemo(() => {
@@ -86,7 +98,7 @@ export const SquadRosterTab: React.FC<SquadRosterTabProps> = ({
     if (searchQuery.trim().length > 1) {
       // Search across ALL 16 squads if user is searching
       const q = searchQuery.toLowerCase();
-      list = squads.flatMap((squad) =>
+      list = effectiveSquads.flatMap((squad) =>
         squad.players
           .filter((p) => p.name.toLowerCase().includes(q) || squad.teamName.toLowerCase().includes(q))
           .map((p) => ({ ...p, squadName: squad.shortName }))
@@ -101,7 +113,7 @@ export const SquadRosterTab: React.FC<SquadRosterTabProps> = ({
     }
 
     return list;
-  }, [squads, currentSquad, searchQuery, selectedPosition]);
+  }, [effectiveSquads, currentSquad, searchQuery, selectedPosition]);
 
   // Group by position
   const groupedPlayers = useMemo(() => {
@@ -386,7 +398,12 @@ export const SquadRosterTab: React.FC<SquadRosterTabProps> = ({
                             })()}
                           </div>
                           <div className="flex items-center space-x-2 text-xs text-slate-500 mt-0.5">
-                            <span>{player.position}</span>
+                            <span className="font-semibold text-slate-800">{player.position}</span>
+                            {player.positionSource === 'NFF' && (
+                              <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 py-0.2 rounded font-medium">
+                                Mest spilt
+                              </span>
+                            )}
                             {player.squadName && (
                               <>
                                 <span>•</span>

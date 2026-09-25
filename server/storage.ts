@@ -9,7 +9,9 @@ import {
   generateDeterministicEventId,
   getPlayerIdentity,
   sanitizeSlug,
+  isOwnGoalEvent
 } from '../src/utils/derivedStats.js';
+import { calculateMatchPOTM } from '../src/utils/potmCalculator.js';
 import {
   enrichMatchEventWithIdentity,
   toCanonicalPlayerId,
@@ -139,12 +141,13 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
         legacyMap: legacyMap,
       });
 
-      const effectivePlayerId = enriched.playerId || toCanonicalPlayerId(undefined, enriched.player);
+      const effectivePlayerId = enriched.ambiguous ? undefined : enriched.playerId;
+      const eventKeyPlayer = enriched.ambiguous ? `ambiguous_${sanitizeSlug(enriched.player || 'player')}_${idx}` : (effectivePlayerId || `unresolved_${idx}`);
       const deterministicId = generateDeterministicEventId(
         match.id,
         enriched.minute,
         enriched.type,
-        effectivePlayerId,
+        eventKeyPlayer,
         enriched.team || match.teamName
       );
 
@@ -153,6 +156,7 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
         id: deterministicId,
         matchId: match.id,
         playerId: effectivePlayerId,
+        fiksId: enriched.ambiguous ? undefined : enriched.fiksId,
       };
 
       eventMap.set(deterministicId, normalizedEvent);
@@ -261,6 +265,25 @@ export function loadPersistedData(): BonesClubData {
             console.warn('[Storage] Could not merge real_match_events.json:', e);
           }
         }
+
+        // Authoritatively synchronize match scores with goal events (including own goals)
+        for (const m of parsed.matches) {
+          if (m.events && m.events.length > 0 && m.events.some(e => e.type === 'goal')) {
+            const derived = calculateMatchScore(m.events, m.homeScore, m.awayScore, m.homeTeam, m.awayTeam);
+            m.homeScore = derived.homeScore;
+            m.awayScore = derived.awayScore;
+          }
+
+          const hasOwnGoal = (m.events || []).some(isOwnGoalEvent);
+          const potmWinnerScoredOG = m.playerOfTheMatch && (m.events || []).some(e =>
+            isOwnGoalEvent(e) && e.player && e.player.trim().toLowerCase() === m.playerOfTheMatch?.winnerName?.trim().toLowerCase()
+          );
+
+          if ((!m.playerOfTheMatch || hasOwnGoal || potmWinnerScoredOG) && (m.status === 'finished' || (m.status as string) === 'live')) {
+            m.playerOfTheMatch = calculateMatchPOTM(m);
+          }
+        }
+
         console.log(
           `[Storage] Persisted database loaded successfully from ${DB_FILE} (Version: ${parsed.dataVersion}, Matches: ${parsed.matches.length}).`
         );
@@ -442,6 +465,25 @@ export function upsertMatch(newMatch: Match, currentData: BonesClubData): Match 
       awayScore = derived.awayScore;
     }
 
+    const matchStatus: MatchStatus = newMatch.status || existing.status || 'finished';
+    const hasOwnGoal = (mergedEvents || []).some(isOwnGoalEvent);
+    const potmWinnerScoredOG = (newMatch.playerOfTheMatch || existing.playerOfTheMatch) && (mergedEvents || []).some(e =>
+      isOwnGoalEvent(e) && e.player && e.player.trim().toLowerCase() === (newMatch.playerOfTheMatch || existing.playerOfTheMatch)?.winnerName?.trim().toLowerCase()
+    );
+    let playerOfTheMatch = newMatch.playerOfTheMatch || existing.playerOfTheMatch;
+    if (!playerOfTheMatch || hasOwnGoal || potmWinnerScoredOG) {
+      if (matchStatus === 'finished' || matchStatus === 'live') {
+        playerOfTheMatch = calculateMatchPOTM({
+          ...existing,
+          ...newMatch,
+          events: mergedEvents,
+          homeScore,
+          awayScore,
+          status: matchStatus,
+        });
+      }
+    }
+
     const merged: Match = {
       ...existing,
       ...newMatch,
@@ -451,6 +493,7 @@ export function upsertMatch(newMatch: Match, currentData: BonesClubData): Match 
       lineup: newMatch.lineup || existing.lineup,
       homeLineup: newMatch.homeLineup || existing.homeLineup,
       awayLineup: newMatch.awayLineup || existing.awayLineup,
+      playerOfTheMatch,
       isOfficialFiks: newMatch.isOfficialFiks ?? existing.isOfficialFiks,
       lastUpdatedSource: newMatch.lastUpdatedSource || existing.lastUpdatedSource,
       lastUpdatedAt: newMatch.lastUpdatedAt || existing.lastUpdatedAt,

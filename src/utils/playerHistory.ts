@@ -1,6 +1,12 @@
 import { BonesClubData, PlayerProfile, PlayerMatchLog, PlayerSeasonStats, TopScorer, CardStatistic, TeamInfo } from '../types.js';
 import { ALL_BONES_PLAYERS } from '../data/bonesSquads.js';
 import { getOfficialStatsForPlayer } from '../services/playerStatsApi.js';
+import { calculatePlayerPerformanceRating } from './playerRatingEngine.js';
+import {
+  calculatePlayerPositionStats,
+  getPlayerPositionInMatch,
+  normalizePosition,
+} from './positionEngine.js';
 import {
   extractNumericFiksId,
   toCanonicalPlayerId,
@@ -102,7 +108,19 @@ export function buildPlayerProfile(
   };
 
   const jerseyNumber = squadPlayer?.jerseyNumber || squadPlayer?.number || 0;
-  const position = squadPlayer?.position || 'Ukjent';
+  const initialPosition = squadPlayer?.position || 'Ukjent';
+
+  // Calculate dynamic position statistics from all match lineups/events.
+  // The player's active position in tropp & spillerkort is determined by what they play MOST.
+  // E.g., 10 matches: 1 keeper, 2 midtbane, 7 angrep -> 'Angrep'
+  const positionStats = calculatePlayerPositionStats(
+    playerName,
+    fiksId,
+    data.matches || [],
+    initialPosition
+  );
+
+  const position = positionStats.mostPlayedPosition || initialPosition;
 
   const isGoalkeeper = position.toLowerCase().includes('keeper') || position.toLowerCase().includes('målvakt');
   const isDefender = position.toLowerCase().includes('forsvar') || position.toLowerCase().includes('stopper') || position.toLowerCase().includes('back');
@@ -179,7 +197,10 @@ export function buildPlayerProfile(
     const playerEvents = (m.events || []).filter((e) => {
       if (e.ambiguous) return false;
       if (fiksId && (e.fiksId === fiksId || e.playerId === `fiks-${fiksId}`)) return true;
-      if (e.playerId && e.playerId === `fiks-${targetFiksId}`) return true;
+      if (targetFiksId && e.playerId === `fiks-${targetFiksId}`) return true;
+      // Rule 4: Name matching shall NEVER win over explicit FIKS identity
+      if (e.fiksId && fiksId && e.fiksId !== fiksId) return false;
+      if (fiksId && e.playerId && e.playerId.startsWith('fiks-') && e.playerId !== `fiks-${fiksId}`) return false;
       return e.player && e.player.trim().toLowerCase() === normalizedTargetName;
     });
 
@@ -191,15 +212,23 @@ export function buildPlayerProfile(
     const hasYellow = realYellow;
     const hasRed = realRed;
 
-    // Performance rating based on actual outcome and events
-    let rating = 7.0;
-    if (result === 'W') rating += 0.8;
-    if (result === 'L') rating -= 0.6;
-    if (goalsInMatch > 0) rating += goalsInMatch * 0.9;
-    if (oppScore === 0 && (isGoalkeeper || isDefender)) rating += 1.0;
-    if (hasYellow) rating -= 0.5;
-    if (hasRed) rating -= 2.0;
-    rating = Math.max(5.5, Math.min(9.8, parseFloat(rating.toFixed(1))));
+    const matchPosition = getPlayerPositionInMatch(playerName, fiksId, m, position);
+
+    // Performance rating based on Game-State & Momentum-aware engine
+    const perf = calculatePlayerPerformanceRating(
+      {
+        playerName: playerName,
+        team: m.teamName || primaryTeam.name,
+        position: matchPosition,
+        isStarter,
+        goals: goalsInMatch,
+        yellowCards: hasYellow ? 1 : 0,
+        redCards: hasRed ? 1 : 0,
+      },
+      m
+    );
+
+    const rating = perf.rating;
 
     // Highlight text with minute info if available from real NFF events
     let highlight = '';
@@ -208,6 +237,7 @@ export function buildPlayerProfile(
     else if (goalsInMatch >= 3) highlight = `⚽ Hat-trick (${goalMins.join(', ')})!`;
     else if (goalsInMatch === 2) highlight = `⚽ To mål (${goalMins.join(', ')}) i kampen`;
     else if (goalsInMatch === 1) highlight = `⚽ Mål (${goalMins[0] || 'scoring'}) for Bønes`;
+    else if (perf.tags && perf.tags.length > 0) highlight = perf.tags[0];
     else if (isGoalkeeper && oppScore === 0) highlight = '🧤 Holdt nullen / Clean sheet!';
     else if (isDefender && oppScore === 0) highlight = '🛡️ Solid forsvarsspill / Null baklengs';
     else if (hasYellow) highlight = '🟨 Gult kort / Advarsel';
@@ -233,6 +263,7 @@ export function buildPlayerProfile(
       teamName: m.teamName || primaryTeam.name,
       division: m.division || primaryTeam.division,
       role,
+      position: matchPosition,
     });
   }
 
@@ -445,6 +476,8 @@ export function buildPlayerProfile(
     category: primaryTeam.category,
     jerseyNumber: jerseyNumber || undefined,
     position: position,
+    mostPlayedPosition: positionStats.mostPlayedPosition,
+    positionStats: positionStats,
     isBonesPlayer: true,
     teamsPlayedFor: finalTeamsPlayedFor,
     spring: springStats,

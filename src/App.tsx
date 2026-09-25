@@ -10,8 +10,6 @@ import { CardsView } from './components/CardsView.js';
 import { LiveFeedView } from './components/LiveFeedView.js';
 import { LivescoreDashboard } from './components/LivescoreDashboard.js';
 import { NffHubView } from './components/NffHubView.js';
-import { ScannerStatusDrawer } from './components/ScannerStatusDrawer.js';
-import { AiAnalysisModal } from './components/AiAnalysisModal.js';
 import { PlayerHistoryModal } from './components/PlayerHistoryModal.js';
 import { LineupModal } from './components/LineupModal.js';
 import { SquadRosterTab } from './components/SquadRosterTab.js';
@@ -23,9 +21,12 @@ import { OfflineBanner } from './components/OfflineBanner.js';
 import { buildPlayerProfile } from './utils/playerHistory.js';
 import { calculateTopScorersFromSeasonLog, calculateCardsFromSeasonLog } from './utils/playerStatsCalculator.js';
 import { getClubData } from './data/bonesData.js';
+import { ALL_BONES_PLAYERS } from './data/bonesSquads.js';
+import { calculateClubRatingLeaderboards } from './utils/playerRatingEngine.js';
 import { MatchdayHeroBanner } from './components/MatchdayHeroBanner.js';
 import { PlayerOfTheMatchModal } from './components/PlayerOfTheMatchModal.js';
 import { LaglederModal } from './components/LaglederModal.js';
+import { PlayerRatingsModal } from './components/PlayerRatingsModal.js';
 import {
   Calendar,
   Trophy,
@@ -51,7 +52,10 @@ import {
   X,
   Check,
   Filter,
-  Palette
+  Palette,
+  Star,
+  Zap,
+  Skull
 } from 'lucide-react';
 
 
@@ -76,8 +80,6 @@ export default function App() {
   const [selectedTeamId, setSelectedTeamId] = useState<string>('all');
   const [showFullTeamSelector, setShowFullTeamSelector] = useState(false);
   const [activeTab, setActiveTab] = useState<'livescore' | 'feed' | 'matches' | 'tables' | 'playerstats' | 'scorers' | 'cards' | 'squads' | 'nff'>('livescore');
-  const [isScannerDrawerOpen, setIsScannerDrawerOpen] = useState(false);
-  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
   const [isRealScraping, setIsRealScraping] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -122,6 +124,15 @@ export default function App() {
   // Player of the match modal state
   const [potmModalMatch, setPotmModalMatch] = useState<Match | null>(null);
   const [isPotmModalOpen, setIsPotmModalOpen] = useState(false);
+
+  // Player Ratings Leaderboards Modal state (Beste spiller, Formspiller & Bønes-mareritt)
+  const [isRatingsModalOpen, setIsRatingsModalOpen] = useState<boolean>(false);
+  const [ratingsModalTab, setRatingsModalTab] = useState<'season' | 'form' | 'nightmare'>('season');
+
+  const handleOpenRatingsModal = (tab: 'season' | 'form' | 'nightmare' = 'season') => {
+    setRatingsModalTab(tab);
+    setIsRatingsModalOpen(true);
+  };
 
   // Lagleder live reporter modal state
   const [isLaglederModalOpen, setIsLaglederModalOpen] = useState(false);
@@ -364,6 +375,14 @@ export default function App() {
   const mostCarded = derivedCards[0] || data.cards[0];
   const upcomingHomeCount = data.matches.filter(m => m.isHome && m.status !== 'finished').length;
 
+  // Algorithmic ratings leaderboards for season best and recent form
+  const ratingLeaderboards = useMemo(() => {
+    return calculateClubRatingLeaderboards(data.matches, ALL_BONES_PLAYERS);
+  }, [data.matches]);
+
+  const bestSeasonPlayer = ratingLeaderboards.bestPlayer;
+  const bestFormPlayer = ratingLeaderboards.formPlayer;
+
   return (
     <div className="min-h-screen flex flex-col font-sans bg-[#f4f5f8] text-slate-900 selection:bg-[#165094] selection:text-white theme-matchday">
       
@@ -377,11 +396,8 @@ export default function App() {
 
       {/* Navigation Bar */}
       <Navbar
-        scanner={data.scanner}
         onSyncNff={handleRealScrape}
         isSyncing={isRealScraping || isScanning}
-        onOpenAiModal={() => setIsAiModalOpen(true)}
-        onOpenScannerDrawer={() => setIsScannerDrawerOpen(true)}
         onOpenNotifications={() => {
           setIsNotificationModalOpen(true);
           markAllAsRead();
@@ -432,26 +448,10 @@ export default function App() {
                   <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
                     Bønes IL
                   </h1>
-                  {/* Bønes IL Club Colors Sub-badge */}
-                  <span
-                    className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200"
-                    title="Bønes IL offisielle klubbfarger"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-[#165094]"></span>
-                    <span className="w-2 h-2 rounded-full bg-[#dc2626]"></span>
-                    <span className="font-semibold text-slate-600">Blå & Rød</span>
-                  </span>
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-[#165094] border border-blue-200">
-                    16 lag
-                  </span>
-                  {liveMatch ? (
+                  {liveMatch && (
                     <span className="flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 animate-pulse">
                       <span className="w-1.5 h-1.5 rounded-full bg-red-600"></span>
                       <span>LIVE KAMPER</span>
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                      NFF Hordaland
                     </span>
                   )}
                 </div>
@@ -472,17 +472,8 @@ export default function App() {
               </div>
             </div>
 
-            {/* FotMob Header Action Chips */}
+            {/* Header Action Chips */}
             <div className="flex items-center flex-wrap gap-2 shrink-0 self-start sm:self-center">
-              <div
-                id="badge-matchday-design"
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-900 to-[#165094] text-white text-xs font-bold shadow-2xs border border-blue-800"
-                title="Design: Matchday Fjellsdalen"
-              >
-                <Flame className="w-3.5 h-3.5 text-amber-400" />
-                <span>Matchday Fjellsdalen</span>
-              </div>
-
               <button
                 id="btn-fotmob-notifications"
                 onClick={() => {
@@ -500,16 +491,6 @@ export default function App() {
                     {unreadCount}
                   </span>
                 )}
-              </button>
-
-              <button
-                id="btn-fotmob-ai-rapport"
-                onClick={() => setIsAiModalOpen(true)}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition-colors cursor-pointer border border-slate-200"
-                title="Åpne AI Kampsenter Analyse"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>AI-analyse</span>
               </button>
 
               <button
@@ -531,51 +512,111 @@ export default function App() {
 
           {/* FotMob Subtle Stats Strip */}
           <div className="mt-4 pt-3.5 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            {/* 1. Beste Spiller (Sesongens gjennomsnittsrating) */}
             <div
-              onClick={() => setActiveTab('livescore')}
-              className="p-2.5 rounded-xl bg-slate-50/90 hover:bg-blue-50/60 cursor-pointer transition-colors border border-slate-100"
+              id="stat-card-best-player"
+              onClick={() => handleOpenRatingsModal('season')}
+              className="p-2.5 rounded-xl bg-slate-50/90 hover:bg-amber-50/70 cursor-pointer transition-colors border border-slate-100 hover:border-amber-200 group"
+              title="Klikk for å åpne den fullstendige sesongbørsen"
             >
-              <span className="text-[11px] text-slate-500 font-medium">Kommende kamper</span>
-              <div className="text-sm font-black text-slate-900 flex items-center space-x-1.5 mt-0.5">
-                <Home className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>{upcomingHomeCount} hjemmekamper</span>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
+                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-400 shrink-0" />
+                  <span>Beste spiller</span>
+                </span>
+                {bestSeasonPlayer && (
+                  <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 font-mono">
+                    ★ {(bestSeasonPlayer.seasonAvgRating ?? 0).toFixed(2)}
+                  </span>
+                )}
+              </div>
+              <div className="text-sm font-black text-slate-900 flex items-center space-x-1.5 mt-0.5 truncate">
+                <span className="truncate group-hover:text-amber-800 transition-colors">
+                  {bestSeasonPlayer ? bestSeasonPlayer.name : 'Ingen data'}
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-500 truncate mt-0.5 flex items-center justify-between">
+                <div className="flex items-center space-x-1 truncate">
+                  <span className="font-semibold text-slate-700">{bestSeasonPlayer ? bestSeasonPlayer.position : ''}</span>
+                  {bestSeasonPlayer && <span>•</span>}
+                  <span>{bestSeasonPlayer ? `${bestSeasonPlayer.matches} kamper` : 'Sesongsnitt'}</span>
+                </div>
+                <span className="text-[9px] font-bold text-amber-700 group-hover:underline ml-1 shrink-0">
+                  Se liste →
+                </span>
               </div>
             </div>
 
+            {/* 2. Toppscorer */}
             <div
               onClick={() => setActiveTab('scorers')}
               className="p-2.5 rounded-xl bg-slate-50/90 hover:bg-amber-50/60 cursor-pointer transition-colors border border-slate-100"
             >
-              <span className="text-[11px] text-slate-500 font-medium">Toppscorer</span>
-              <div className="text-sm font-black text-slate-900 flex items-center space-x-1.5 mt-0.5 truncate">
+              <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
                 <Flame className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <span>Toppscorer</span>
+              </span>
+              <div className="text-sm font-black text-slate-900 flex items-center space-x-1.5 mt-0.5 truncate">
                 <span className="truncate">
-                  {clubTopScorer ? `${clubTopScorer.name} (${clubTopScorer.goals} mål)` : 'Ingen'}
+                  {clubTopScorer ? `${clubTopScorer.name}` : 'Ingen'}
                 </span>
+              </div>
+              <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                {clubTopScorer ? `${clubTopScorer.goals} mål i serien` : '0 mål'}
               </div>
             </div>
 
+            {/* 3. Kortregister */}
             <div
               onClick={() => setActiveTab('cards')}
               className="p-2.5 rounded-xl bg-slate-50/90 hover:bg-yellow-50/60 cursor-pointer transition-colors border border-slate-100"
             >
-              <span className="text-[11px] text-slate-500 font-medium">Kortregister</span>
-              <div className="text-sm font-black text-slate-900 flex items-center space-x-1.5 mt-0.5 truncate">
+              <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
                 <Scale className="w-3.5 h-3.5 text-yellow-600 shrink-0" />
+                <span>Kortregister</span>
+              </span>
+              <div className="text-sm font-black text-slate-900 flex items-center space-x-1.5 mt-0.5 truncate">
                 <span className="truncate">
-                  {mostCarded ? `${mostCarded.name} (${mostCarded.yellowCards}🟨)` : 'Ingen'}
+                  {mostCarded ? `${mostCarded.name}` : 'Ingen'}
                 </span>
+              </div>
+              <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                {mostCarded ? `${mostCarded.yellowCards} gule kort` : 'Ingen kort'}
               </div>
             </div>
 
+            {/* 4. Formspiller (Siste 3 matcher gjennomsnittsrating) */}
             <div
-              onClick={() => setActiveTab('tables')}
-              className="p-2.5 rounded-xl bg-slate-50/90 hover:bg-indigo-50/60 cursor-pointer transition-colors border border-slate-100"
+              id="stat-card-form-player"
+              onClick={() => handleOpenRatingsModal('form')}
+              className="p-2.5 rounded-xl bg-slate-50/90 hover:bg-orange-50/70 cursor-pointer transition-colors border border-slate-100 hover:border-orange-200 group"
+              title="Klikk for å åpne det fullstendige formbarometeret"
             >
-              <span className="text-[11px] text-slate-500 font-medium">Serier i NFF</span>
-              <div className="text-sm font-black text-slate-900 flex items-center space-x-1.5 mt-0.5">
-                <Trophy className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                <span>{Object.keys(data.tables).length} tabeller</span>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
+                  <Zap className="w-3.5 h-3.5 text-orange-500 fill-orange-400 shrink-0" />
+                  <span>Formspiller</span>
+                </span>
+                {bestFormPlayer && (
+                  <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-orange-100 text-orange-950 border border-orange-300 font-mono">
+                    🔥 {(bestFormPlayer.last3AvgRating ?? 0).toFixed(2)}
+                  </span>
+                )}
+              </div>
+              <div className="text-sm font-black text-slate-900 flex items-center space-x-1.5 mt-0.5 truncate">
+                <span className="truncate group-hover:text-orange-800 transition-colors">
+                  {bestFormPlayer ? bestFormPlayer.name : 'Ingen data'}
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-500 truncate mt-0.5 flex items-center justify-between">
+                <div className="flex items-center space-x-1 truncate">
+                  <span className="font-semibold text-slate-700">{bestFormPlayer ? bestFormPlayer.position : ''}</span>
+                  {bestFormPlayer && <span>•</span>}
+                  <span>{bestFormPlayer ? `Siste ${Math.min(3, bestFormPlayer.matches)} matcher` : 'Siste 3'}</span>
+                </div>
+                <span className="text-[9px] font-bold text-orange-700 group-hover:underline ml-1 shrink-0">
+                  Se liste →
+                </span>
               </div>
             </div>
           </div>
@@ -809,6 +850,28 @@ export default function App() {
               </span>
             </button>
 
+            {/* Quick Access: Spillerbørs & Form Leaderboards */}
+            <button
+              id="main-tab-ratings"
+              onClick={() => handleOpenRatingsModal('season')}
+              className="flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer text-amber-800 bg-amber-50/90 hover:bg-amber-100 border border-amber-200/90 shadow-2xs"
+              title="Åpne rangeringslister for Beste Spiller og Formspiller (kun Bønes-spillere)"
+            >
+              <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+              <span>Børs & Form</span>
+            </button>
+
+            {/* Quick Access: Bønes-mareritt (Worst Opponents) */}
+            <button
+              id="main-tab-nightmares"
+              onClick={() => handleOpenRatingsModal('nightmare')}
+              className="flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer text-purple-900 bg-purple-50/90 hover:bg-purple-100 border border-purple-200 shadow-2xs"
+              title="Se topp-motstandere og måltyver som har herjet mot Bønes"
+            >
+              <Skull className="w-4 h-4 text-purple-600" />
+              <span>Bønes-mareritt</span>
+            </button>
+
             {/* Tab 7: Tropp */}
             <button
               id="main-tab-squads"
@@ -939,6 +1002,7 @@ export default function App() {
         {activeTab === 'squads' && (
           <SquadRosterTab
             teams={data.teams}
+            matches={data.matches}
             selectedTeamId={selectedTeamId === 'all' || selectedTeamId === 'herrer-a' ? 'menn-1' : selectedTeamId}
             onSelectTeamId={(id) => setSelectedTeamId(id)}
             onSelectPlayer={handleSelectPlayer}
@@ -994,30 +1058,10 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-4 text-[11px]">
-            <span className="flex items-center space-x-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-ping"></span>
-              <span>Sanntidsskanner operativ</span>
-            </span>
             <span>Kilder: fotball.no & NFF Hordaland</span>
           </div>
         </div>
       </footer>
-
-      {/* Scanner Status Drawer */}
-      <ScannerStatusDrawer
-        isOpen={isScannerDrawerOpen}
-        onClose={() => setIsScannerDrawerOpen(false)}
-        scanner={data.scanner}
-        onManualScan={handleManualScan}
-        isScanning={isScanning}
-        onToggleAutoScan={handleToggleAutoScan}
-      />
-
-      {/* AI Analysis Modal */}
-      <AiAnalysisModal
-        isOpen={isAiModalOpen}
-        onClose={() => setIsAiModalOpen(false)}
-      />
 
       {/* Player History Modal */}
       {activePlayerProfile && (
@@ -1110,6 +1154,19 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Player Ratings Leaderboards Modal (Beste spiller, Formspiller & Bønes-mareritt) */}
+      <PlayerRatingsModal
+        isOpen={isRatingsModalOpen}
+        onClose={() => setIsRatingsModalOpen(false)}
+        initialTab={ratingsModalTab}
+        matches={data.matches}
+        players={data.players && data.players.length > 0 ? data.players : ALL_BONES_PLAYERS}
+        teams={data.teams}
+        onSelectPlayer={(name, teamId) => {
+          handleSelectPlayer(name, teamId);
+        }}
+      />
 
     </div>
   );

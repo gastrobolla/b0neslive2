@@ -1,4 +1,7 @@
 import { Match, PlayerOfTheMatchData, PlayerOfTheMatchCandidate } from '../types.js';
+import { calculatePlayerPerformanceRating } from './playerRatingEngine.js';
+import { getPlayerPositionInMatch } from './positionEngine.js';
+import { isOwnGoalEvent } from './derivedStats.js';
 
 /**
  * Calculates or updates Banens Beste (Player of the Match) for a given match.
@@ -39,6 +42,7 @@ export function calculateMatchPOTM(
         position: pos || 'Spiller',
         jerseyNumber: num,
         goals: 0,
+        ownGoals: 0,
         assists: 0,
         yellowCards: 0,
         redCards: 0,
@@ -62,22 +66,43 @@ export function calculateMatchPOTM(
     const allLineupPlayers = [...(lineup.starters || []), ...(lineup.bench || []), ...(lineup.subs || [])];
     for (const p of allLineupPlayers) {
       if (!p.name) continue;
-      getOrCreateCandidate(p.name, team, p.position || 'Spiller', p.jerseyNumber || p.number);
+      const dynPos = getPlayerPositionInMatch(p.name, p.fiksId, match, p.position);
+      getOrCreateCandidate(p.name, team, dynPos, p.jerseyNumber || p.number);
     }
   }
 
-  // 2. Extract from events (mål, assist, kort)
+  // 2. Extract from events (mål, selvmål, assist, kort)
   if (match.events && match.events.length > 0) {
     for (const ev of match.events) {
       if (ev.player) {
-        const c = getOrCreateCandidate(ev.player, ev.team);
-        if (ev.type === 'goal') c.goals += 1;
+        const dynPos = getPlayerPositionInMatch(ev.player, undefined, match);
+        const c = getOrCreateCandidate(ev.player, ev.team, dynPos);
+        if (ev.type === 'goal') {
+          if (isOwnGoalEvent(ev)) {
+            c.ownGoals = (c.ownGoals || 0) + 1;
+          } else {
+            c.goals += 1;
+          }
+        }
         if (ev.type === 'yellow_card') c.yellowCards += 1;
         if (ev.type === 'red_card') c.redCards += 1;
       }
       if (ev.assistPlayer) {
-        const c = getOrCreateCandidate(ev.assistPlayer, ev.team);
+        const dynPos = getPlayerPositionInMatch(ev.assistPlayer, undefined, match);
+        const c = getOrCreateCandidate(ev.assistPlayer, ev.team, dynPos);
         c.assists += 1;
+      }
+    }
+
+    // Ensure candidate goals and own goals strictly match events
+    for (const c of candidateMap.values()) {
+      const pNorm = c.playerName.trim().toLowerCase();
+      const pEvents = match.events.filter(e => e.player && e.player.trim().toLowerCase() === pNorm);
+      if (pEvents.length > 0) {
+        const ogCount = pEvents.filter(isOwnGoalEvent).length;
+        const realGoalsCount = pEvents.filter(e => e.type === 'goal' && !isOwnGoalEvent(e)).length;
+        c.ownGoals = ogCount;
+        c.goals = realGoalsCount;
       }
     }
   }
@@ -100,57 +125,66 @@ export function calculateMatchPOTM(
   const homeWon = homeScore > awayScore;
   const awayWon = awayScore > homeScore;
 
-  // Calculate algorithm ratings
+  // Calculate algorithm ratings using Context-Aware Game-State Engine
   const candidates = Array.from(candidateMap.values());
   let totalVotes = 0;
 
   for (const c of candidates) {
     totalVotes += c.votes;
 
-    let base = 7.0;
-    // Deterministic slight variance based on name char codes so ratings aren't all identical
-    const hash = c.playerName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    base += ((hash % 7) - 3) * 0.1;
+    const perf = calculatePlayerPerformanceRating(
+      {
+        playerName: c.playerName,
+        team: c.team,
+        position: c.position,
+        jerseyNumber: c.jerseyNumber,
+        goals: c.goals,
+        ownGoals: c.ownGoals,
+        assists: c.assists,
+        yellowCards: c.yellowCards,
+        redCards: c.redCards,
+      },
+      match
+    );
 
-    // Performance additions
-    base += c.goals * 1.15;
-    base += c.assists * 0.75;
-    base -= c.yellowCards * 0.45;
-    base -= c.redCards * 1.5;
-
-    // Team outcome bonus
-    const isHome = c.team === match.homeTeam;
-    if ((isHome && homeWon) || (!isHome && awayWon)) {
-      base += 0.3;
-    }
-
-    // Clean sheet bonus for keeper/defenders if 0 goals conceded
-    const goalsConceded = isHome ? awayScore : homeScore;
-    if (goalsConceded === 0 && match.status !== 'upcoming') {
-      if (c.position?.toLowerCase().includes('keep') || c.position?.toLowerCase().includes('forsv')) {
-        base += 0.6;
-      }
-    }
-
-    // Clamp rating to 6.1 - 9.8
-    c.algoRating = Math.max(6.1, Math.min(9.8, parseFloat(base.toFixed(1))));
+    c.algoRating = perf.rating;
+    c.ratingBreakdown = perf.breakdown;
+    c.tags = perf.tags;
   }
 
-  // Incorporate public votes into combinedScore
-  // Formula: combinedScore = algoRating * 0.65 + (publicVoteRatio * 3.5)
+  // Incorporate public votes and apply disqualification rules for own goals
   for (const c of candidates) {
+    const hasOwnGoal = (c.ownGoals || 0) > 0;
+    if (hasOwnGoal) {
+      c.disqualified = true;
+      c.disqualificationReason = (c.ownGoals || 0) > 1 ? `${c.ownGoals} selvmål` : 'Selvmål';
+    }
+
     const voteRatio = totalVotes > 0 ? c.votes / totalVotes : 0;
     const voteBonus = voteRatio * 3.0; // Up to 3.0 points from unanimous public vote
-    c.combinedScore = parseFloat((c.algoRating * 0.7 + (7.0 + voteBonus) * 0.3).toFixed(2));
+
+    if (c.disqualified) {
+      // Disqualified players cannot be Player of the Match; penalty applied to combinedScore
+      c.combinedScore = parseFloat(Math.max(1.0, c.algoRating - 4.5).toFixed(2));
+    } else {
+      c.combinedScore = parseFloat((c.algoRating * 0.7 + (7.0 + voteBonus) * 0.3).toFixed(2));
+    }
   }
 
-  // Sort candidates by combinedScore descending
-  candidates.sort((a, b) => b.combinedScore - a.combinedScore || b.votes - a.votes || b.algoRating - a.algoRating);
+  // Sort candidates: eligible players first by combinedScore descending; disqualified players at the very bottom
+  candidates.sort((a, b) => {
+    if (a.disqualified && !b.disqualified) return 1;
+    if (!a.disqualified && b.disqualified) return -1;
+    return b.combinedScore - a.combinedScore || b.votes - a.votes || b.algoRating - a.algoRating;
+  });
 
-  // Pick winner / leader
+  // Pick winner / leader: Must NEVER be a player who scored an own goal
+  const eligibleCandidates = candidates.filter((c) => !c.disqualified && (c.ownGoals || 0) === 0);
+  const eligiblePool = eligibleCandidates.length > 0 ? eligibleCandidates : candidates;
+
   const leader = jurySelectedPlayer
-    ? candidates.find((c) => c.playerName === jurySelectedPlayer) || candidates[0]
-    : candidates[0];
+    ? eligiblePool.find((c) => c.playerName === jurySelectedPlayer) || eligiblePool[0]
+    : eligiblePool[0];
 
   const status: 'voting_open' | 'decided' =
     match.status === 'finished' ? 'decided' : 'voting_open';
