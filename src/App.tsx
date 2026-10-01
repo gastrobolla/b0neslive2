@@ -19,7 +19,11 @@ import { NotificationModal } from './components/NotificationModal.js';
 import { useMatchNotifications } from './hooks/useMatchNotifications.js';
 import { OfflineBanner } from './components/OfflineBanner.js';
 import { buildPlayerProfile } from './utils/playerHistory.js';
-import { calculateTopScorersFromSeasonLog, calculateCardsFromSeasonLog } from './utils/playerStatsCalculator.js';
+import {
+  calculateTopScorersFromSeasonLog,
+  calculateCardsFromSeasonLog,
+  recalculateAllPlayerData,
+} from './utils/playerStatsCalculator.js';
 import { getClubData } from './data/bonesData.js';
 import { ALL_BONES_PLAYERS } from './data/bonesSquads.js';
 import { calculateClubRatingLeaderboards } from './utils/playerRatingEngine.js';
@@ -27,6 +31,8 @@ import { MatchdayHeroBanner } from './components/MatchdayHeroBanner.js';
 import { PlayerOfTheMatchModal } from './components/PlayerOfTheMatchModal.js';
 import { LaglederModal } from './components/LaglederModal.js';
 import { PlayerRatingsModal } from './components/PlayerRatingsModal.js';
+import { ErrorBoundary } from './components/ErrorBoundary.js';
+import { PWAControls, PWAHeaderInstallButton } from './components/PWAControls.js';
 import {
   Calendar,
   Trophy,
@@ -59,14 +65,18 @@ import {
 } from 'lucide-react';
 
 
+const CACHE_KEY = 'bones_club_data_cache_v4';
+
 export default function App() {
   const [data, setData] = useState<BonesClubData | null>(() => {
     try {
-      const cached = localStorage.getItem('bones_club_data_cache');
+      // Invalidate legacy cache if present
+      localStorage.removeItem('bones_club_data_cache');
+      const cached = localStorage.getItem(CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed.matches) && Array.isArray(parsed.teams) && parsed.teams.length > 0) {
-          return parsed;
+          return recalculateAllPlayerData(parsed, { reason: 'data_fetched' });
         }
       }
     } catch {
@@ -180,10 +190,11 @@ export default function App() {
 
       const json: BonesClubData = await res.json();
       if (json && Array.isArray(json.matches)) {
-        setData(json);
+        const freshData = recalculateAllPlayerData(json, { reason: 'data_fetched' });
+        setData(freshData);
         setFetchError(null);
         try {
-          localStorage.setItem('bones_club_data_cache', JSON.stringify(json));
+          localStorage.setItem(CACHE_KEY, JSON.stringify(freshData));
         } catch {
           // LocalStorage quota
         }
@@ -198,7 +209,7 @@ export default function App() {
           fetchData(retryCount + 1);
         }, delay);
       } else if (!data) {
-        const fallback = getClubData();
+        const fallback = recalculateAllPlayerData(getClubData(), { reason: 'data_fetched' });
         setData(fallback);
         setFetchError('Tilkoblingsfeil mot server. Viser lokal klubbdatabase.');
       }
@@ -216,7 +227,8 @@ export default function App() {
       const ct = res.headers.get('content-type') || '';
       if (res.ok && ct.includes('application/json')) {
         const result = await res.json();
-        setData(result.data);
+        const freshData = recalculateAllPlayerData(result.data, { reason: 'data_fetched' });
+        setData(freshData);
         showToast('Fersk scraping fullført! Alle 16 Bønes-lag, tabeller og kamper er lagret til databasen.');
       } else {
         showToast('Kunne ikke fullføre scraping akkurat nå.');
@@ -236,7 +248,8 @@ export default function App() {
       const ct = res.headers.get('content-type') || '';
       if (res.ok && ct.includes('application/json')) {
         const result = await res.json();
-        setData(result.data);
+        const freshData = recalculateAllPlayerData(result.data, { reason: 'data_fetched' });
+        setData(freshData);
         showToast('NFF-kontroll fullført! Resultater og tabeller er oppdatert.');
       } else {
         showToast('Kunne ikke fullføre manuell skanning akkurat nå.');
@@ -316,6 +329,23 @@ export default function App() {
     return calculateCardsFromSeasonLog(data);
   }, [data]);
 
+  // Algorithmic ratings leaderboards for season best and recent form
+  // MUST be called before any early returns to respect the Rules of Hooks
+  const ratingLeaderboards = useMemo(() => {
+    if (!data?.matches) return { bestPlayer: undefined, formPlayer: undefined, topSeasonPlayers: [], topFormPlayers: [] };
+    const playersPool = data.players && data.players.length > 0 ? data.players : ALL_BONES_PLAYERS;
+    return calculateClubRatingLeaderboards(data.matches, playersPool, data.tables);
+  }, [data?.matches, data?.players, data?.tables]);
+
+  // Mobile-first navigation hub category (Kamper, Lag & Tabell, Spillere, NFF)
+  // MUST be called before any early returns to respect the Rules of Hooks
+  const currentMainCategory = useMemo<'kamper' | 'lag' | 'spillere' | 'nff'>(() => {
+    if (activeTab === 'livescore' || activeTab === 'matches' || activeTab === 'feed') return 'kamper';
+    if (activeTab === 'tables' || activeTab === 'squads') return 'lag';
+    if (activeTab === 'playerstats' || activeTab === 'scorers' || activeTab === 'cards') return 'spillere';
+    return 'nff';
+  }, [activeTab]);
+
   if (loading && !data) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white space-y-4 px-4 text-center">
@@ -375,17 +405,15 @@ export default function App() {
   const mostCarded = derivedCards[0] || data.cards[0];
   const upcomingHomeCount = data.matches.filter(m => m.isHome && m.status !== 'finished').length;
 
-  // Algorithmic ratings leaderboards for season best and recent form
-  const ratingLeaderboards = useMemo(() => {
-    return calculateClubRatingLeaderboards(data.matches, ALL_BONES_PLAYERS);
-  }, [data.matches]);
-
   const bestSeasonPlayer = ratingLeaderboards.bestPlayer;
   const bestFormPlayer = ratingLeaderboards.formPlayer;
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-[#f4f5f8] text-slate-900 selection:bg-[#165094] selection:text-white theme-matchday">
       
+      {/* PWA Lifecycle Controls (Offline Banner, Update Toast, iOS Guide) */}
+      <PWAControls />
+
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-700 text-xs font-semibold flex items-center space-x-2 animate-in fade-in slide-in-from-bottom-2">
@@ -420,6 +448,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4">
+        <ErrorBoundary fallbackTitle="Feil under visning av kampsenteret" onReset={() => setActiveTab('tables')}>
         
         {/* FotMob Club Profile Header */}
         <section id="fotmob-club-header" className="relative overflow-hidden bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs">
@@ -493,6 +522,8 @@ export default function App() {
                 )}
               </button>
 
+              <PWAHeaderInstallButton />
+
               <button
                 id="btn-fotmob-sync"
                 onClick={handleRealScrape}
@@ -525,9 +556,16 @@ export default function App() {
                   <span>Beste spiller</span>
                 </span>
                 {bestSeasonPlayer && (
-                  <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 font-mono">
-                    ★ {(bestSeasonPlayer.seasonAvgRating ?? 0).toFixed(2)}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    {bestSeasonPlayer.isLive && (
+                      <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-red-600 text-white animate-pulse">
+                        LIVE
+                      </span>
+                    )}
+                    <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 font-mono">
+                      ★ {(bestSeasonPlayer.seasonAvgRating ?? 0).toFixed(2)}
+                    </span>
+                  </div>
                 )}
               </div>
               <div className="text-sm font-black text-slate-900 flex items-center space-x-1.5 mt-0.5 truncate">
@@ -598,9 +636,16 @@ export default function App() {
                   <span>Formspiller</span>
                 </span>
                 {bestFormPlayer && (
-                  <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-orange-100 text-orange-950 border border-orange-300 font-mono">
-                    🔥 {(bestFormPlayer.last3AvgRating ?? 0).toFixed(2)}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    {bestFormPlayer.isLive && (
+                      <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-red-600 text-white animate-pulse">
+                        LIVE
+                      </span>
+                    )}
+                    <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-orange-100 text-orange-950 border border-orange-300 font-mono">
+                      🔥 {(bestFormPlayer.last3AvgRating ?? 0).toFixed(2)}
+                    </span>
+                  </div>
                 )}
               </div>
               <div className="text-sm font-black text-slate-900 flex items-center space-x-1.5 mt-0.5 truncate">
@@ -612,7 +657,13 @@ export default function App() {
                 <div className="flex items-center space-x-1 truncate">
                   <span className="font-semibold text-slate-700">{bestFormPlayer ? bestFormPlayer.position : ''}</span>
                   {bestFormPlayer && <span>•</span>}
-                  <span>{bestFormPlayer ? `Siste ${Math.min(3, bestFormPlayer.matches)} matcher` : 'Siste 3'}</span>
+                  <span>
+                    {bestFormPlayer
+                      ? bestFormPlayer.isLive
+                        ? 'Spiller live nå!'
+                        : `Siste ${Math.min(3, bestFormPlayer.matches)} matcher`
+                      : 'Siste 3'}
+                  </span>
                 </div>
                 <span className="text-[9px] font-bold text-orange-700 group-hover:underline ml-1 shrink-0">
                   Se liste →
@@ -732,198 +783,274 @@ export default function App() {
           )}
         </section>
 
-        {/* FotMob Navigation Tabs */}
-        <section id="navigation-tabs" className="bg-white rounded-xl p-1 border border-slate-200/90 shadow-2xs overflow-x-auto scrollbar-none">
-          <div className="flex items-center space-x-1 min-w-max">
-            
-            {/* Tab 1: Kamper / Livescore */}
+        {/* Navigation Tabs: Mobile-First Main Categories + Subcategories */}
+        <section id="navigation-tabs" className="bg-white rounded-2xl p-1.5 sm:p-2 border border-slate-200/90 shadow-2xs space-y-2">
+          {/* Main 4 Primary Hubs (Kamper, Lag & Tabell, Spillere, NFF) */}
+          <div className="grid grid-cols-4 gap-1 sm:gap-1.5 bg-slate-100/90 p-1 rounded-xl">
+            {/* 1. Kamper */}
             <button
-              id="main-tab-livescore"
-              onClick={() => setActiveTab('livescore')}
-              className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                activeTab === 'livescore'
-                  ? 'bg-[#165094] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              id="main-hub-kamper"
+              onClick={() => {
+                if (currentMainCategory !== 'kamper') setActiveTab('livescore');
+              }}
+              className={`flex flex-col sm:flex-row items-center justify-center space-y-0.5 sm:space-y-0 sm:space-x-2 py-2 sm:py-2.5 px-1 sm:px-3 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer relative ${
+                currentMainCategory === 'kamper'
+                  ? 'bg-[#165094] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              <Radio className={`w-4 h-4 ${data.matches.some(m => m.status === 'live') ? 'text-red-400 animate-pulse' : ''}`} />
-              <span>Kamper</span>
-              {data.matches.some(m => m.status === 'live') && (
-                <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
-                  {data.matches.filter(m => m.status === 'live').length} LIVE
-                </span>
-              )}
+              <div className="relative flex items-center">
+                <Radio className={`w-4 h-4 ${data.matches.some(m => m.status === 'live') ? 'text-red-400 animate-pulse' : ''}`} />
+                {data.matches.some(m => m.status === 'live') && (
+                  <span className="absolute -top-1 -right-2 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                  </span>
+                )}
+              </div>
+              <span className="truncate">Kamper</span>
             </button>
 
-            {/* Tab 2: Terminliste */}
+            {/* 2. Lag & Tabell */}
             <button
-              id="main-tab-matches"
-              onClick={() => setActiveTab('matches')}
-              className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                activeTab === 'matches'
-                  ? 'bg-[#165094] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <Calendar className="w-4 h-4" />
-              <span>Terminliste</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
-                activeTab === 'matches' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {data.matches.length}
-              </span>
-            </button>
-
-            {/* Tab 3: Tabell */}
-            <button
-              id="main-tab-tables"
-              onClick={() => setActiveTab('tables')}
-              className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                activeTab === 'tables'
-                  ? 'bg-[#165094] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              id="main-hub-lag"
+              onClick={() => {
+                if (currentMainCategory !== 'lag') setActiveTab('tables');
+              }}
+              className={`flex flex-col sm:flex-row items-center justify-center space-y-0.5 sm:space-y-0 sm:space-x-2 py-2 sm:py-2.5 px-1 sm:px-3 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentMainCategory === 'lag'
+                  ? 'bg-[#165094] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
               <Trophy className="w-4 h-4" />
-              <span>Tabell</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
-                activeTab === 'tables' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {Object.keys(data.tables).length}
-              </span>
+              <span className="truncate">Lag & Tabell</span>
             </button>
 
-            {/* Tab 4: Toppscorere */}
+            {/* 3. Spillere */}
             <button
-              id="main-tab-scorers"
-              onClick={() => setActiveTab('scorers')}
-              className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                activeTab === 'scorers'
-                  ? 'bg-[#165094] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <Flame className="w-4 h-4" />
-              <span>Toppscorere</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
-                activeTab === 'scorers' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {derivedTopScorers.length}
-              </span>
-            </button>
-
-            {/* Tab 5: Kort & Soning */}
-            <button
-              id="main-tab-cards"
-              onClick={() => setActiveTab('cards')}
-              className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                activeTab === 'cards'
-                  ? 'bg-[#165094] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <Scale className="w-4 h-4" />
-              <span>Kort & Soning</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
-                activeTab === 'cards' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {derivedCards.length}
-              </span>
-            </button>
-
-            {/* Tab 6: Spillerstatistikk */}
-            <button
-              id="main-tab-playerstats"
-              onClick={() => setActiveTab('playerstats')}
-              className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                activeTab === 'playerstats'
-                  ? 'bg-[#165094] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <Award className="w-4 h-4" />
-              <span>Spillerstatistikk</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
-                activeTab === 'playerstats' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                315
-              </span>
-            </button>
-
-            {/* Quick Access: Spillerbørs & Form Leaderboards */}
-            <button
-              id="main-tab-ratings"
-              onClick={() => handleOpenRatingsModal('season')}
-              className="flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer text-amber-800 bg-amber-50/90 hover:bg-amber-100 border border-amber-200/90 shadow-2xs"
-              title="Åpne rangeringslister for Beste Spiller og Formspiller (kun Bønes-spillere)"
-            >
-              <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
-              <span>Børs & Form</span>
-            </button>
-
-            {/* Quick Access: Bønes-mareritt (Worst Opponents) */}
-            <button
-              id="main-tab-nightmares"
-              onClick={() => handleOpenRatingsModal('nightmare')}
-              className="flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer text-purple-900 bg-purple-50/90 hover:bg-purple-100 border border-purple-200 shadow-2xs"
-              title="Se topp-motstandere og måltyver som har herjet mot Bønes"
-            >
-              <Skull className="w-4 h-4 text-purple-600" />
-              <span>Bønes-mareritt</span>
-            </button>
-
-            {/* Tab 7: Tropp */}
-            <button
-              id="main-tab-squads"
-              onClick={() => setActiveTab('squads')}
-              className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                activeTab === 'squads'
-                  ? 'bg-[#165094] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              id="main-hub-spillere"
+              onClick={() => {
+                if (currentMainCategory !== 'spillere') setActiveTab('playerstats');
+              }}
+              className={`flex flex-col sm:flex-row items-center justify-center space-y-0.5 sm:space-y-0 sm:space-x-2 py-2 sm:py-2.5 px-1 sm:px-3 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentMainCategory === 'spillere'
+                  ? 'bg-[#165094] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
               <Users className="w-4 h-4" />
-              <span>Tropp</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
-                activeTab === 'squads' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {data.teams.length}
-              </span>
+              <span className="truncate">Spillere</span>
             </button>
 
-            {/* Tab 8: Siste nytt */}
+            {/* 4. NFF Hub */}
             <button
-              id="main-tab-feed"
-              onClick={() => setActiveTab('feed')}
-              className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                activeTab === 'feed'
-                  ? 'bg-[#165094] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <Activity className="w-4 h-4" />
-              <span>Siste nytt</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
-                activeTab === 'feed' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {data.feed?.length || 0}
-              </span>
-            </button>
-
-            {/* Tab 9: NFF Hub */}
-            <button
-              id="main-tab-nff"
-              onClick={() => setActiveTab('nff')}
-              className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                activeTab === 'nff'
-                  ? 'bg-[#165094] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              id="main-hub-nff"
+              onClick={() => {
+                if (currentMainCategory !== 'nff') setActiveTab('nff');
+              }}
+              className={`flex flex-col sm:flex-row items-center justify-center space-y-0.5 sm:space-y-0 sm:space-x-2 py-2 sm:py-2.5 px-1 sm:px-3 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentMainCategory === 'nff'
+                  ? 'bg-[#165094] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
               <Shield className="w-4 h-4" />
-              <span>NFF Hub</span>
+              <span className="truncate">NFF Hub</span>
             </button>
+          </div>
 
+          {/* Subcategory Pills for Active Hub */}
+          <div className="flex items-center space-x-1.5 overflow-x-auto scrollbar-none pt-1 px-0.5 pb-0.5">
+            {/* SUB-TABS: KAMPER */}
+            {currentMainCategory === 'kamper' && (
+              <>
+                <button
+                  id="sub-tab-livescore"
+                  onClick={() => setActiveTab('livescore')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'livescore'
+                      ? 'bg-blue-50 text-[#165094] border border-blue-200 shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Radio className={`w-3.5 h-3.5 ${data.matches.some(m => m.status === 'live') ? 'text-red-500 animate-pulse' : ''}`} />
+                  <span>Kamper & Livescore</span>
+                  {data.matches.some(m => m.status === 'live') && (
+                    <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
+                      {data.matches.filter(m => m.status === 'live').length} LIVE
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  id="sub-tab-matches"
+                  onClick={() => setActiveTab('matches')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'matches'
+                      ? 'bg-blue-50 text-[#165094] border border-blue-200 shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Terminliste</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    activeTab === 'matches' ? 'bg-[#165094] text-white' : 'bg-slate-200/80 text-slate-700'
+                  }`}>
+                    {data.matches.length}
+                  </span>
+                </button>
+
+                <button
+                  id="sub-tab-feed"
+                  onClick={() => setActiveTab('feed')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'feed'
+                      ? 'bg-blue-50 text-[#165094] border border-blue-200 shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Activity className="w-3.5 h-3.5" />
+                  <span>Live Feed / Nyheter</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    activeTab === 'feed' ? 'bg-[#165094] text-white' : 'bg-slate-200/80 text-slate-700'
+                  }`}>
+                    {data.feed?.length || 0}
+                  </span>
+                </button>
+              </>
+            )}
+
+            {/* SUB-TABS: LAG & TABELL */}
+            {currentMainCategory === 'lag' && (
+              <>
+                <button
+                  id="sub-tab-tables"
+                  onClick={() => setActiveTab('tables')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'tables'
+                      ? 'bg-blue-50 text-[#165094] border border-blue-200 shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Serietabell</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    activeTab === 'tables' ? 'bg-[#165094] text-white' : 'bg-slate-200/80 text-slate-700'
+                  }`}>
+                    {Object.keys(data.tables).length}
+                  </span>
+                </button>
+
+                <button
+                  id="sub-tab-squads"
+                  onClick={() => setActiveTab('squads')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'squads'
+                      ? 'bg-blue-50 text-[#165094] border border-blue-200 shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Tropp & Spillere</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    activeTab === 'squads' ? 'bg-[#165094] text-white' : 'bg-slate-200/80 text-slate-700'
+                  }`}>
+                    {data.teams.length} lag
+                  </span>
+                </button>
+              </>
+            )}
+
+            {/* SUB-TABS: SPILLERE */}
+            {currentMainCategory === 'spillere' && (
+              <>
+                <button
+                  id="sub-tab-playerstats"
+                  onClick={() => setActiveTab('playerstats')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'playerstats'
+                      ? 'bg-blue-50 text-[#165094] border border-blue-200 shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5 text-[#165094]" />
+                  <span>Spillerstatistikk</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    activeTab === 'playerstats' ? 'bg-[#165094] text-white' : 'bg-slate-200/80 text-slate-700'
+                  }`}>
+                    315
+                  </span>
+                </button>
+
+                <button
+                  id="sub-tab-scorers"
+                  onClick={() => setActiveTab('scorers')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'scorers'
+                      ? 'bg-blue-50 text-[#165094] border border-blue-200 shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Flame className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Toppscorere</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    activeTab === 'scorers' ? 'bg-[#165094] text-white' : 'bg-slate-200/80 text-slate-700'
+                  }`}>
+                    {derivedTopScorers.length}
+                  </span>
+                </button>
+
+                <button
+                  id="sub-tab-cards"
+                  onClick={() => setActiveTab('cards')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeTab === 'cards'
+                      ? 'bg-blue-50 text-[#165094] border border-blue-200 shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Scale className="w-3.5 h-3.5 text-yellow-600" />
+                  <span>Kort & Soning</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    activeTab === 'cards' ? 'bg-[#165094] text-white' : 'bg-slate-200/80 text-slate-700'
+                  }`}>
+                    {derivedCards.length}
+                  </span>
+                </button>
+
+                <button
+                  id="sub-tab-ratings"
+                  onClick={() => handleOpenRatingsModal('season')}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 shadow-2xs"
+                  title="Åpne rangeringslister for Beste Spiller og Formspiller"
+                >
+                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
+                  <span>Børs & Form</span>
+                </button>
+
+                <button
+                  id="sub-tab-nightmares"
+                  onClick={() => handleOpenRatingsModal('nightmare')}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 shadow-2xs"
+                  title="Se motstandere og måltyver som har scoret mot Bønes"
+                >
+                  <Skull className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Bønes-mareritt</span>
+                </button>
+              </>
+            )}
+
+            {/* SUB-TABS: NFF */}
+            {currentMainCategory === 'nff' && (
+              <div className="flex items-center space-x-2 text-xs font-medium text-slate-600 py-0.5 px-1">
+                <span className="font-bold text-[#165094] flex items-center gap-1">
+                  <Shield className="w-3.5 h-3.5" />
+                  NFF FIKS Integrasjon:
+                </span>
+                <span>Offisiell kampdata, serietabeller og troppsregistreringer fra fotball.no</span>
+              </div>
+            )}
           </div>
         </section>
 
@@ -1003,6 +1130,7 @@ export default function App() {
           <SquadRosterTab
             teams={data.teams}
             matches={data.matches}
+            tables={data.tables}
             selectedTeamId={selectedTeamId === 'all' || selectedTeamId === 'herrer-a' ? 'menn-1' : selectedTeamId}
             onSelectTeamId={(id) => setSelectedTeamId(id)}
             onSelectPlayer={handleSelectPlayer}
@@ -1013,6 +1141,7 @@ export default function App() {
           <TopScorersView
             topScorers={derivedTopScorers}
             matches={data.matches}
+            tables={data.tables}
             teams={data.teams}
             selectedTeamId={selectedTeamId}
             onSelectPlayer={handleSelectPlayer}
@@ -1045,6 +1174,7 @@ export default function App() {
           />
         )}
 
+        </ErrorBoundary>
       </main>
 
       {/* Footer */}
@@ -1063,25 +1193,120 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Player History Modal */}
-      {activePlayerProfile && (
-        <PlayerHistoryModal
-          player={activePlayerProfile}
-          onClose={() => setSelectedPlayerName(null)}
-          onSelectTeam={(teamId) => {
-            setSelectedTeamId(teamId);
-            setActiveTab('tables');
+      {/* Modals and Overlays wrapped in ErrorBoundary */}
+      <ErrorBoundary fallbackTitle="Kunne ikke vise vinduet" onReset={() => {
+        setIsLineupModalOpen(false);
+        setIsRatingsModalOpen(false);
+        setIsPotmModalOpen(false);
+        setIsLaglederModalOpen(false);
+        setSelectedPlayerName(null);
+      }}>
+        {/* Match Lineup / Lagoppstilling Modal */}
+        <LineupModal
+          match={lineupMatch}
+          isOpen={isLineupModalOpen}
+          onClose={() => setIsLineupModalOpen(false)}
+          onSelectPlayer={handleSelectPlayer}
+          allMatches={data.matches}
+        />
+
+        {/* Realtime Notification Settings & Alerts Modal */}
+        <NotificationModal
+          isOpen={isNotificationModalOpen}
+          onClose={() => setIsNotificationModalOpen(false)}
+          settings={notifSettings}
+          onUpdateSettings={updateNotifSettings}
+          notifications={notifications}
+          onClearHistory={clearNotifHistory}
+          onTestNotification={testNotification}
+          onRequestPermission={requestNotifPermission}
+          onOpenMatch={(matchId) => {
+            const m = data.matches.find(x => x.id === matchId);
+            if (m) handleViewLineup(m);
           }}
         />
-      )}
 
-      {/* Match Lineup / Lagoppstilling Modal */}
-      <LineupModal
-        match={lineupMatch}
-        isOpen={isLineupModalOpen}
-        onClose={() => setIsLineupModalOpen(false)}
-        onSelectPlayer={handleSelectPlayer}
-      />
+        {/* Lagleder Modal for Match Events */}
+        {isLaglederModalOpen && (
+          <LaglederModal
+            isOpen={isLaglederModalOpen}
+            onClose={() => {
+              setIsLaglederModalOpen(false);
+              setLaglederMatch(null);
+            }}
+            matches={data.matches}
+            initialMatch={laglederMatch || undefined}
+            players={data.teams.flatMap((t) => t.players)}
+            onReportSuccess={(updated, msg) => {
+              setData((prev) => {
+                if (!prev) return prev;
+                const nextMatches = prev.matches.map((m) => (m.id === updated.id ? updated : m));
+                const nextData: BonesClubData = {
+                  ...prev,
+                  matches: nextMatches,
+                };
+                return recalculateAllPlayerData(nextData, {
+                  finishedMatchId: updated.id,
+                  reason: updated.status === 'finished' ? 'match_finished' : 'manual',
+                });
+              });
+              showToast(msg);
+            }}
+          />
+        )}
+
+        {/* Player of the Match Modal (Algorating + Publikum live-stemmer) */}
+        {potmModalMatch && (
+          <PlayerOfTheMatchModal
+            isOpen={isPotmModalOpen}
+            onClose={() => {
+              setIsPotmModalOpen(false);
+              setPotmModalMatch(null);
+            }}
+            match={potmModalMatch}
+            onVoteSuccess={(updated) => {
+              setData((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  matches: prev.matches.map((m) => (m.id === updated.id ? updated : m))
+                };
+              });
+              showToast(`Stemme registrert på Banens Beste i ${updated.homeTeam} vs ${updated.awayTeam}!`);
+            }}
+          />
+        )}
+
+        {/* Player Ratings Leaderboards Modal (Beste spiller, Formspiller & Bønes-mareritt) */}
+        <PlayerRatingsModal
+          isOpen={isRatingsModalOpen}
+          onClose={() => setIsRatingsModalOpen(false)}
+          initialTab={ratingsModalTab}
+          matches={data.matches}
+          players={data.players && data.players.length > 0 ? data.players : ALL_BONES_PLAYERS}
+          teams={data.teams}
+          tables={data.tables}
+          onSelectPlayer={(name, teamId) => {
+            handleSelectPlayer(name, teamId);
+          }}
+        />
+
+        {/* Player History Modal - Always on top when opened from any view or modal */}
+        {activePlayerProfile && (
+          <PlayerHistoryModal
+            player={activePlayerProfile}
+            allMatches={data.matches}
+            onClose={() => setSelectedPlayerName(null)}
+            onSelectTeam={(teamId) => {
+              setSelectedPlayerName(null);
+              setIsRatingsModalOpen(false);
+              setIsLineupModalOpen(false);
+              setSelectedTeamId(teamId);
+              setActiveTab('tables');
+            }}
+          />
+        )}
+      </ErrorBoundary>
 
       {/* Floating Goal / Match Event Toast */}
       <NotificationToast
@@ -1090,81 +1315,6 @@ export default function App() {
         onOpenMatch={(matchId) => {
           const m = data.matches.find(x => x.id === matchId);
           if (m) handleViewLineup(m);
-        }}
-      />
-
-      {/* Realtime Notification Settings & Alerts Modal */}
-      <NotificationModal
-        isOpen={isNotificationModalOpen}
-        onClose={() => setIsNotificationModalOpen(false)}
-        settings={notifSettings}
-        onUpdateSettings={updateNotifSettings}
-        notifications={notifications}
-        onClearHistory={clearNotifHistory}
-        onTestNotification={testNotification}
-        onRequestPermission={requestNotifPermission}
-        onOpenMatch={(matchId) => {
-          const m = data.matches.find(x => x.id === matchId);
-          if (m) handleViewLineup(m);
-        }}
-      />
-
-      {/* Player of the Match Modal (Algorating + Publikum live-stemmer) */}
-      {potmModalMatch && (
-        <PlayerOfTheMatchModal
-          isOpen={isPotmModalOpen}
-          onClose={() => {
-            setIsPotmModalOpen(false);
-            setPotmModalMatch(null);
-          }}
-          match={potmModalMatch}
-          onVoteSuccess={(updated) => {
-            setData((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                matches: prev.matches.map((m) => (m.id === updated.id ? updated : m))
-              };
-            });
-            showToast(`Stemme registrert på Banens Beste i ${updated.homeTeam} vs ${updated.awayTeam}!`);
-          }}
-        />
-      )}
-
-      {/* Lagleder Modal for Match Events */}
-      {isLaglederModalOpen && (
-        <LaglederModal
-          isOpen={isLaglederModalOpen}
-          onClose={() => {
-            setIsLaglederModalOpen(false);
-            setLaglederMatch(null);
-          }}
-          matches={data.matches}
-          initialMatch={laglederMatch || undefined}
-          players={data.teams.flatMap((t) => t.players)}
-          onReportSuccess={(updated, msg) => {
-            setData((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                matches: prev.matches.map((m) => (m.id === updated.id ? updated : m))
-              };
-            });
-            showToast(msg);
-          }}
-        />
-      )}
-
-      {/* Player Ratings Leaderboards Modal (Beste spiller, Formspiller & Bønes-mareritt) */}
-      <PlayerRatingsModal
-        isOpen={isRatingsModalOpen}
-        onClose={() => setIsRatingsModalOpen(false)}
-        initialTab={ratingsModalTab}
-        matches={data.matches}
-        players={data.players && data.players.length > 0 ? data.players : ALL_BONES_PLAYERS}
-        teams={data.teams}
-        onSelectPlayer={(name, teamId) => {
-          handleSelectPlayer(name, teamId);
         }}
       />
 

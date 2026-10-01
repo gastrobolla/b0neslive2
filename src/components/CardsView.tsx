@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { CardStatistic, TeamInfo, Match } from '../types.js';
 import { calculateCardsFromSeasonLog } from '../utils/playerStatsCalculator.js';
-import { AlertTriangle, ShieldAlert, CheckCircle, Scale, AlertOctagon, User, TrendingUp, Sparkles, RefreshCw, CheckCircle2, Calendar } from 'lucide-react';
+import { AlertTriangle, ShieldAlert, CheckCircle, Scale, AlertOctagon, User, TrendingUp, Sparkles, RefreshCw, CheckCircle2, Calendar, ChevronRight } from 'lucide-react';
 
 interface CardsViewProps {
   cards: CardStatistic[];
@@ -189,7 +189,82 @@ export const CardsView: React.FC<CardsViewProps> = ({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile Cards List (Phones) */}
+        <div className="block sm:hidden divide-y divide-slate-100">
+          {filteredCards.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-xs px-4">
+              Ingen kort registrert for dette filteret.
+            </div>
+          ) : (
+            filteredCards.map((card, idx) => {
+              const isSuspended = card.status === 'Karantene';
+              const isWarning = card.status.includes('Advarsel');
+
+              return (
+                <div
+                  key={`mobile-card-${card.id || card.name}-${idx}`}
+                  onClick={() => onSelectPlayer?.(card.name, card.teamId)}
+                  className={`p-3.5 flex items-center justify-between gap-2.5 active:bg-blue-50/80 transition-colors cursor-pointer ${
+                    isSuspended ? 'bg-red-50/50' : isWarning ? 'bg-amber-50/30' : ''
+                  }`}
+                >
+                  <div className="flex items-center space-x-3 min-w-0">
+                    <span className="text-xs font-mono font-bold text-slate-400 w-5 text-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-1.5 flex-wrap">
+                        <span className="font-bold text-slate-900 text-sm truncate">
+                          {card.name}
+                        </span>
+                        {isSuspended && (
+                          <span className="text-[9px] bg-red-100 text-red-800 font-black px-1.5 py-0.2 rounded">
+                            KARANTENE
+                          </span>
+                        )}
+                        {isWarning && (
+                          <span className="text-[9px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.2 rounded">
+                            ADVARSEL
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-1.5 text-xs text-slate-500 mt-0.5 truncate">
+                        <span className="font-semibold text-slate-700">{card.teamName.replace('Bønes ', '')}</span>
+                        <span>•</span>
+                        <span>{card.matches} kamper</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <div className="text-right">
+                      <div className="flex items-center justify-end space-x-1 font-mono font-bold text-sm">
+                        {card.yellowCards > 0 && <span className="text-amber-600">{card.yellowCards}🟨</span>}
+                        {card.redCards > 0 && <span className="text-red-600">{card.redCards}🟥</span>}
+                        {card.yellowCards === 0 && card.redCards === 0 && <span className="text-slate-300">0</span>}
+                      </div>
+                      <span
+                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full inline-block mt-0.5 ${
+                          isSuspended
+                            ? 'bg-red-100 text-red-800'
+                            : isWarning
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-emerald-50 text-emerald-800'
+                        }`}
+                      >
+                        {card.status}
+                      </span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300" />
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop Table (Tablets & Desktop) */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-left text-xs sm:text-sm">
             <thead className="bg-slate-100 text-slate-600 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
               <tr>

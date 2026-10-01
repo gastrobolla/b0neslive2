@@ -8047,17 +8047,6 @@ export const INITIAL_TOP_SCORERS: TopScorer[] = [
     "isBonesPlayer": true
   },
   {
-    "id": "ts-sander_b_nes-g19_1",
-    "name": "Sander Bønes",
-    "teamId": "g19-1",
-    "teamName": "Bønes G19-1",
-    "goals": 1,
-    "matches": 1,
-    "penalties": 0,
-    "goalsPerMatch": 1,
-    "isBonesPlayer": true
-  },
-  {
     "id": "ts-torje_s_ter_reigstad-g16_3",
     "name": "Torje Sæter Reigstad",
     "teamId": "g16-3",

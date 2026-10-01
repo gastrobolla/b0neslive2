@@ -34,7 +34,7 @@ export const ClubWeatherBadge: React.FC = () => {
     setIsLoading(true);
     try {
       const now = new Date();
-      const dummyMatch = {
+      const bonesVenueContext = {
         id: 'bones-current-live',
         teamId: 'menn-1',
         teamName: 'Bønes IL',
@@ -49,7 +49,7 @@ export const ClubWeatherBadge: React.FC = () => {
         isHome: true,
         events: []
       };
-      const fetched = await fetchMatchWeather(dummyMatch);
+      const fetched = await fetchMatchWeather(bonesVenueContext);
       if (fetched) {
         setWeather(fetched);
       }

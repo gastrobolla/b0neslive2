@@ -23535,23 +23535,23 @@
   "3920386": {
     "fiksId": 3920386,
     "name": "Alma Dahlsrud",
-    "lastUpdated": "2026-09-20T17:59:57.484Z",
+    "lastUpdated": "2026-09-28T10:04:39.062Z",
     "isOfficial": true,
     "career": {
-      "matchesYouth": 34,
+      "matchesYouth": 35,
       "matchesAdult": 0,
-      "totalMatches": 34,
-      "goalsYouth": 30,
+      "totalMatches": 35,
+      "goalsYouth": 31,
       "goalsAdult": 0,
-      "totalGoals": 30,
-      "goalsAverage": 0.88,
+      "totalGoals": 31,
+      "goalsAverage": 0.89,
       "yellowCards": 0,
       "redCards": 0
     },
     "season2026": {
-      "totalMatches": 20,
-      "totalGoals": 25,
-      "goalsPerMatch": 1.25,
+      "totalMatches": 21,
+      "totalGoals": 26,
+      "goalsPerMatch": 1.24,
       "yellowCards": 0,
       "redCards": 0,
       "teams": [
@@ -23571,9 +23571,9 @@
           "teamName": "Bønes J16-1",
           "nffTeamId": 19687,
           "ageCategory": "Ungdom 16 år",
-          "matches": 5,
-          "goals": 4,
-          "goalsPerMatch": 0.8,
+          "matches": 6,
+          "goals": 5,
+          "goalsPerMatch": 0.83,
           "yellowCards": 0,
           "redCards": 0
         },
@@ -23620,9 +23620,9 @@
         "teamId": "j16-1",
         "nffTeamId": 19687,
         "ageCategory": "Ungdom 16 år",
-        "matches": 5,
-        "goals": 4,
-        "goalsPerMatch": 0.8,
+        "matches": 6,
+        "goals": 5,
+        "goalsPerMatch": 0.83,
         "yellowCards": 0,
         "redCards": 0
       },
@@ -23692,7 +23692,197 @@
         "redCards": 0
       }
     ],
-    "matches2026": []
+    "matches2026": [
+      {
+        "date": "17.09",
+        "tournament": "J14 2. div. avd. 01 høst",
+        "match": "Søreide/Gneist - Bønes",
+        "result": "1 - 3",
+        "venue": "Sandslibanen",
+        "matchFiksId": 9189394,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "13.09",
+        "tournament": "J14 Hordalandscupen",
+        "match": "Sotra/Telavåg - Bønes",
+        "result": "4 - 2",
+        "venue": "Straume Sotra stadion",
+        "matchFiksId": 9175401,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "05.09",
+        "tournament": "J14 2. div. avd. 01 høst",
+        "match": "Bønes - Norheimsund/Øystese",
+        "result": "0 - 4",
+        "venue": "Fjellsdalen idrettsplass",
+        "matchFiksId": 9189390,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "27.08",
+        "tournament": "J14 2. div. avd. 01 høst",
+        "match": "Voss - Bønes",
+        "result": "2 - 3",
+        "venue": "Prestegardsmoen KIWI-banen",
+        "matchFiksId": 9189385,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "11.06",
+        "tournament": "J14 2. div. avd. 03 vår",
+        "match": "Bønes - Nore Neset",
+        "result": "9 - 0",
+        "venue": "Fjellsdalen idrettsplass",
+        "matchFiksId": 9063479,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "04.06",
+        "tournament": "J14 2. div. avd. 03 vår",
+        "match": "Bønes - Nordsiden Askøy/Apollo/Ramsøy",
+        "result": "6 - 1",
+        "venue": "Fjellsdalen idrettsplass",
+        "matchFiksId": 9063471,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "28.05",
+        "tournament": "J14 2. div. avd. 03 vår",
+        "match": "Sotra/Telavåg - Bønes",
+        "result": "2 - 3",
+        "venue": "Straumebanen",
+        "matchFiksId": 9063465,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "26.05",
+        "tournament": "J14 2. div. avd. 03 vår",
+        "match": "Bønes - Fyllingsdalen",
+        "result": "3 - 0",
+        "venue": "Fjellsdalen idrettsplass",
+        "matchFiksId": 9063461,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "21.05",
+        "tournament": "J14 2. div. avd. 03 vår",
+        "match": "Njardar/Tysnes - Bønes",
+        "result": "0 - 7",
+        "venue": "Reiso kunstgras",
+        "matchFiksId": 9063480,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "10.05",
+        "tournament": "J14 2. div. avd. 03 vår",
+        "match": "Vestsiden-Askøy - Bønes",
+        "result": "0 - 5",
+        "venue": "Ravnanger kunstgress",
+        "matchFiksId": 9063456,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "05.05",
+        "tournament": "J14 Hordalandscupen",
+        "match": "Bønes - Valestrand Hjellvik",
+        "result": "3 - 1",
+        "venue": "Fjellsdalen idrettsplass",
+        "matchFiksId": 9133657,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "28.04",
+        "tournament": "J14 2. div. avd. 03 vår",
+        "match": "Østsiden Askøy - Bønes",
+        "result": "2 - 1",
+        "venue": "Erdal idrettsplass kunstgress",
+        "matchFiksId": 9063447,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "16.04",
+        "tournament": "J14 2. div. avd. 03 vår",
+        "match": "Bønes - Sandviken/Varegg 3",
+        "result": "8 - 0",
+        "venue": "Fjellsdalen idrettsplass",
+        "matchFiksId": 9063440,
+        "teamId": "j14-1"
+      },
+      {
+        "date": "22.09",
+        "tournament": "J16 2. div. avd. 03 høst",
+        "match": "Nore Neset - Bønes",
+        "result": "1 - 2",
+        "venue": "Nore Neset idrettsplass",
+        "matchFiksId": 9188484,
+        "teamId": "j16-1"
+      },
+      {
+        "date": "10.09",
+        "tournament": "J16 2. div. avd. 03 høst",
+        "match": "Nymark/Baune/Bergensdalen - Bønes",
+        "result": "2 - 7",
+        "venue": "Lægdebanen",
+        "matchFiksId": 9188463,
+        "teamId": "j16-1"
+      },
+      {
+        "date": "03.09",
+        "tournament": "J16 2. div. avd. 03 høst",
+        "match": "Bønes - Eidsvåg",
+        "result": "2 - 0",
+        "venue": "Fjellsdalen idrettsplass",
+        "matchFiksId": 9188459,
+        "teamId": "j16-1"
+      },
+      {
+        "date": "29.08",
+        "tournament": "J16 2. div. avd. 03 høst",
+        "match": "Masfjord/Gulen 2 - Bønes",
+        "result": "4 - 3",
+        "venue": "Nordbygda idrettsanlegg",
+        "matchFiksId": 9188476,
+        "teamId": "j16-1"
+      },
+      {
+        "date": "30.05",
+        "tournament": "J16 2. div. avd. 04 vår",
+        "match": "Bønes - Sandviken/Varegg 3",
+        "result": "4 - 2",
+        "venue": "Fjellsdalen idrettsplass",
+        "matchFiksId": 9064466,
+        "teamId": "j16-1"
+      },
+      {
+        "date": "25.04",
+        "tournament": "J16 2. div. avd. 04 vår",
+        "match": "Bønes - Nymark/Baune/Bergensdalen",
+        "result": "1 - 3",
+        "venue": "Fjellsdalen idrettsplass",
+        "matchFiksId": 9064421,
+        "teamId": "j16-1"
+      },
+      {
+        "date": "05.06",
+        "tournament": "J13 2. div. avd. 05 vår",
+        "match": "Sotra - Bønes",
+        "result": "3 - 0",
+        "venue": "Straume Sotra stadion 9er A",
+        "matchFiksId": 9059733,
+        "teamId": "j13-1"
+      },
+      {
+        "date": "13.06",
+        "tournament": "J13 2. div. avd. 03 vår",
+        "match": "Sædalen/Kringlebotn 2 - Bønes 2",
+        "result": "3 - 2",
+        "venue": "Sædalen Arena 9er A",
+        "matchFiksId": 9059355,
+        "teamId": "j13-2"
+      }
+    ]
   },
   "3922123": {
     "fiksId": 3922123,

@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { TopScorer, TeamInfo, Match } from '../types.js';
+import { TopScorer, TeamInfo, Match, DivisionTable } from '../types.js';
 import { calculateTopScorersFromSeasonLog } from '../utils/playerStatsCalculator.js';
-import { Flame, Award, Crosshair, Target, ChevronDown, User, TrendingUp, Sparkles, RefreshCw, CheckCircle2, Calendar } from 'lucide-react';
+import { calculateClubRatingLeaderboards } from '../utils/playerRatingEngine.js';
+import { Flame, Award, Crosshair, Target, ChevronDown, ChevronRight, User, TrendingUp, Sparkles, RefreshCw, CheckCircle2, Calendar, Star } from 'lucide-react';
 
 interface TopScorersViewProps {
   topScorers: TopScorer[];
@@ -11,6 +12,7 @@ interface TopScorersViewProps {
   onSyncRealData?: () => void;
   isSyncing?: boolean;
   matches?: Match[];
+  tables?: DivisionTable[] | Record<string, DivisionTable>;
 }
 
 export const TopScorersView: React.FC<TopScorersViewProps> = ({
@@ -21,9 +23,24 @@ export const TopScorersView: React.FC<TopScorersViewProps> = ({
   onSyncRealData,
   isSyncing,
   matches,
+  tables,
 }) => {
   const [localTeamFilter, setLocalTeamFilter] = useState<string>(selectedTeamId);
   const [seasonFilter, setSeasonFilter] = useState<'all' | 'Vår' | 'Høst'>('all');
+
+  // Derived algorithmic rating lookup with position weights & opponent table strength
+  const playerRatingsMap = useMemo(() => {
+    if (!matches || matches.length === 0) return new Map<string, number>();
+    const leaderboards = calculateClubRatingLeaderboards(matches, [], tables);
+    const map = new Map<string, number>();
+    for (const item of leaderboards.allSeasonRanked) {
+      if (item.seasonAvgRating > 0) {
+        map.set(item.name.toLowerCase().trim(), item.seasonAvgRating);
+        if (item.fiksId) map.set(`fiks-${item.fiksId}`, item.seasonAvgRating);
+      }
+    }
+    return map;
+  }, [matches, tables]);
 
   // Sync if selectedTeamId changes from parent
   const activeTeamFilter = selectedTeamId !== 'all' ? selectedTeamId : localTeamFilter;
@@ -217,7 +234,84 @@ export const TopScorersView: React.FC<TopScorersViewProps> = ({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile Scorer List (Phones): Vertical clean items, zero horizontal scrolling */}
+        <div className="block sm:hidden divide-y divide-slate-100">
+          {filteredScorers.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-xs px-4">
+              Ingen målscorere registrert for dette filteret.
+            </div>
+          ) : (
+            filteredScorers.map((scorer, index) => {
+              const isLeader = index === 0;
+
+              return (
+                <div
+                  key={`mobile-scorer-${scorer.id || scorer.name}-${index}`}
+                  onClick={() => onSelectPlayer?.(scorer.name, scorer.teamId)}
+                  className={`p-3.5 flex items-center justify-between gap-2.5 active:bg-blue-50/80 transition-colors cursor-pointer ${
+                    isLeader ? 'bg-amber-50/50' : ''
+                  }`}
+                >
+                  <div className="flex items-center space-x-3 min-w-0">
+                    <span
+                      className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-black font-mono shrink-0 ${
+                        index === 0
+                          ? 'bg-amber-400 text-slate-900'
+                          : index === 1
+                          ? 'bg-slate-300 text-slate-800'
+                          : index === 2
+                          ? 'bg-amber-700/20 text-amber-900'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-1.5 flex-wrap">
+                        <span className="font-bold text-slate-900 text-sm truncate">
+                          {scorer.name}
+                        </span>
+                        {isLeader && (
+                          <span className="text-[9px] bg-amber-200 text-amber-900 border border-amber-300 px-1 py-0.2 rounded font-black">
+                            Gullstøvel
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-1.5 text-xs text-slate-500 mt-0.5 truncate">
+                        <span className="font-semibold text-blue-900">{scorer.teamName.replace('Bønes ', '')}</span>
+                        <span>•</span>
+                        <span>{scorer.matches} kamper</span>
+                        {(() => {
+                          const playerRating = playerRatingsMap.get(scorer.name.toLowerCase().trim());
+                          return playerRating && playerRating > 0 ? (
+                            <span className="text-[10px] font-black font-mono text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-200 ml-1">
+                              ★ {playerRating.toFixed(2)}
+                            </span>
+                          ) : null;
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <div className="text-right">
+                      <span className="text-base font-black font-mono text-red-600 block leading-tight">
+                        {scorer.goals} <span className="text-xs font-sans font-bold text-slate-400">mål</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono block">
+                        {(scorer.goalsPerMatch ?? (scorer.matches ? scorer.goals / scorer.matches : 0)).toFixed(2)} /k
+                      </span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300" />
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop Table (Tablets & Desktop) */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-left text-xs sm:text-sm">
             <thead className="bg-slate-100 text-slate-600 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
               <tr>
@@ -225,6 +319,7 @@ export const TopScorersView: React.FC<TopScorersViewProps> = ({
                 <th scope="col" className="py-3 px-4">Spiller (klikk for profil)</th>
                 <th scope="col" className="py-3 px-3">Lag / Avdeling</th>
                 <th scope="col" className="py-3 px-3 text-center">Kamper</th>
+                <th scope="col" className="py-3 px-3 text-center">⭐ Børs</th>
                 <th scope="col" className="py-3 px-3 text-center hidden sm:table-cell">Straffer</th>
                 <th scope="col" className="py-3 px-3 text-center hidden md:table-cell">Snitt/kamp</th>
                 <th scope="col" className="py-3 px-4 text-center font-extrabold text-slate-900">Mål</th>
@@ -233,6 +328,7 @@ export const TopScorersView: React.FC<TopScorersViewProps> = ({
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {filteredScorers.map((scorer, index) => {
                 const isLeader = index === 0;
+                const playerRating = playerRatingsMap.get(scorer.name.toLowerCase().trim());
 
                 return (
                   <tr
@@ -287,6 +383,20 @@ export const TopScorersView: React.FC<TopScorersViewProps> = ({
 
                     <td className="py-3 px-3 text-center font-mono">
                       {scorer.matches}
+                    </td>
+
+                    <td className="py-3 px-3 text-center font-mono">
+                      {playerRating && playerRating > 0 ? (
+                        <span
+                          className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 text-xs font-black shadow-2xs"
+                          title={`Sesongbørs: ${playerRating.toFixed(2)}`}
+                        >
+                          <Star className="w-3 h-3 text-amber-500 fill-amber-400 shrink-0" />
+                          <span>{playerRating.toFixed(2)}</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">-</span>
+                      )}
                     </td>
 
                     <td className="py-3 px-3 text-center font-mono text-slate-500 hidden sm:table-cell">

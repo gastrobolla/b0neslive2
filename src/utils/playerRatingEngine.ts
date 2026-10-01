@@ -1,4 +1,4 @@
-import { Match, MatchEvent, Player, PlayerPosition, PlayerRatingBreakdown } from '../types.js';
+import { Match, MatchEvent, Player, PlayerPosition, PlayerRatingBreakdown, DivisionTable } from '../types.js';
 import { normalizePosition, getPlayerPositionInMatch } from './positionEngine.js';
 import { isOwnGoalEvent } from './derivedStats.js';
 
@@ -13,6 +13,12 @@ export interface PlayerRatingInput {
   assists?: number;
   yellowCards?: number;
   redCards?: number;
+  saves?: number;
+  tackles?: number;
+  blocks?: number;
+  opponentRank?: number;
+  opponentTotalTeams?: number;
+  minutesPlayed?: number;
 }
 
 export interface PlayerRatingResult {
@@ -20,6 +26,112 @@ export interface PlayerRatingResult {
   breakdown: PlayerRatingBreakdown;
   tags: string[];
   summary: string;
+}
+
+export interface OpponentTableContext {
+  rank: number;
+  totalTeams: number;
+  tier: 'top' | 'upper_mid' | 'mid' | 'bottom' | 'unknown';
+  tierLabel: string;
+  multiplier: number; // 1.25-1.35 for elite, 1.12 for upper-mid, 1.0 for mid, 0.95 for bottom
+  isTopThree: boolean;
+  isLeader: boolean;
+}
+
+/**
+ * Resolves the opponent's table standing in the series/division.
+ * Uses official DivisionTable rows when available, or manual override.
+ */
+export function resolveOpponentTableContext(
+  match: Match,
+  tables?: DivisionTable[] | Record<string, DivisionTable>,
+  overrideRank?: number,
+  overrideTotalTeams?: number
+): OpponentTableContext {
+  if (overrideRank && overrideRank > 0) {
+    const total = overrideTotalTeams || 10;
+    const isTopThree = overrideRank <= 3;
+    const isLeader = overrideRank === 1;
+    let tier: 'top' | 'upper_mid' | 'mid' | 'bottom' = 'mid';
+    let multiplier = 1.0;
+    let tierLabel = `Tabell #${overrideRank}`;
+
+    if (overrideRank <= Math.max(3, Math.ceil(total * 0.25))) {
+      tier = 'top';
+      multiplier = isLeader ? 1.35 : 1.25;
+      tierLabel = isLeader ? 'Serieleder' : `Topplag (#${overrideRank})`;
+    } else if (overrideRank <= Math.ceil(total * 0.50)) {
+      tier = 'upper_mid';
+      multiplier = 1.12;
+      tierLabel = `Øvre tabellhalvdel (#${overrideRank})`;
+    } else if (overrideRank >= total - 2) {
+      tier = 'bottom';
+      multiplier = 0.95;
+      tierLabel = `Bunnlag (#${overrideRank})`;
+    }
+
+    return { rank: overrideRank, totalTeams: total, tier, tierLabel, multiplier, isTopThree, isLeader };
+  }
+
+  const isBonesHome = match.isHome || (match.homeTeam || '').toLowerCase().includes('bønes');
+  const opponentName = (isBonesHome ? match.awayTeam : match.homeTeam || '').trim().toLowerCase();
+
+  // Safely normalize tables whether it is passed as an Array or an Object Record<string, DivisionTable>
+  const tablesList: DivisionTable[] = Array.isArray(tables)
+    ? tables
+    : tables && typeof tables === 'object'
+    ? Object.values(tables)
+    : [];
+
+  if (tablesList.length > 0) {
+    const matchingTable = tablesList.find(t =>
+      (match.division && t.divisionName && t.divisionName.toLowerCase().includes(match.division.toLowerCase())) ||
+      (match.teamId && t.teamId === match.teamId) ||
+      (t.rows && t.rows.some(r => r.teamName.toLowerCase().includes(opponentName)))
+    );
+
+    if (matchingTable && matchingTable.rows && matchingTable.rows.length > 0) {
+      const oppRow = matchingTable.rows.find(r =>
+        opponentName.includes(r.teamName.toLowerCase()) || r.teamName.toLowerCase().includes(opponentName)
+      );
+
+      if (oppRow) {
+        const rank = oppRow.rank;
+        const total = matchingTable.rows.length;
+        const isLeader = rank === 1;
+        const isTopThree = rank <= 3;
+        let tier: 'top' | 'upper_mid' | 'mid' | 'bottom' = 'mid';
+        let multiplier = 1.0;
+        let tierLabel = `Tabell #${rank}`;
+
+        if (rank <= Math.max(3, Math.ceil(total * 0.25))) {
+          tier = 'top';
+          multiplier = isLeader ? 1.35 : 1.25;
+          tierLabel = isLeader ? 'Serieleder' : `Topplag (#${rank})`;
+        } else if (rank <= Math.ceil(total * 0.50)) {
+          tier = 'upper_mid';
+          multiplier = 1.12;
+          tierLabel = `Øvre halvdel (#${rank})`;
+        } else if (rank >= total - 2) {
+          tier = 'bottom';
+          multiplier = 0.95;
+          tierLabel = `Bunnlag (#${rank})`;
+        }
+
+        return { rank, totalTeams: total, tier, tierLabel, multiplier, isTopThree, isLeader };
+      }
+    }
+  }
+
+  return {
+    rank: 5,
+    totalTeams: 10,
+    tier: 'unknown',
+    tierLabel: 'Ordinær motstander',
+    multiplier: 1.0,
+    isTopThree: false,
+    isLeader: false
+  };
 }
 
 /**
@@ -34,7 +146,8 @@ export interface PlayerRatingResult {
  */
 export function calculatePlayerPerformanceRating(
   player: PlayerRatingInput,
-  match: Match
+  match: Match,
+  tables?: DivisionTable[] | Record<string, DivisionTable>
 ): PlayerRatingResult {
   const normName = player.playerName.trim().toLowerCase();
   const isHome = (player.team || '').toLowerCase().includes(match.homeTeam.toLowerCase());
@@ -139,17 +252,45 @@ export function calculatePlayerPerformanceRating(
   let anchorBonus = 0;
   let goalImpact = 0;
   let assistImpact = 0;
+  let savesImpact = 0;
+  let tackleImpact = 0;
+  let blockImpact = 0;
+  let possessionImpact = 0;
+  let opponentStrengthBonus = 0;
   let disciplinePenalty = 0;
+
+  // Resolve opponent strength based on league table standings
+  const oppStrength = resolveOpponentTableContext(
+    match,
+    tables,
+    player.opponentRank,
+    player.opponentTotalTeams
+  );
+
+  // Extract or derive possession and shots on target
+  const rawHomePoss = match.stats?.possession
+    ? match.stats.possession.home
+    : (teamScore > oppScore ? Math.min(68, 53 + (teamScore - oppScore) * 3 + (isHome ? 2 : -2)) : Math.max(34, 47 + (teamScore - oppScore) * 3 + (isHome ? 2 : -2)));
+  const homePoss = Math.min(85, Math.max(15, rawHomePoss));
+  const teamPoss = isHome ? homePoss : (100 - homePoss);
+  const oppPoss = 100 - teamPoss;
+
+  const teamShotsOnTarget = match.stats?.shotsOnTarget
+    ? (isHome ? match.stats.shotsOnTarget.home : match.stats.shotsOnTarget.away)
+    : Math.max(teamScore, Math.ceil(teamScore * 1.8 + (teamPoss > 50 ? 3 : 2)));
+  const oppShotsOnTarget = match.stats?.shotsOnTarget
+    ? (isHome ? match.stats.shotsOnTarget.away : match.stats.shotsOnTarget.home)
+    : Math.max(oppScore, Math.ceil(oppScore * 1.8 + (oppPoss > 50 ? 3 : 2)));
 
   // 1. CLUTCH DEFENSE / HOLDING THE LEAD IN FINAL 15 MINUTES (Holding a 2-1 or 1-0 lead)
   const defendedTightLead = (teamLeadAtClutchStart === 1 || (teamLeadAtClutchStart === 2 && teamScore - oppScore <= 2)) && result === 'W';
   if (defendedTightLead && opponentGoalsInClutch === 0 && match.status !== 'upcoming') {
     if (isKeeper) {
-      clutchBonus += 0.95;
-      tags.push('🧤 Matchvinner i buret under sluttpress');
+      clutchBonus += 0.95 * (oppStrength.isTopThree ? 1.25 : 1.0);
+      tags.push(oppStrength.isTopThree ? `🧤 Matchvinner i buret mot topplag (#${oppStrength.rank})` : '🧤 Matchvinner i buret under sluttpress');
     } else if (isDefender) {
-      clutchBonus += 0.85;
-      tags.push(`🛡️ Herdet forsvaret under sluttpress (${teamScore}-${oppScore})`);
+      clutchBonus += 0.85 * (oppStrength.isTopThree ? 1.25 : 1.0);
+      tags.push(oppStrength.isTopThree ? `🛡️ Herdet forsvaret mot topplag (${teamScore}-${oppScore})` : `🛡️ Herdet forsvaret under sluttpress (${teamScore}-${oppScore})`);
     } else if (isMidfielder) {
       clutchBonus += 0.55;
       tags.push('💪 Vant krigen på midtbanen i sluttminuttene');
@@ -187,17 +328,19 @@ export function calculatePlayerPerformanceRating(
     }
   }
 
-  // 3. CLEAN SHEET & DEFENSIVE ACCOUNTABILITY
+  // 3. CLEAN SHEET & DEFENSIVE ACCOUNTABILITY (Enhanced vs strong opposition)
   if (oppScore === 0 && match.status !== 'upcoming') {
     const margin = teamScore - oppScore;
+    const tableCleanSheetFactor = oppStrength.isTopThree ? 1.30 : (oppStrength.multiplier || 1.0);
+
     if (margin <= 1) {
       // 1-0 or 0-0 tight clean sheet
       if (isKeeper) {
-        cleanSheetBonus += 1.35;
-        tags.push('🧤 Helteinnsats / Holdt nullen i 1-0 seier');
+        cleanSheetBonus += 1.35 * tableCleanSheetFactor;
+        tags.push(oppStrength.isTopThree ? `🧤🏆 Helteinnsats / Holdt nullen mot topplag (#${oppStrength.rank})` : '🧤 Helteinnsats / Holdt nullen i 1-0 seier');
       } else if (isDefender) {
-        cleanSheetBonus += 1.15;
-        tags.push('🛡️ Ugjennomtrengelig / Clean Sheet');
+        cleanSheetBonus += 1.15 * tableCleanSheetFactor;
+        tags.push(oppStrength.isTopThree ? `🛡️ Ugjennomtrengelig mot seriens topplag (#${oppStrength.rank})` : '🛡️ Ugjennomtrengelig / Clean Sheet');
       } else if (isMidfielder) {
         cleanSheetBonus += 0.45;
         tags.push('🔒 Defensivt skjold foran fireren');
@@ -205,11 +348,11 @@ export function calculatePlayerPerformanceRating(
     } else if (margin <= 3) {
       // 2-0 or 3-0 solid win
       if (isKeeper) {
-        cleanSheetBonus += 1.05;
-        tags.push('🧤 Holdt nullen');
+        cleanSheetBonus += 1.05 * tableCleanSheetFactor;
+        tags.push(oppStrength.isTopThree ? `🧤 Holdt nullen mot topplag (#${oppStrength.rank})` : '🧤 Holdt nullen');
       } else if (isDefender) {
-        cleanSheetBonus += 0.90;
-        tags.push('🛡️ Solid bakre firer / Null baklengs');
+        cleanSheetBonus += 0.90 * tableCleanSheetFactor;
+        tags.push(oppStrength.isTopThree ? `🛡️ Solid bakre firer mot toppmotstander (#${oppStrength.rank})` : '🛡️ Solid bakre firer / Null baklengs');
       } else if (isMidfielder) {
         cleanSheetBonus += 0.30;
       }
@@ -224,54 +367,181 @@ export function calculatePlayerPerformanceRating(
     else if (isDefender) cleanSheetBonus -= 0.35;
   }
 
-  // 4. GOAL IMPACT (Position-specific value)
+  // 4. GOAL IMPACT (Position-specific value, forward bonus & opponent strength multiplier)
   if (realGoals > 0) {
     for (let i = 0; i < realGoals; i++) {
       const gEvent = playerEvents.filter((e) => e.type === 'goal' && !isOwnGoalEvent(e))[i];
       const gMin = gEvent?.minute;
 
+      let gVal = 1.15;
       if (gMin !== undefined && gMin >= clutchStartMinute && result === 'W' && teamScore - oppScore <= 1) {
         // Late match-winner!
-        goalImpact += 1.55;
+        gVal = 1.55;
         tags.push(`⚽ Sent matchvinnermål (${gMin}')!`);
+      } else if (isForward) {
+        // Attackers rewarded with offensive impact bonus
+        gVal = 1.25;
       } else if (isDefender) {
-        // Defender goal is high value
-        goalImpact += 1.40;
+        // Defender goal is exceptionally high value
+        gVal = 1.45;
         tags.push('🛡️⚽ Scoring fra forsvarsspiller!');
       } else if (isKeeper) {
-        goalImpact += 2.00;
+        gVal = 2.10;
         tags.push('🧤⚽ Mål fra målvakt!');
       } else if (isMidfielder) {
-        goalImpact += 1.25;
+        gVal = 1.25;
         tags.push('🎯 Målfarlig midtbane');
       } else if (realGoals >= 3) {
-        goalImpact += 1.20;
-      } else {
-        goalImpact += 1.15;
+        gVal = 1.20;
       }
+
+      // Opponent strength adjustment: goals against top teams are weighted higher
+      if (oppStrength.isTopThree) {
+        gVal += oppStrength.isLeader ? 0.38 : 0.28;
+      } else if (oppStrength.multiplier > 1.0) {
+        gVal *= oppStrength.multiplier;
+      }
+
+      goalImpact += gVal;
     }
+
+    if (oppStrength.isTopThree && !tags.some((t) => t.includes('topplag') || t.includes('serielederen'))) {
+      tags.push(oppStrength.isLeader ? '⚽🏆 Scoret mot serielederen!' : `⚽ Mål mot topplag (#${oppStrength.rank})`);
+    }
+
     if (realGoals >= 3 && !tags.some((t) => t.includes('Hat-trick'))) {
       tags.push('🎩 Hat-trick!');
     } else if (realGoals === 2 && !tags.some((t) => t.includes('Dobbeltscorer'))) {
       tags.push('⚽ Dobbeltscorer!');
     } else if (realGoals === 1 && !tags.some((t) => t.includes('mål') || t.includes('Scoring'))) {
-      tags.push('⚽ Målscorer');
+      tags.push(isForward ? '🎯 Klinisk spissmål' : '⚽ Målscorer');
     }
   }
 
-  // 5. ASSISTS IMPACT (Position-specific value)
+  // 5. ASSISTS IMPACT (Position-specific value, late clutch bonus & opponent strength multiplier)
   if (realAssists > 0) {
-    const assistMultiplier = isDefender ? 0.85 : isMidfielder ? 0.80 : 0.65;
+    let assistMultiplier = isDefender ? 0.90 : isMidfielder ? 0.85 : 0.70;
+
+    // Boost assist value against top tier opponents
+    if (oppStrength.isTopThree) {
+      assistMultiplier += oppStrength.isLeader ? 0.30 : 0.22;
+      tags.push(oppStrength.isLeader ? '👟 Målgivende mot serielederen!' : `👟 Målgivende mot topplag (#${oppStrength.rank})`);
+    } else if (oppStrength.multiplier > 1.0) {
+      assistMultiplier *= oppStrength.multiplier;
+    }
+
     assistImpact += realAssists * assistMultiplier;
-    tags.push(realAssists > 1 ? `👟 ${realAssists} målgivende pasninger` : '👟 Målgivende pasning');
+
+    const isClutchAssist = playerAssists.some((e) => (e.minute || 0) >= clutchStartMinute) && result === 'W' && teamScore - oppScore <= 1;
+    if (isClutchAssist) {
+      assistImpact += 0.40;
+      tags.push('👟 Sent matchvinnende assist!');
+    } else if (!tags.some((t) => t.includes('målgivende') || t.includes('Målgivende'))) {
+      tags.push(realAssists > 1 ? `👟 ${realAssists} målgivende pasninger` : '👟 Målgivende pasning');
+    }
   }
 
-  // 6. CARD DISCIPLINE & DEFENSIVE ERRORS (INCLUDING OWN GOALS)
+  // 6. REDNINGER (Goalkeeper Saves, Shot-Stopping Workload & Opponent Strength Scaling)
+  if (isKeeper && match.status !== 'upcoming') {
+    const rawSaves = player.saves !== undefined ? player.saves : Math.max(0, oppShotsOnTarget - oppScore);
+    const saveRate = oppShotsOnTarget > 0 ? rawSaves / oppShotsOnTarget : 1.0;
+    const saveMult = oppStrength.isTopThree ? 1.30 : oppStrength.multiplier;
+
+    if (rawSaves >= 4 && saveRate >= 0.70) {
+      const baseSaveBonus = Math.min(1.40, 0.50 + (rawSaves - 3) * 0.20);
+      savesImpact += baseSaveBonus * saveMult;
+      tags.push(oppStrength.isTopThree
+        ? `🧤 ${rawSaves} redninger mot topplag (#${oppStrength.rank})`
+        : `🧤 ${rawSaves} redninger (Klasse i buret)`);
+    } else if (rawSaves >= 2 && saveRate >= 0.50) {
+      savesImpact += (0.35 + rawSaves * 0.10) * saveMult;
+      if (oppStrength.isTopThree) {
+        tags.push(`🧤 Nøkkelredninger mot topplag (#${oppStrength.rank})`);
+      }
+    } else if (oppShotsOnTarget >= 4 && saveRate < 0.30 && oppScore >= 3) {
+      savesImpact -= 0.35;
+    }
+  }
+
+  // 7. TAKLINGER & BLOKKERINGER (Tackles, Blocks, Defensive Stops & Opponent Strength Scaling)
+  if ((isDefender || isMidfielder) && match.status !== 'upcoming') {
+    const defMult = oppStrength.isTopThree ? 1.28 : oppStrength.multiplier;
+
+    // Tackles bonus
+    if (player.tackles !== undefined && player.tackles > 0) {
+      const perTackle = (isDefender ? 0.22 : 0.18) * defMult;
+      tackleImpact += Math.min(1.20, player.tackles * perTackle);
+      tags.push(oppStrength.isTopThree
+        ? `🛡️ ${player.tackles} nøkkeltaklinger mot topplag (#${oppStrength.rank})`
+        : `🛡️ ${player.tackles} vellykkede taklinger`);
+    } else {
+      // Grassroots duels and pressure containment from opposition territory and shots
+      if (oppPoss >= 52 || oppShotsOnTarget >= 4 || oppStrength.isTopThree) {
+        if (oppScore <= 1 || (teamScore >= oppScore && defendedTightLead)) {
+          tackleImpact += (isDefender ? 0.65 : 0.45) * defMult;
+          tags.push(isDefender
+            ? (oppStrength.isTopThree ? `🛡️ Stoppet angrepene til toppmotstander (#${oppStrength.rank})` : '🛡️ Solide taklinger og brudd under press')
+            : '💪 Duellstyrke og brudd på midtbanen');
+        } else if (oppScore <= 2 && result === 'W') {
+          tackleImpact += (isDefender ? 0.40 : 0.25) * defMult;
+        }
+      }
+    }
+
+    // Blocks (Blokkeringer) bonus
+    if (player.blocks !== undefined && player.blocks > 0) {
+      const perBlock = (isDefender ? 0.28 : 0.20) * defMult;
+      blockImpact += Math.min(1.10, player.blocks * perBlock);
+      tags.push(oppStrength.isTopThree
+        ? `🧱 ${player.blocks} heroiske blokkeringer mot topplag (#${oppStrength.rank})`
+        : `🧱 ${player.blocks} viktige blokkeringer`);
+    } else if (isDefender && (oppShotsOnTarget >= 4 || oppStrength.isTopThree) && oppScore <= 2) {
+      // Grassroots proxy for defenders holding the line against heavy shot volume
+      blockImpact += 0.30 * defMult;
+      if (oppStrength.isTopThree && !tags.some((t) => t.includes('Blokkerte'))) {
+        tags.push('🧱 Blokkerte farlige skudd i egen boks');
+      }
+    }
+  }
+
+  // 8. BALLBESITTELSE & SPILLKONTROLL (Possession & Game Control)
+  if (match.status !== 'upcoming') {
+    if (isMidfielder) {
+      if (teamPoss >= 55) {
+        possessionImpact += Math.min(0.50, parseFloat(((teamPoss - 50) * 0.035).toFixed(2)));
+        tags.push(`🧠 Dominerte banespillet (${teamPoss}% ballbesittelse)`);
+      } else if (teamPoss <= 42 && result === 'W') {
+        possessionImpact += 0.30;
+        tags.push('⚡ Effektiv og direkte i overgangsspillet');
+      }
+    } else if (isForward && teamPoss < 45 && realGoals > 0) {
+      // Counter-attack clinical efficiency
+      possessionImpact += 0.25;
+      tags.push('⚡ Klinisk på kontringer');
+    }
+  }
+
+  // 9. OPPONENT STRENGTH BONUS FOR POSITIVE RESULT AGAINST TOP TEAMS
+  if (oppStrength.isTopThree && match.status !== 'upcoming') {
+    if (result === 'W') {
+      opponentStrengthBonus += oppStrength.isLeader ? 0.40 : 0.28;
+      tags.push(`🏆 Skalperte topplaget (${oppStrength.tierLabel})`);
+    } else if (result === 'D') {
+      opponentStrengthBonus += 0.18;
+      tags.push(`⭐ Sterkt poeng mot ${oppStrength.tierLabel}`);
+    }
+  }
+
+  // 10. CARD DISCIPLINE & DEFENSIVE ERRORS (INCLUDING OWN GOALS)
   if (ownGoalsCount > 0) {
     // Scoring into one's own net completely cancels defensive bonuses
     cleanSheetBonus = 0;
     clutchBonus = 0;
     anchorBonus = 0;
+    savesImpact = Math.min(0, savesImpact);
+    tackleImpact = 0;
+    blockImpact = 0;
+    opponentStrengthBonus = 0;
 
     if (ownGoalsCount >= 2) {
       // 2 or more own goals is a historic nightmare disaster (cannot be anywhere near POTM)
@@ -301,7 +571,7 @@ export function calculatePlayerPerformanceRating(
     clutchBonus += 0.20;
   }
 
-  // 7. Micro-variance hash based on player name for realistic granularity
+  // 11. Micro-variance hash based on player name for realistic granularity
   const nameHash = player.playerName.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const microVariance = ((nameHash % 7) - 3) * 0.04;
 
@@ -312,6 +582,11 @@ export function calculatePlayerPerformanceRating(
     anchorBonus +
     goalImpact +
     assistImpact +
+    savesImpact +
+    tackleImpact +
+    blockImpact +
+    possessionImpact +
+    opponentStrengthBonus +
     disciplinePenalty +
     microVariance;
 
@@ -339,6 +614,11 @@ export function calculatePlayerPerformanceRating(
     anchorStabilization: anchorBonus > 0 ? parseFloat(anchorBonus.toFixed(2)) : undefined,
     goalImpact: goalImpact > 0 ? parseFloat(goalImpact.toFixed(2)) : undefined,
     assistImpact: assistImpact > 0 ? parseFloat(assistImpact.toFixed(2)) : undefined,
+    savesImpact: savesImpact !== 0 ? parseFloat(savesImpact.toFixed(2)) : undefined,
+    tackleImpact: tackleImpact > 0 ? parseFloat(tackleImpact.toFixed(2)) : undefined,
+    blockImpact: blockImpact > 0 ? parseFloat(blockImpact.toFixed(2)) : undefined,
+    possessionImpact: possessionImpact > 0 ? parseFloat(possessionImpact.toFixed(2)) : undefined,
+    opponentStrengthBonus: opponentStrengthBonus > 0 ? parseFloat(opponentStrengthBonus.toFixed(2)) : undefined,
     disciplinePenalty: disciplinePenalty !== 0 ? parseFloat(disciplinePenalty.toFixed(2)) : undefined,
     tags,
   };
@@ -380,6 +660,9 @@ export interface LeaderboardPlayerRating {
   trend?: 'up' | 'down' | 'same';
   ratingDiff?: number;
   jerseyNumber?: number;
+  lastMatchDate?: string;
+  latestRating?: number;
+  isLive?: boolean;
 }
 
 export interface OpponentNightmareRating {
@@ -417,7 +700,8 @@ export function isBonesClub(teamName?: string): boolean {
  */
 export function calculateClubRatingLeaderboards(
   matches: Match[],
-  players: Player[]
+  players: Player[],
+  tables?: DivisionTable[] | Record<string, DivisionTable>
 ): {
   bestPlayer: LeaderboardPlayerRating | null;
   formPlayer: LeaderboardPlayerRating | null;
@@ -426,11 +710,18 @@ export function calculateClubRatingLeaderboards(
   bonesNightmares: OpponentNightmareRating[];
   worstOpponent: OpponentNightmareRating | null;
 } {
-  const finishedMatches = (matches || [])
-    .filter((m) => m.status === 'finished')
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Include finished matches AND active live matches (where goals/events/ratings are live in real-time)
+  const activeMatches = (matches || [])
+    .filter((m) => m.status === 'finished' || m.status === 'live')
+    .sort((a, b) => {
+      if (a.status === 'live' && b.status !== 'live') return -1;
+      if (a.status !== 'live' && b.status === 'live') return 1;
+      const timeA = (a.date || '') + ' ' + (a.time || '12:00');
+      const timeB = (b.date || '') + ' ' + (b.time || '12:00');
+      return timeB.localeCompare(timeA);
+    });
 
-  if (finishedMatches.length === 0) {
+  if (activeMatches.length === 0) {
     return {
       bestPlayer: null,
       formPlayer: null,
@@ -460,7 +751,7 @@ export function calculateClubRatingLeaderboards(
       teamId: string;
       teamName: string;
       positions: PlayerPosition[];
-      ratings: { rating: number; date: string }[];
+      ratings: { rating: number; date: string; time?: string; isLive?: boolean }[];
       tags: string[];
       jerseyNumber?: number;
     }
@@ -476,7 +767,9 @@ export function calculateClubRatingLeaderboards(
     rating: number,
     date: string,
     tag?: string,
-    jerseyNum?: number
+    jerseyNum?: number,
+    time?: string,
+    isLive?: boolean
   ) => {
     const key = fiksId ? `fiks-${fiksId}` : name.trim().toLowerCase();
     if (!bonesStatsMap.has(key)) {
@@ -493,7 +786,7 @@ export function calculateClubRatingLeaderboards(
     }
     const entry = bonesStatsMap.get(key)!;
     entry.positions.push(pos);
-    entry.ratings.push({ rating, date });
+    entry.ratings.push({ rating, date, time, isLive: Boolean(isLive) });
     if (tag) entry.tags.push(tag);
     if (!entry.jerseyNumber && jerseyNum) entry.jerseyNumber = jerseyNum;
   };
@@ -517,8 +810,8 @@ export function calculateClubRatingLeaderboards(
     }
   >();
 
-  // Evaluate each finished match
-  for (const m of finishedMatches) {
+  // Evaluate each finished or live match
+  for (const m of activeMatches) {
     const isHomeBones = m.isHome || isBonesClub(m.homeTeam);
     const bonesTeamName = isHomeBones ? m.homeTeam : m.awayTeam;
     const oppTeamName = isHomeBones ? m.awayTeam : m.homeTeam;
@@ -537,16 +830,30 @@ export function calculateClubRatingLeaderboards(
       if (!lp.name) continue;
       const normName = lp.name.trim().toLowerCase();
       if (processedBonesInMatch.has(normName)) continue;
-      processedBonesInMatch.add(normName);
 
       // Verify that this player is NOT an opponent
       if (lp.teamName && !isBonesClub(lp.teamName) && !knownBonesPlayerNames.has(normName)) {
         continue;
       }
 
+      // Check events in match for this player
+      const pEvents = (m.events || []).filter(e => {
+        if (lp.fiksId && (e.fiksId === lp.fiksId || e.playerId === `fiks-${lp.fiksId}`)) return true;
+        return e.player && e.player.trim().toLowerCase() === normName;
+      });
+      const wasSubbedIn = (m.events || []).some(e => e.subInPlayer && e.subInPlayer.trim().toLowerCase() === normName);
+      const isOfficialMatch = Boolean(m.isOfficialFiks || m.homeLineup || m.awayLineup);
+
+      // Only evaluate players who actually took part in the match.
+      // Bench players in unverified squads who had 0 events and no sub-in event did NOT play!
+      if (!lp.isStarter && pEvents.length === 0 && !wasSubbedIn) {
+        continue;
+      }
+
+      processedBonesInMatch.add(normName);
+
       const matchPos = getPlayerPositionInMatch(lp.name, lp.fiksId, m, lp.position);
       // Strictly extract real goals and own goals from events
-      const pEvents = (m.events || []).filter(e => e.player && e.player.trim().toLowerCase() === normName);
       const ogCount = pEvents.filter(isOwnGoalEvent).length;
       const realGoalsCount = pEvents.length > 0
         ? pEvents.filter(e => e.type === 'goal' && !isOwnGoalEvent(e)).length
@@ -564,7 +871,8 @@ export function calculateClubRatingLeaderboards(
           yellowCards: lp.yellowCards,
           redCards: lp.redCards,
         },
-        m
+        m,
+        tables
       );
 
       const official = playerOfficialMap.get(normName);
@@ -578,7 +886,9 @@ export function calculateClubRatingLeaderboards(
         perf.rating,
         m.date,
         perf.summary,
-        lp.jerseyNumber || lp.number || official?.number
+        lp.jerseyNumber || lp.number || official?.number,
+        m.time,
+        m.status === 'live'
       );
     }
 
@@ -601,11 +911,15 @@ export function calculateClubRatingLeaderboards(
               playerName: ev.player,
               team: bonesTeamName,
               position: matchPos,
+              jerseyNumber: official?.jerseyNumber || official?.number,
               isStarter: false,
               goals: realGoalsCount,
               ownGoals: ogCount,
+              yellowCards: pEvents.filter(e => e.type === 'yellow_card').length,
+              redCards: pEvents.filter(e => e.type === 'red_card').length,
             },
-            m
+            m,
+            tables
           );
 
           addBonesRating(
@@ -617,7 +931,9 @@ export function calculateClubRatingLeaderboards(
             perf.rating,
             m.date,
             perf.summary,
-            official?.number
+            official?.number,
+            m.time,
+            m.status === 'live'
           );
         }
       }
@@ -796,15 +1112,24 @@ export function calculateClubRatingLeaderboards(
   bonesStatsMap.forEach((entry) => {
     if (entry.ratings.length === 0) return;
 
-    entry.ratings.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    // Sort ratings strictly by date/time descending, ensuring any live match is first
+    entry.ratings.sort((a, b) => {
+      if (a.isLive && !b.isLive) return -1;
+      if (!a.isLive && b.isLive) return 1;
+      const dateA = a.date + ' ' + (a.time || '12:00');
+      const dateB = b.date + ' ' + (b.time || '12:00');
+      return dateB.localeCompare(dateA);
+    });
 
     const totalRatings = entry.ratings.map((r) => r.rating);
     const seasonAvg =
       totalRatings.reduce((sum, r) => sum + r, 0) / totalRatings.length;
 
-    // Last 3 matches
+    // Last 3 matches (chronologically latest matches)
     const last3 = totalRatings.slice(0, 3);
     const last3Avg = last3.reduce((sum, r) => sum + r, 0) / last3.length;
+    const latestItem = entry.ratings[0];
+    const isCurrentlyLive = entry.ratings.some((r) => r.isLive);
 
     // Find most played position for this player
     const posCounts: Record<string, number> = {};
@@ -847,6 +1172,9 @@ export function calculateClubRatingLeaderboards(
       last3AvgRating: parseFloat(last3Avg.toFixed(2)),
       recentRatings: last3,
       highestRating: Math.max(...totalRatings),
+      lastMatchDate: latestItem?.date,
+      latestRating: latestItem?.rating,
+      isLive: isCurrentlyLive,
       primaryTag,
       trend,
       ratingDiff,
@@ -854,16 +1182,36 @@ export function calculateClubRatingLeaderboards(
     });
   });
 
-  // Sort for Beste Spiller: Prioritize players with >= 2 matches, descending by seasonAvgRating
+  // Sort for Beste Spiller: Prioritize players with >= 3 matches, rewarding high season average and match consistency
   const allSeasonRanked = [...compiled].sort((a, b) => {
-    const aWeighted = a.matches >= 2 ? a.seasonAvgRating : a.seasonAvgRating - 0.3;
-    const bWeighted = b.matches >= 2 ? b.seasonAvgRating : b.seasonAvgRating - 0.3;
-    return bWeighted - aWeighted || b.matches - a.matches;
+    const aMinPenalty = a.matches >= 3 ? 0 : a.matches === 2 ? 0.8 : 1.8;
+    const bMinPenalty = b.matches >= 3 ? 0 : b.matches === 2 ? 0.8 : 1.8;
+    const aVolumeBonus = Math.min(0.25, Math.max(0, (a.matches - 3) * 0.03));
+    const bVolumeBonus = Math.min(0.25, Math.max(0, (b.matches - 3) * 0.03));
+    const aScore = a.seasonAvgRating + aVolumeBonus - aMinPenalty;
+    const bScore = b.seasonAvgRating + bVolumeBonus - bMinPenalty;
+    return bScore - aScore || b.matches - a.matches;
   });
 
-  // Sort for Formspiller: Descending by last3AvgRating
+  // Reference date of latest match played in the club for temporal recency calculations
+  const referenceDateStr = activeMatches[0]?.date || '2026-09-27';
+  const referenceTime = new Date(referenceDateStr).getTime();
+
+  // Sort for Formspiller: Strictly sorted from highest to lowest by average rating in last 3 matches (last3AvgRating)
   const allFormRanked = [...compiled].sort((a, b) => {
-    return b.last3AvgRating - a.last3AvgRating || b.matches - a.matches;
+    // 1. Strict descending order by last3AvgRating (from highest to lowest value)
+    const formDiff = (Number(b.last3AvgRating) || 0) - (Number(a.last3AvgRating) || 0);
+    if (Math.abs(formDiff) >= 0.0001) return formDiff;
+
+    // 2. Live match priority for equal form
+    if (a.isLive && !b.isLive) return -1;
+    if (!a.isLive && b.isLive) return 1;
+
+    // 3. Tie-breakers: season average rating, then total matches
+    const seasonDiff = (Number(b.seasonAvgRating) || 0) - (Number(a.seasonAvgRating) || 0);
+    if (Math.abs(seasonDiff) >= 0.0001) return seasonDiff;
+
+    return b.matches - a.matches;
   });
 
   // Sort Bønes-mareritt: Highest rating against Bønes, then total goals scored against Bønes
@@ -906,7 +1254,8 @@ export function calculateClubRatingLeaderboards(
 
 export function calculateBonesNightmaresLeaderboard(
   matches: Match[],
-  players: Player[]
+  players: Player[],
+  tables?: DivisionTable[] | Record<string, DivisionTable>
 ): OpponentNightmareRating[] {
-  return calculateClubRatingLeaderboards(matches, players).bonesNightmares;
+  return calculateClubRatingLeaderboards(matches, players, tables).bonesNightmares;
 }

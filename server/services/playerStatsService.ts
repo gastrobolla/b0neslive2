@@ -78,6 +78,7 @@ export interface OfficialNffPlayerStats {
 }
 
 const CACHE_FILE = path.join(process.cwd(), 'data', 'official_nff_player_stats.json');
+const SRC_CACHE_FILE = path.join(process.cwd(), 'src', 'data', 'officialNffPlayerStats.json');
 
 // Map NFF team IDs to our internal team IDs
 const NFF_TEAM_TO_INTERNAL: Record<number, { teamId: string; name: string }> = {
@@ -124,6 +125,10 @@ function saveCache(cache: Record<number, OfficialNffPlayerStats>) {
     const dir = path.dirname(CACHE_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2), 'utf8');
+
+    const srcDir = path.dirname(SRC_CACHE_FILE);
+    if (!fs.existsSync(srcDir)) fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(SRC_CACHE_FILE, JSON.stringify(cache, null, 2), 'utf8');
   } catch (err) {
     console.warn('[PlayerStatsService] Failed to write cache file:', (err as Error).message);
   }

@@ -508,7 +508,7 @@ export function buildMatchFeed(matches: Match[], limit: number = 40): FeedItem[]
           teamId: match.teamId,
           teamName: match.teamName,
           title: `Sluttresultat: ${match.homeTeam} ${match.homeScore ?? 0} - ${match.awayScore ?? 0} ${match.awayTeam}`,
-          description: `Kampen er ferdigspilt. Banens Beste ble kåret til ${winner.playerName} (${(winner.algoRating ?? (winner as any).rating ?? 0).toFixed(1)} ★) med ${winner.votes || 0} stemmer.`,
+          description: `Kampen er ferdigspilt. Banens Beste ble kåret til ${winner.playerName}${winner.algoRating !== undefined ? ` (${winner.algoRating.toFixed(1)} ★)` : ''} med ${winner.votes || 0} stemmer.`,
           badgeText: 'Banens Beste',
           isHomeMatch: match.isHome,
           venue: match.venue,
@@ -527,7 +527,7 @@ export function buildMatchFeed(matches: Match[], limit: number = 40): FeedItem[]
           },
           impact: {
             type: 'potm',
-            detail: `Banens Beste: ${winner.playerName} (★ ${(winner.algoRating ?? (winner as any).rating ?? 0).toFixed(1)})`
+            detail: `Banens Beste: ${winner.playerName}${winner.algoRating !== undefined ? ` (★ ${winner.algoRating.toFixed(1)})` : ''}`
           }
         });
       }

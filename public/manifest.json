@@ -1,0 +1,56 @@
+{
+  "id": "/",
+  "name": "Bønes IL Fotball Live",
+  "short_name": "Bønes Live",
+  "description": "Sofascore for alle Bønes IL sine 16 fotballag med livescore, lagoppstillinger, kampstatistikk, tabeller og toppscorere.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#165094",
+  "categories": ["sports", "utilities"],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Kamper & Livescore",
+      "short_name": "Kamper",
+      "description": "Se aktive kamper og resultater",
+      "url": "/?tab=livescore",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Serietabeller",
+      "short_name": "Tabell",
+      "description": "Se serietabeller for Bønes IL",
+      "url": "/?tab=tables",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Toppscorere",
+      "short_name": "Scorere",
+      "description": "Bønes IL toppscorerbørs",
+      "url": "/?tab=scorers",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}

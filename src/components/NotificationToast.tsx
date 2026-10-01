@@ -26,7 +26,7 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
   const isGoal = notification.type === 'goal';
 
   return (
-    <div className="fixed top-4 right-4 z-50 max-w-md w-full animate-in fade-in slide-in-from-top-4 duration-300 px-3">
+    <div className="fixed top-4 right-4 z-[100] max-w-md w-full animate-in fade-in slide-in-from-top-4 duration-300 px-3">
       <div
         className={`rounded-2xl p-4 shadow-2xl border flex items-start gap-3 backdrop-blur-md cursor-pointer transition-transform hover:scale-[1.01] ${
           isGoal

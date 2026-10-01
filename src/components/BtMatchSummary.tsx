@@ -49,10 +49,10 @@ export const BtMatchSummary: React.FC<BtMatchSummaryProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
 
-  const isBonesHome = match.homeTeam.toLowerCase().includes('bønes');
-  const isBonesAway = match.awayTeam.toLowerCase().includes('bønes');
-  const opponent = isBonesHome ? match.awayTeam : match.homeTeam;
-  const bonesTeamName = match.teamName || (isBonesHome ? match.homeTeam : match.awayTeam);
+  const isBonesHome = (match.homeTeam || '').toLowerCase().includes('bønes');
+  const isBonesAway = (match.awayTeam || '').toLowerCase().includes('bønes');
+  const opponent = isBonesHome ? (match.awayTeam || 'Motstander') : (match.homeTeam || 'Motstander');
+  const bonesTeamName = match.teamName || (isBonesHome ? match.homeTeam : match.awayTeam) || 'Bønes IL';
 
   const homeScore = match.homeScore ?? 0;
   const awayScore = match.awayScore ?? 0;
@@ -69,7 +69,7 @@ export const BtMatchSummary: React.FC<BtMatchSummaryProps> = ({
   const goalDiff = Math.abs(bonesScore - oppScore);
 
   // Extract goal and card events
-  const goalEvents = events.filter((e) => e.type === 'goal').sort((a, b) => a.minute - b.minute);
+  const goalEvents = events.filter((e) => e.type === 'goal').sort((a, b) => (a.minute || 0) - (b.minute || 0));
   const cardEvents = events.filter((e) => e.type === 'yellow_card' || e.type === 'red_card');
   const yellowCards = events.filter((e) => e.type === 'yellow_card');
   const redCards = events.filter((e) => e.type === 'red_card');

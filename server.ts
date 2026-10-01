@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
-import { BonesClubData, ScanLog, MatchEvent, FeedItem, Match, LaglederReportRequest, TopScorer, CardStatistic, MatchStatus } from './src/types.js';
+import { BonesClubData, ScanLog, MatchEvent, FeedItem, Match, LaglederReportRequest, TopScorer, CardStatistic, MatchStatus, Player } from './src/types.js';
 import { runFullClubScrape, BONES_16_TEAMS, scrapeMatchEvents, scrapeMatchLineup, enrichMatchResultFromFiks } from './server/bonesScraper.js';
 import { loadPersistedData, savePersistedData, upsertMatches, queryMatches } from './server/storage.js';
 import { ALL_BONES_SQUADS, ALL_BONES_PLAYERS, getSquadForTeam, getMatchLineup } from './src/data/bonesSquads.js';
@@ -25,11 +25,127 @@ app.use(express.json());
 
 // Load persistent database from disk (survives container restarts)
 let currentData: BonesClubData = loadPersistedData();
-if (!currentData.players || currentData.players.length === 0) {
-  currentData.players = ALL_BONES_PLAYERS;
+const authSquadPlayerMap = new Map(ALL_BONES_PLAYERS.map(p => [p.name.trim().toLowerCase(), p]));
+
+// Function to authoritatively enrich squad players with official NFF statistics and match events
+function enrichClubPlayersWithStats(players: Player[], matches: Match[]): Player[] {
+  const cachedOfficial = getAllCachedPlayerStats();
+  const playerMap = new Map<string, Player>();
+
+  for (const p of players) {
+    let matchesCount = p.matches || 0;
+    let goalsCount = p.goals || 0;
+    let yellowCount = p.yellowCards || 0;
+    let redCount = p.redCards || 0;
+
+    const fiksId = p.fiksId || (p.id?.startsWith('fiks-') ? parseInt(p.id.replace('fiks-', ''), 10) : undefined);
+    const official = fiksId ? cachedOfficial[String(fiksId)] : undefined;
+
+    if (official && official.season2026) {
+      const teamStat = official.season2026.teams?.find(t => t.teamId === p.teamId);
+      if (teamStat) {
+        matchesCount = Math.max(matchesCount, teamStat.matches);
+        goalsCount = Math.max(goalsCount, teamStat.goals);
+        yellowCount = Math.max(yellowCount, teamStat.yellowCards);
+        redCount = Math.max(redCount, teamStat.redCards);
+      } else if (official.season2026.teams?.length === 1) {
+        const onlyTeam = official.season2026.teams[0];
+        matchesCount = Math.max(matchesCount, onlyTeam.matches);
+        goalsCount = Math.max(goalsCount, onlyTeam.goals);
+        yellowCount = Math.max(yellowCount, onlyTeam.yellowCards);
+        redCount = Math.max(redCount, onlyTeam.redCards);
+      }
+    }
+
+    const key = `${p.fiksId || p.id || p.name}_${p.teamId}`;
+    playerMap.set(key, {
+      ...p,
+      matches: matchesCount,
+      goals: goalsCount,
+      yellowCards: yellowCount,
+      redCards: redCount,
+    });
+  }
+
+  // Scan finished & live matches for newly finished matches
+  const processedMatches = new Set<string>();
+  for (const m of matches || []) {
+    if (m.status !== 'finished' && (m.status as string) !== 'live') continue;
+
+    const matchFiksId = m.fiksId || (m.id ? parseInt(m.id.replace('nff-', ''), 10) : undefined);
+    const matchLineup = [
+      ...(m.lineup?.starters || []),
+      ...(m.lineup?.bench || []),
+      ...(m.lineup?.subs || []),
+      ...(m.homeLineup?.starters || []),
+      ...(m.homeLineup?.bench || []),
+      ...(m.homeLineup?.subs || []),
+      ...(m.awayLineup?.starters || []),
+      ...(m.awayLineup?.bench || []),
+      ...(m.awayLineup?.subs || []),
+    ];
+    const potmCandidates = m.playerOfTheMatch?.candidates || [];
+    const bonesEvents = (m.events || []).filter(e => {
+      const pName = (e.player || '').trim();
+      return pName && !pName.toLowerCase().includes('personinfo');
+    });
+
+    for (const [, p] of playerMap.entries()) {
+      if (p.teamId !== m.teamId) continue;
+      const pmKey = `${p.id || p.name}_${m.id}`;
+      if (processedMatches.has(pmKey)) continue;
+
+      const inLineup = matchLineup.some(lp =>
+        (p.fiksId && lp.fiksId === p.fiksId) ||
+        (lp.name && lp.name.trim().toLowerCase() === p.name.trim().toLowerCase())
+      );
+      const inPotm = potmCandidates.some(c =>
+        (p.fiksId && c.fiksId === p.fiksId) ||
+        (c.playerName && c.playerName.trim().toLowerCase() === p.name.trim().toLowerCase())
+      );
+      const inEvents = bonesEvents.some(e =>
+        (p.fiksId && e.fiksId === p.fiksId) ||
+        (e.player && e.player.trim().toLowerCase() === p.name.trim().toLowerCase())
+      );
+
+      if (inLineup || inPotm || inEvents) {
+        processedMatches.add(pmKey);
+        const official = p.fiksId ? cachedOfficial[String(p.fiksId)] : undefined;
+        let isOfficialBaselineMatch = false;
+        if (official && official.season2026) {
+          const hasOfficialMatchList = Array.isArray(official.matches2026) && official.matches2026.length > 0;
+          if (hasOfficialMatchList) {
+            isOfficialBaselineMatch = Boolean(
+              matchFiksId &&
+              official.matches2026!.some(om => om.matchFiksId === matchFiksId)
+            );
+          } else {
+            const cutoff = official.lastUpdated ? official.lastUpdated.slice(0, 10) : '2026-09-20';
+            isOfficialBaselineMatch = m.date <= cutoff;
+          }
+        }
+
+        if (!isOfficialBaselineMatch) {
+          p.matches += 1;
+          const playerEvents = bonesEvents.filter(e =>
+            (p.fiksId && e.fiksId === p.fiksId) ||
+            (e.player && e.player.trim().toLowerCase() === p.name.trim().toLowerCase())
+          );
+          p.goals += playerEvents.filter(e => e.type === 'goal').length;
+          p.yellowCards += playerEvents.filter(e => e.type === 'yellow_card').length;
+          p.redCards += playerEvents.filter(e => e.type === 'red_card').length;
+        }
+      }
+    }
+  }
+
+  return Array.from(playerMap.values());
 }
+
+currentData.players = enrichClubPlayersWithStats(ALL_BONES_PLAYERS, currentData.matches);
+
 for (const m of currentData.matches) {
-  if (m.id === 'nff-9183579' || m.status === 'live') {
+  if (m.id === 'nff-9183579') {
     m.status = 'finished';
     if (m.homeScore === undefined || m.homeScore === null) m.homeScore = 0;
     if (m.awayScore === undefined || m.awayScore === null) m.awayScore = 1;
@@ -41,6 +157,25 @@ for (const m of currentData.matches) {
   }
   if (!m.lineup) {
     m.lineup = getMatchLineup(m.teamId);
+  } else {
+    if (m.lineup.starters) {
+      for (const p of m.lineup.starters) {
+        const auth = authSquadPlayerMap.get(p.name?.trim().toLowerCase());
+        if (auth) {
+          p.position = auth.position;
+          p.jerseyNumber = auth.jerseyNumber || p.jerseyNumber;
+        }
+      }
+    }
+    if (m.lineup.bench) {
+      for (const p of m.lineup.bench) {
+        const auth = authSquadPlayerMap.get(p.name?.trim().toLowerCase());
+        if (auth) {
+          p.position = auth.position;
+          p.jerseyNumber = auth.jerseyNumber || p.jerseyNumber;
+        }
+      }
+    }
   }
 
   const hasOwnGoal = (m.events || []).some(isOwnGoalEvent);
@@ -234,6 +369,68 @@ function addScanLog(level: 'info' | 'success' | 'update' | 'warning', source: st
   }
 }
 
+/**
+ * Standard NFF FIKS Match Lineup Synchronizer.
+ * Standard protocol:
+ * 1. Automatically triggers 15 minutes before kickoff (when official team sheets are submitted to FIKS).
+ * 2. If sync fails or official team sheet is not ready yet at -15 min, retries automatically at kickoff (kampstart) and during match.
+ * 3. Scrapes official starters and substitutes from fotball.no.
+ * 4. Recalculates POTM and player ratings strictly for verified participants, assigning NO rating to unused reserves or upcoming matches.
+ */
+async function syncFiksMatchLineup(
+  match: Match,
+  timing: '15min' | 'kickoff' | 'retry' | 'manual' = 'manual'
+): Promise<{ success: boolean; isOfficialFiks: boolean; message: string }> {
+  try {
+    const scraped = await scrapeMatchLineup(match);
+    if (!scraped) {
+      if (timing === '15min') {
+        match.fiksSyncFailedAt15 = true;
+        match.fiksSyncAttempted = '15min';
+        addScanLog('warning', 'FIKS Synk (15 min)', `Ingen offisiell kamptropp for ${match.homeTeam} vs ${match.awayTeam} 15 min før kamp. Planlegger ny synk ved kampstart.`);
+      }
+      return {
+        success: false,
+        isOfficialFiks: false,
+        message: timing === '15min'
+          ? 'Ingen offisiell tropp i FIKS 15 min før kamp. Ny synk tas ved kampstart.'
+          : 'Fant ingen offisielle kamptropper hos fotball.no ennå.'
+      };
+    }
+
+    match.homeLineup = scraped.homeLineup;
+    match.awayLineup = scraped.awayLineup;
+    match.lineup = scraped.bonesLineup || scraped.homeLineup;
+    match.isOfficialFiks = true;
+    match.fiksSyncFailedAt15 = false;
+    match.fiksSyncAttempted = timing;
+    match.fiksSyncedAt = timing === '15min'
+      ? 'Synkronisert 15 min før avspark'
+      : timing === 'kickoff'
+      ? 'Synkronisert ved kampstart (retry)'
+      : 'Offisielt synkronisert fra NFF FIKS';
+    match.lastUpdatedAt = new Date().toLocaleTimeString('no-NO', { hour: '2-digit', minute: '2-digit' });
+
+    // Recalculate POTM strictly for active players (unused reserves get NO rating)
+    match.playerOfTheMatch = calculateMatchPOTM(match);
+
+    savePersistedData(currentData);
+    addScanLog('success', 'NFF FIKS Synk', `${match.fiksSyncedAt}: Hentet offisiell kamptropp for ${match.homeTeam} vs ${match.awayTeam}`);
+
+    return {
+      success: true,
+      isOfficialFiks: true,
+      message: `${match.fiksSyncedAt}: Offisiell lagoppstilling og kamptropp oppdatert!`
+    };
+  } catch (err: any) {
+    if (timing === '15min') {
+      match.fiksSyncFailedAt15 = true;
+      match.fiksSyncAttempted = '15min';
+    }
+    return { success: false, isOfficialFiks: false, message: err.message };
+  }
+}
+
 // Real scanner cycle - strictly checks actual match windows and NFF without fabricated simulation
 async function runScannerCycle(manual: boolean = false): Promise<void> {
   const now = new Date();
@@ -262,6 +459,35 @@ async function runScannerCycle(manual: boolean = false): Promise<void> {
       } catch (err: any) {
         console.warn(`[MatchWindow] Could not scrape events for ${match.id}:`, err.message);
       }
+    }
+  }
+
+  // Automatic NFF FIKS Lineup Synchronizer:
+  // Standard: 15 min before kickoff. If it fails, retry at kickoff.
+  const todayStr = now.toISOString().split('T')[0];
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  for (const match of currentData.matches) {
+    if (match.date === todayStr && match.status !== 'finished') {
+      const parts = (match.time || '18:00').split(':').map(Number);
+      if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        const matchMinutes = parts[0] * 60 + parts[1];
+        const minutesUntilKickoff = matchMinutes - currentMinutes;
+
+        // 1. 15-minute pre-match FIKS sync
+        if (minutesUntilKickoff <= 16 && minutesUntilKickoff >= 2 && !match.isOfficialFiks && match.fiksSyncAttempted !== '15min') {
+          syncFiksMatchLineup(match, '15min');
+        }
+
+        // 2. Kickoff retry sync if 15-min sync failed or tropp was not ready yet
+        if (minutesUntilKickoff <= 1 && minutesUntilKickoff >= -15 && !match.isOfficialFiks && match.fiksSyncAttempted !== 'kickoff') {
+          syncFiksMatchLineup(match, 'kickoff');
+        }
+      }
+    } else if (match.status === 'finished' && !match.isOfficialFiks && !match.fiksSyncAttempted && match.fiksId) {
+      // 3. Finished matches with FIKS ID lacking official lineup: attempt official tropp sync
+      match.fiksSyncAttempted = 'retry';
+      syncFiksMatchLineup(match, 'retry').catch(() => {});
     }
   }
 
@@ -318,6 +544,9 @@ setInterval(async () => {
 
 // 1. Full data retrieval
 app.get(['/api/bones/data', '/api/bones/data/'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   if (currentData.matches && currentData.matches.length > 0) {
     rebuildScorersAndCardsFromEvents(currentData.matches);
   }
@@ -866,6 +1095,11 @@ app.post(['/api/bones/match/:matchId/report', '/api/lagleder/report'], async (re
     if (matchIdx !== -1) {
       currentData.matches[matchIdx] = result.match;
     }
+    // Dynamically re-calculate player stats and leaderboards immediately
+    currentData.players = enrichClubPlayersWithStats(ALL_BONES_PLAYERS, currentData.matches);
+    currentData.topScorers = calculateTopScorers(currentData.matches, currentData.players, { bonesOnly: true });
+    currentData.cards = calculateCardStatistics(currentData.matches, currentData.players, { bonesOnly: true });
+    currentData.dataVersion = (currentData.dataVersion || 1) + 1;
     savePersistedData(currentData);
 
     addScanLog(
@@ -1215,8 +1449,43 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+
+    // PWA Service Worker route: always check server for fresh updates
+    app.get(['/sw.js', '/service-worker.js'], (req, res) => {
+      res.setHeader('Content-Type', 'application/javascript');
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      const swFilePath = path.join(process.cwd(), 'public', 'service-worker.js');
+      res.sendFile(swFilePath);
+    });
+
+    // PWA Web App Manifest
+    app.get('/manifest.json', (req, res) => {
+      res.setHeader('Content-Type', 'application/manifest+json');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(path.join(process.cwd(), 'public', 'manifest.json'));
+    });
+
+    // Hashed assets from Vite build can be cached long-term
+    app.use('/assets', express.static(path.join(distPath, 'assets'), {
+      maxAge: '1y',
+      immutable: true,
+    }));
+    // Static root files (HTML, icons, manifests): no-cache on HTML to ensure updates load immediately on publish
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html') || filePath.endsWith('.json') || filePath.endsWith('.js')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+          res.setHeader('Surrogate-Control', 'no-store');
+        }
+      }
+    }));
     app.get('*', (req, res) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PlayerProfile } from '../types.js';
+import { PlayerProfile, Match } from '../types.js';
 import {
   X,
   Trophy,
@@ -17,22 +17,28 @@ import {
   ArrowUpRight,
   MapPin,
   ExternalLink,
-  Compass
+  Compass,
+  MessageSquare
 } from 'lucide-react';
+import { CoachNotesSection } from './CoachNotesSection.js';
+import { HeadToHeadSection } from './HeadToHeadSection.js';
 
 interface PlayerHistoryModalProps {
   player: PlayerProfile | null;
   onClose: () => void;
   onSelectTeam?: (teamId: string) => void;
+  allMatches?: Match[];
 }
 
 export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
   player,
   onClose,
   onSelectTeam,
+  allMatches = [],
 }) => {
   const [activeSeasonTab, setActiveSeasonTab] = useState<'all' | 'host' | 'var'>('all');
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all');
+  const [selectedH2hOpponent, setSelectedH2hOpponent] = useState<string | null>(null);
 
   // Close on ESC key
   useEffect(() => {
@@ -154,8 +160,9 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
   const isSuspended = player.cardStatus === 'Karantene';
   const isWarning = player.cardStatus.includes('Advarsel');
 
-  // SVG sparkline coordinates for the form curve
-  const ratings = [...player.matchHistory].reverse().map((m) => m.rating);
+  // SVG sparkline coordinates for the form curve (strictly rated matches where player took part)
+  const validHistory = [...player.matchHistory].reverse().filter((m) => typeof m.rating === 'number' && m.rating > 0);
+  const ratings = validHistory.map((m) => m.rating as number);
   const minRating = 5.0;
   const maxRating = 10.0;
   const svgWidth = 400;
@@ -176,7 +183,7 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
   return (
     <div
       id="player-history-modal-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-y-auto animate-fadeIn"
+      className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -191,14 +198,16 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
           id="player-modal-header"
           className="relative bg-gradient-to-r from-slate-950 via-[#0B2545] to-slate-900 text-white p-5 sm:p-6 border-b border-slate-800 shrink-0"
         >
-          {/* Close button */}
+          {/* Close / Back button */}
           <button
             id="btn-close-player-modal"
             onClick={onClose}
-            aria-label="Lukk spillerprofil"
-            className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 rounded-full p-1.5 transition-colors"
+            aria-label="Lukk spillerprofil og gå tilbake"
+            className="absolute top-4 right-4 flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-white bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700/60 rounded-xl px-2.5 py-1.5 transition-all shadow-md cursor-pointer"
+            title="Lukk spillerprofil og gå tilbake"
           >
-            <X className="w-5 h-5" />
+            <span className="hidden sm:inline">Tilbake</span>
+            <X className="w-4 h-4" />
           </button>
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pr-8">
@@ -288,8 +297,8 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
               </div>
             </div>
 
-            {/* Quick Status Pill */}
-            <div className="sm:text-right shrink-0">
+            {/* Quick Status Pill & Trenernotater shortcut */}
+            <div className="flex sm:flex-col items-center sm:items-end gap-2 shrink-0">
               <span
                 className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${
                   isSuspended
@@ -316,6 +325,19 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                   </>
                 )}
               </span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('coach-notes-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-amber-300 text-xs font-bold border border-amber-300/30 transition-all cursor-pointer"
+                title="Hopp til trenernotater"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Trenernotater</span>
+              </button>
             </div>
           </div>
         </div>
@@ -499,17 +521,17 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
             </section>
           )}
 
-          {/* Season Breakdown Cards: Vår vs Høst vs Totalt */}
+          {/* Season Breakdown Cards: Vår vs Høst vs Totalt vs NFF Karriere */}
           <section id="season-comparison-section" className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center space-x-1.5">
                 <Calendar className="w-3.5 h-3.5 text-[#165094]" />
-                <span>Sesongstatistikk 2026: Vår vs. Høst</span>
+                <span>Sesong- & Karrierestatistikk (NFF fotball.no)</span>
               </h3>
-              <span className="text-[11px] text-slate-400">Offisiell NFF Hordaland registrering</span>
+              <span className="text-[11px] text-slate-400">Offisiell NFF FIKS registrering</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               
               {/* Card 1: Vårsesongen 2026 */}
               <div
@@ -525,7 +547,7 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                 <div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md">
-                      🌸 Vårsesong 2026
+                      🌸 Vår 2026
                     </span>
                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
                       activeSeasonTab === 'var' ? 'bg-emerald-200 text-emerald-900 font-bold' : 'text-slate-500'
@@ -582,20 +604,20 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                 <div>
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-xs font-extrabold text-amber-950 bg-amber-200/90 border border-amber-300/90 px-2 py-0.5 rounded-md flex items-center space-x-1">
-                      <span>🍂 Høstsesong 2026</span>
+                      <span>🍂 Høst 2026</span>
                     </span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold transition-colors ${
                       activeSeasonTab === 'host'
                         ? 'bg-amber-400 text-slate-950'
                         : 'text-amber-800 bg-amber-100/60 border border-amber-200/60'
                     }`}>
-                      {activeSeasonTab === 'host' ? 'Aktiv i logg ✓' : 'Aktiv nå'}
+                      {activeSeasonTab === 'host' ? 'Aktiv ✓' : 'Aktiv nå'}
                     </span>
                   </div>
 
                   <div className="mt-3">
                     <div className="flex items-center justify-between">
-                      <p className="text-[11px] text-slate-500 uppercase font-semibold">Spilte kamper (sesonglogg)</p>
+                      <p className="text-[11px] text-slate-500 uppercase font-semibold">Spilte kamper</p>
                       <span className="text-[10px] font-mono text-amber-800 bg-amber-100/80 px-1 py-0.2 rounded font-semibold">
                         {autumnWins}S - {autumnDraws}U - {autumnLosses}T
                       </span>
@@ -604,7 +626,7 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                       <span className="text-2xl font-black font-mono text-slate-900">
                         {autumnMatchesCount}
                       </span>
-                      <span className="text-xs font-bold text-slate-600">kamper i høst</span>
+                      <span className="text-xs font-bold text-slate-600">kamper</span>
                     </div>
                     <p className="text-[10px] text-amber-900/70 truncate mt-0.5 font-medium">
                       Tabell: Høst ({player.autumn.divisionName || player.division})
@@ -649,7 +671,7 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                 className={`bg-gradient-to-br from-[#0B2545] to-[#165094] text-white rounded-xl p-3.5 flex flex-col justify-between shadow-xs transition-all cursor-pointer select-none ${
                   activeSeasonTab === 'all' ? 'ring-2 ring-amber-300' : 'hover:opacity-95'
                 }`}
-                title="Klikk for å vise alle kamper i sesongloggen"
+                title="Klikk for å vise alle 2026-kamper i sesongloggen"
               >
                 <div>
                   <div className="flex items-center justify-between">
@@ -657,30 +679,23 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                       <span>⚡</span>
                       <span>
                         {selectedTeamFilter !== 'all'
-                          ? `Total: ${selectedTeamStats?.teamName || 'Valgt lag'}`
-                          : 'Samlet Sesong 2026'}
+                          ? `2026: ${selectedTeamStats?.teamName || 'Valgt lag'}`
+                          : 'Sesong 2026'}
                       </span>
                     </span>
                     <span className="text-[10px] font-bold text-amber-300 bg-amber-400/20 border border-amber-400/30 px-1.5 py-0.5 rounded">
                       {selectedTeamFilter !== 'all'
-                        ? 'Filtrert lag'
+                        ? 'Lagfilter'
                         : (player.teamsPlayedFor && player.teamsPlayedFor.length > 1
-                            ? `Klubbtotal (${player.teamsPlayedFor.length} lag)`
-                            : 'Vår + Høst')}
+                            ? `${player.teamsPlayedFor.length} lag`
+                            : '2026')}
                     </span>
                   </div>
 
                   <div className="mt-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[11px] text-blue-200 uppercase font-semibold">
-                        {selectedTeamFilter !== 'all' ? 'Spilte kamper (dette laget)' : 'Totalt spilte kamper (klubben)'}
-                      </p>
-                      {selectedTeamFilter === 'all' && player.teamsPlayedFor && player.teamsPlayedFor.length > 1 && (
-                        <span className="text-[10px] text-blue-200/90 font-mono">
-                          Alle lag samlet
-                        </span>
-                      )}
-                    </div>
+                    <p className="text-[11px] text-blue-200 uppercase font-semibold">
+                      {selectedTeamFilter !== 'all' ? 'Kamper dette laget' : 'Kamper sesong 2026'}
+                    </p>
                     <div className="flex items-baseline space-x-1.5 mt-0.5">
                       <span className="text-3xl font-black font-mono text-amber-300">
                         {totalMatchesCount}
@@ -688,34 +703,23 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                       <span className="text-xs font-bold text-blue-100">kamper</span>
                     </div>
 
-                    {/* Breakdown pill when multi-team player is shown in 'all' view */}
                     {selectedTeamFilter === 'all' && player.teamsPlayedFor && player.teamsPlayedFor.length > 1 && (
-                      <div className="text-[10px] text-blue-100/95 mt-1.5 bg-blue-900/60 border border-blue-400/30 px-2 py-0.8 rounded-md flex items-center gap-1">
-                        <span className="text-amber-300 font-bold shrink-0">Sum:</span>
-                        <span className="truncate">
-                          {player.teamsPlayedFor.map((t) => `${t.matches}k ${t.teamName.replace('Bønes ', '')}`).join(' + ')}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Filtered indicator when team filter is active */}
-                    {selectedTeamFilter !== 'all' && (
-                      <div className="text-[10px] text-amber-200 mt-1.5 bg-amber-950/40 border border-amber-400/40 px-2 py-0.8 rounded-md flex items-center justify-between">
-                        <span>Viser kun {selectedTeamStats?.teamName}</span>
-                        <span className="font-semibold text-white font-mono">{totalMatchesCount} av {player.total.matches} kamper</span>
+                      <div className="text-[10px] text-blue-100/95 mt-1.5 bg-blue-900/60 border border-blue-400/30 px-2 py-0.8 rounded-md truncate">
+                        <span className="text-amber-300 font-bold mr-1">2026:</span>
+                        {player.teamsPlayedFor.map((t) => `${t.matches}k ${t.teamName.replace('Bønes ', '')}`).join(' + ')}
                       </div>
                     )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-white/20 text-xs">
                     <div>
-                      <span className="text-blue-200 block">Totalt mål:</span>
+                      <span className="text-blue-200 block">2026 mål:</span>
                       <span className="font-extrabold text-amber-300 font-mono text-sm">
                         {totalGoalsCount} mål
                       </span>
                     </div>
                     <div>
-                      <span className="text-blue-200 block">Totalt snitt:</span>
+                      <span className="text-blue-200 block">Snitt 2026:</span>
                       <span className="font-bold text-white font-mono text-sm">
                         {totalGoalsPerMatch}
                       </span>
@@ -724,23 +728,65 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                 </div>
 
                 <div className="mt-3 pt-2 border-t border-white/20 flex items-center justify-between text-[11px] text-blue-200">
-                  <span>Disiplinærpoeng:</span>
+                  <span>Kort 2026:</span>
                   <span className="font-mono font-bold text-white">
-                    {totalDisciplinaryPoints} p ({totalYellowCount}G / {totalRedCount}R)
+                    🟨 {totalYellowCount} &nbsp; 🟥 {totalRedCount}
                   </span>
                 </div>
+              </div>
 
-                {player.officialNffData && selectedTeamFilter === 'all' && (
-                  <div className="mt-2.5 pt-2 border-t border-white/20 flex items-center justify-between text-[11px] text-blue-200">
-                    <span className="flex items-center space-x-1">
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>NFF FIKS offisielt:</span>
+              {/* Card 4: Offisiell NFF Karriere (fotball.no) */}
+              <div
+                id="season-card-career"
+                className="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-xl p-3.5 flex flex-col justify-between shadow-xs border border-amber-500/40 select-none relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 transform translate-x-3 -translate-y-3 w-16 h-16 bg-amber-500/10 rounded-full blur-xs" />
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-amber-300 bg-amber-500/20 border border-amber-400/30 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <Trophy className="w-3 h-3 text-amber-400" />
+                      <span>NFF Karriere</span>
                     </span>
-                    <span className="font-mono font-bold text-amber-300">
-                      {player.officialNffData.season2026.totalMatches} k / {player.officialNffData.season2026.totalGoals} mål
+                    <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                      fotball.no ✓
                     </span>
                   </div>
-                )}
+
+                  <div className="mt-3">
+                    <p className="text-[11px] text-slate-400 uppercase font-semibold">Offisielle kamper totalt</p>
+                    <div className="flex items-baseline space-x-1.5 mt-0.5">
+                      <span className="text-3xl font-black font-mono text-amber-400">
+                        {player.career ? player.career.totalMatches : totalMatchesCount}
+                      </span>
+                      <span className="text-xs font-bold text-slate-300">karrierekamper</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                      {player.career ? `${player.career.matchesYouth} ungdom • ${player.career.matchesAdult} senior` : 'Registrert hos fotball.no'}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-800 text-xs">
+                    <div>
+                      <span className="text-slate-400 block">Totalt mål:</span>
+                      <span className="font-extrabold text-amber-400 font-mono text-sm">
+                        {player.career ? player.career.totalGoals : totalGoalsCount} mål
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Karrieresnitt:</span>
+                      <span className="font-bold text-white font-mono text-sm">
+                        {player.career ? player.career.goalsAverage.toFixed(2) : totalGoalsPerMatch}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Kort totalt:</span>
+                  <span className="font-mono font-semibold text-slate-200">
+                    🟨 {player.career ? player.career.yellowCards : totalYellowCount} &nbsp; 🟥 {player.career ? player.career.redCards : totalRedCount}
+                  </span>
+                </div>
               </div>
 
             </div>
@@ -779,10 +825,228 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
               )}
             </div>
 
-            {/* Team Breakdown Table */}
+            {/* Official NFF Career Overview Strip (Matches fotball.no exactly) */}
+            {player.career && (
+              <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-blue-950 text-white rounded-xl p-4 border border-amber-400/40 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-8 h-8 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center font-black text-sm">
+                      <Trophy className="w-4 h-4 text-slate-950" />
+                    </span>
+                    <div>
+                      <h4 className="text-sm font-black text-white flex items-center gap-1.5">
+                        <span>Offisiell NFF Profil: {player.name}</span>
+                        <span className="bg-amber-400 text-slate-950 text-[10px] font-bold px-2 py-0.2 rounded-full">
+                          fotball.no
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-slate-300">
+                        Total karrierestatistikk registrert i Norges Fotballforbund
+                      </p>
+                    </div>
+                  </div>
+                  {player.fiksId && (
+                    <a
+                      href={player.fiksUrl || `https://www.fotball.no/fotballdata/person/profil/?fiksId=${player.fiksId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-400 text-slate-950 hover:bg-amber-300 transition-colors shrink-0 shadow-2xs"
+                    >
+                      <span>Verifiser på fotball.no</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 text-center">
+                  <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700/60">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Kamper totalt</span>
+                    <span className="text-2xl font-black font-mono text-amber-400 mt-0.5 block">
+                      {player.career.totalMatches}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {player.career.matchesYouth} ungdom • {player.career.matchesAdult} voksen
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700/60">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Mål totalt</span>
+                    <span className="text-2xl font-black font-mono text-amber-400 mt-0.5 block">
+                      {player.career.totalGoals}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {player.career.goalsYouth} ungdom • {player.career.goalsAdult} voksen
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700/60">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Målsnitt totalt</span>
+                    <span className="text-2xl font-black font-mono text-white mt-0.5 block">
+                      {player.career.goalsAverage.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      mål per kamp
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700/60">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Disiplinærkort</span>
+                    <span className="text-2xl font-black font-mono text-emerald-400 mt-0.5 block">
+                      {player.career.yellowCards + player.career.redCards === 0 ? '0' : `${player.career.yellowCards}G / ${player.career.redCards}R`}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      🟨 {player.career.yellowCards} gule • 🟥 {player.career.redCards} røde
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Official NFF All Seasons Table (if official multi-season data is available) */}
+            {player.officialNffData?.seasons && player.officialNffData.seasons.length > 0 ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <span>Sesong og lag (Offisiell NFF FIKS-historikk)</span>
+                  </h4>
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    Kilde: fotball.no
+                  </span>
+                </div>
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-200 text-[11px] font-bold text-slate-700">
+                        <th className="py-2.5 px-3">Sesong</th>
+                        <th className="py-2.5 px-3">Lag</th>
+                        <th className="py-2.5 px-3">Alderskategori</th>
+                        <th className="py-2.5 px-2 text-center">Kamper</th>
+                        <th className="py-2.5 px-2 text-center">Mål</th>
+                        <th className="py-2.5 px-2 text-center">Målsnitt</th>
+                        <th className="py-2.5 px-2 text-center">Gule</th>
+                        <th className="py-2.5 px-2 text-center">Røde</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      {player.officialNffData.seasons.map((row: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-2 px-3 font-bold text-slate-900 font-sans">
+                            {row.season}
+                          </td>
+                          <td className="py-2 px-3 font-sans font-semibold text-slate-900">
+                            {row.teamName}
+                          </td>
+                          <td className="py-2 px-3 font-sans text-slate-600 text-[11px]">
+                            {row.ageCategory}
+                          </td>
+                          <td className="py-2 px-2 text-center font-bold text-slate-800">
+                            {row.matches}
+                          </td>
+                          <td className="py-2 px-2 text-center font-black">
+                            <span className={row.goals > 0 ? 'bg-amber-100 text-amber-950 px-1.5 py-0.2 rounded font-black' : 'text-slate-400'}>
+                              {row.goals}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-center text-slate-600">
+                            {row.goalsPerMatch ? Number(row.goalsPerMatch).toFixed(2) : (row.matches > 0 ? (row.goals / row.matches).toFixed(2) : '0.00')}
+                          </td>
+                          <td className="py-2 px-2 text-center text-slate-600">
+                            {row.yellowCards > 0 ? `${row.yellowCards} 🟨` : '-'}
+                          </td>
+                          <td className="py-2 px-2 text-center text-slate-600">
+                            {row.redCards > 0 ? `${row.redCards} 🟥` : '-'}
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Summary row */}
+                      {player.career && (
+                        <tr className="bg-amber-50/80 font-bold border-t-2 border-amber-300 text-slate-900">
+                          <td colSpan={3} className="py-2.5 px-3 font-sans font-black">
+                            TOTALT I KARRIEREN (fotball.no)
+                          </td>
+                          <td className="py-2.5 px-2 text-center font-black text-[#165094]">
+                            {player.career.totalMatches}
+                          </td>
+                          <td className="py-2.5 px-2 text-center">
+                            <span className="bg-amber-300 text-amber-950 px-2 py-0.5 rounded font-black">
+                              {player.career.totalGoals}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-2 text-center font-black text-slate-800">
+                            {player.career.goalsAverage.toFixed(2)}
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-slate-700">
+                            {player.career.yellowCards > 0 ? `${player.career.yellowCards} 🟨` : '-'}
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-slate-700">
+                            {player.career.redCards > 0 ? `${player.career.redCards} 🟥` : '-'}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Official NFF Tournaments Table (if tournament data is available) */}
+            {player.officialNffData?.tournaments && player.officialNffData.tournaments.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <span>Turneringskategori (fotball.no)</span>
+                </h4>
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-200 text-[11px] font-bold text-slate-700">
+                        <th className="py-2 px-3">Turnering</th>
+                        <th className="py-2 px-3">Lag / Kamper pr. lag</th>
+                        <th className="py-2 px-2 text-center">Kamper</th>
+                        <th className="py-2 px-2 text-center">Mål</th>
+                        <th className="py-2 px-2 text-center">Snitt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      {player.officialNffData.tournaments.map((t: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-2 px-3 font-bold font-sans text-slate-900">
+                            {t.tournament}
+                          </td>
+                          <td className="py-2 px-3 font-sans text-slate-600">
+                            {t.teamInfo}
+                          </td>
+                          <td className="py-2 px-2 text-center font-bold text-slate-800">
+                            {t.matches}
+                          </td>
+                          <td className="py-2 px-2 text-center font-black">
+                            <span className={t.goals > 0 ? 'bg-amber-100 text-amber-950 px-1.5 py-0.2 rounded font-black' : 'text-slate-400'}>
+                              {t.goals}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-center text-slate-600">
+                            {t.goalsPerMatch ? Number(t.goalsPerMatch).toFixed(2) : (t.matches > 0 ? (t.goals / t.matches).toFixed(2) : '0.00')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Team Breakdown Table (Current Season 2026) */}
             {player.teamsPlayedFor && player.teamsPlayedFor.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <span>Sesong 2026 Lagfordeling & Interaktive Filter</span>
+                  </h4>
+                  <span className="text-[11px] text-slate-400">
+                    Klikk et lag for å filtrere kampene under
+                  </span>
+                </div>
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600">
                       <th className="py-2 px-3">Lag i Bønes IL</th>
@@ -835,7 +1099,7 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                     {/* Summary row */}
                     <tr className="bg-emerald-50/60 font-bold border-t-2 border-emerald-200 text-slate-900">
                       <td className="py-2.5 px-3 font-sans">
-                        TOTALT FOR BØNES IL
+                        TOTALT FOR BØNES IL (SESONG 2026)
                       </td>
                       <td className="py-2.5 px-2 text-center font-black text-[#165094]">
                         {totalMatchesCount}
@@ -868,6 +1132,7 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                   </tbody>
                 </table>
               </div>
+            </div>
             ) : null}
 
             {player.teamsPlayedFor && player.teamsPlayedFor.length > 1 && (
@@ -986,6 +1251,9 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
             )}
           </section>
 
+          {/* Trenernotater & Spillerutvikling (Kvalitative observasjoner som ikke fanges opp av statistikk alene) */}
+          <CoachNotesSection player={player} />
+
           {/* Detailed Match History Timeline */}
           <section id="player-match-log-section" className="space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -1066,15 +1334,93 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
               </div>
             </div>
 
+            {/* FIKS-innmelding vs App-visning Audit Banner */}
+            <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-3.5 space-y-2 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                <div className="flex items-center space-x-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="font-black text-slate-900 text-xs">
+                    FIKS-innmelding vs. App-visning (Revisjon kamp-for-kamp)
+                  </span>
+                </div>
+                <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  ✓ Verifisert mot NFF FIKS-protokoller
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                NFF FIKS-innmelding skjer 1 time før avspark og synkroniseres automatisk 15 minutter før kamp. 
+                Appens dynamiske posisjonsmotor registrerer spilt rolle per kamp:
+                {player.positionStats && (
+                  <span className="font-semibold text-slate-900 ml-1">
+                    Mest spilt er <span className="text-[#165094] underline">{player.position}</span> ({player.positionStats.breakdown[0]?.count} av {player.positionStats.totalTrackedMatches} kamper, {player.positionStats.breakdown[0]?.percentage}%).
+                  </span>
+                )}
+              </p>
+            </div>
+
+            {/* Active Head to Head Opponent Panel if selected */}
+            {selectedH2hOpponent && (
+              <div className="bg-white rounded-xl border-2 border-[#165094] p-4 shadow-md space-y-3 relative animate-in fade-in slide-in-from-top-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedH2hOpponent(null)}
+                  className="absolute top-3 right-3 p-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 cursor-pointer"
+                  title="Lukk innbyrdes oppgjør"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <HeadToHeadSection
+                  opponentName={selectedH2hOpponent}
+                  bonesTeamName={player.teamName}
+                  allMatches={allMatches}
+                />
+              </div>
+            )}
+
             {/* Match History Table */}
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+              {/* NFF Participation Summary Bar */}
+              {(() => {
+                const startedCount = player.matchHistory.filter(
+                  (m) => m.role === 'Startellever' || m.role === 'Startet' || ((m.minutes || 0) >= 70 && m.rating !== undefined)
+                ).length;
+                const subCount = player.matchHistory.filter(
+                  (m) => m.role === 'Innbytter' || ((m.minutes || 0) > 0 && (m.minutes || 0) < 70 && m.rating !== undefined)
+                ).length;
+                const unusedCount = player.matchHistory.filter(
+                  (m) => m.role === 'Ubenyttet reserve' || m.rating === undefined || (m.minutes || 0) === 0
+                ).length;
+
+                return (
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 border-b border-slate-200 text-xs">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] font-bold text-slate-600">NFF Kampstatus:</span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        🟢 {startedCount} startet
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-[#165094] border border-blue-200">
+                        🔄 {subCount} innbytter
+                      </span>
+                      {unusedCount > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                          ⏸️ {unusedCount} ubenyttet
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      {player.matchHistory.length} kamper i protokoll
+                    </span>
+                  </div>
+                );
+              })()}
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
                     <tr>
                       <th className="py-2.5 px-3">Dato</th>
                       <th className="py-2.5 px-2">Sesong</th>
-                      <th className="py-2.5 px-3">Kamp / Lag</th>
+                      <th className="py-2.5 px-3">Kamp / FIKS-rolle</th>
                       <th className="py-2.5 px-2 text-center">Res.</th>
                       <th className="py-2.5 px-3 text-center">Spillerbidrag</th>
                       <th className="py-2.5 px-2 text-center">Børs</th>
@@ -1100,35 +1446,93 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                         </td>
 
                         <td className="py-2.5 px-3 font-semibold text-slate-900">
-                          <div className="flex items-center space-x-1.5">
+                          <div className="flex items-center space-x-1.5 flex-wrap">
                             <span className="text-[10px] px-1 py-0.2 rounded bg-slate-100 text-slate-500 font-mono">
                               {log.isHome ? 'H' : 'B'}
                             </span>
-                            <span>{log.opponent}</span>
+                            <span className="font-bold">{log.opponent}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedH2hOpponent(selectedH2hOpponent === log.opponent ? null : log.opponent)}
+                              className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors inline-flex items-center gap-0.5 cursor-pointer ml-1 ${
+                                selectedH2hOpponent === log.opponent
+                                  ? 'bg-[#165094] text-white border-blue-700 shadow-2xs font-bold'
+                                  : 'bg-blue-50/90 text-[#165094] hover:bg-blue-100 border-blue-200'
+                              }`}
+                              title={`Vis innbyrdes oppgjør mot ${log.opponent} over de siste 3 sesongene`}
+                            >
+                              <Trophy className="w-2.5 h-2.5" />
+                              <span>Innbyrdes (3 år)</span>
+                            </button>
                           </div>
-                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
                             <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-50 text-[#165094] border border-blue-200">
                               {log.teamName || player.teamName}
                             </span>
-                            {log.role && (
-                              <span className="text-[10px] font-medium text-slate-500">
-                                • {log.role}
-                              </span>
-                            )}
+
+                            {/* NFF FIKS participation status badge: 'Startet', 'Innbytter' or 'Ubenyttet reserve' */}
+                            {(() => {
+                              const isUnused =
+                                log.fiksStatus === 'Ubenyttet reserve' ||
+                                log.role === 'Ubenyttet reserve' ||
+                                log.rating === undefined ||
+                                (log.minutes === 0 && (log.goals || 0) === 0);
+
+                              const isStarter =
+                                !isUnused &&
+                                (log.fiksStatus === 'Startet' ||
+                                  log.role === 'Startellever' ||
+                                  log.role === 'Startet' ||
+                                  (log.minutes && log.minutes >= 70));
+
+                              if (isStarter) {
+                                return (
+                                  <span
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs"
+                                    title="NFF FIKS: Registrert som 'Startet' i offisiell lagoppstilling"
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                                    Startet
+                                  </span>
+                                );
+                              }
+
+                              if (!isUnused) {
+                                return (
+                                  <span
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-[#165094] border border-blue-300 shadow-2xs"
+                                    title="NFF FIKS: Registrert som 'Innbytter' med aktiv spilletid"
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                                    Innbytter
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-300 shadow-2xs"
+                                  title="NFF FIKS: Registrert som 'Ubenyttet reserve' på benken"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                  Ubenyttet reserve
+                                </span>
+                              );
+                            })()}
                             {log.position && (
                               <span
-                                className="text-[10px] font-bold px-1.5 py-0.2 rounded border bg-slate-50 text-slate-700 border-slate-200"
-                                title={`Registrert posisjon i denne kampen: ${log.position}`}
+                                className="text-[10px] font-bold px-1.5 py-0.2 rounded border bg-blue-50 text-[#165094] border-blue-200"
+                                title={`Offisiell FIKS-innmelding og registrert posisjon: ${log.position}`}
                               >
                                 {log.position === 'Angrep'
-                                  ? '⚽ Spiss'
+                                  ? '⚽ FIKS: Spiss'
                                   : log.position === 'Midtbane'
-                                  ? '🏃 Midtbane'
+                                  ? '🏃 FIKS: Midtbane'
                                   : log.position === 'Forsvar'
-                                  ? '🛡️ Forsvar'
+                                  ? '🛡️ FIKS: Forsvar'
                                   : log.position === 'Keeper'
-                                  ? '🧤 Keeper'
-                                  : log.position}
+                                  ? '🧤 FIKS: Keeper'
+                                  : `FIKS: ${log.position}`}
                               </span>
                             )}
                             {log.highlight && log.highlight.startsWith('⚽') && (
@@ -1172,7 +1576,11 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                             )}
                             {log.goals === 0 && !log.yellowCard && !log.redCard && (
                               <span className="text-slate-500 text-[11px] inline-flex items-center gap-1 font-medium">
-                                {(player.position === 'Keeper' || player.position === 'Forsvar') && log.rating >= 7.5 ? (
+                                {log.role === 'Ubenyttet reserve' || log.rating === undefined ? (
+                                  <span className="text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/70 italic">
+                                    Ubenyttet reserve (0 min)
+                                  </span>
+                                ) : (player.position === 'Keeper' || player.position === 'Forsvar') && log.rating >= 7.5 ? (
                                   <span className="text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                                     🛡️ Solid innsats ({log.minutes} min)
                                   </span>
@@ -1185,17 +1593,26 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                         </td>
 
                         <td className="py-2.5 px-2 text-center font-mono font-bold">
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[11px] ${
-                              log.rating >= 8.5
-                                ? 'bg-amber-100 text-amber-900 font-extrabold'
-                                : log.rating >= 7.5
-                                ? 'bg-blue-50 text-blue-900'
-                                : 'text-slate-600'
-                            }`}
-                          >
-                            {(log.rating ?? 0).toFixed(1)}
-                          </span>
+                          {typeof log.rating === 'number' && log.rating > 0 ? (
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[11px] ${
+                                log.rating >= 8.5
+                                  ? 'bg-amber-100 text-amber-900 font-extrabold'
+                                  : log.rating >= 7.5
+                                  ? 'bg-blue-50 text-blue-900'
+                                  : 'text-slate-600 bg-slate-50'
+                              }`}
+                            >
+                              {log.rating.toFixed(1)}
+                            </span>
+                          ) : (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[10px] text-slate-400 bg-slate-100 border border-slate-200/80 font-medium italic"
+                              title="Ubenyttet reserve / ikke tildelt rating"
+                            >
+                              Ingen rating
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}

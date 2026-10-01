@@ -16,7 +16,8 @@ import {
   Sparkles,
   Share2,
   ExternalLink,
-  Copy
+  Copy,
+  BarChart2
 } from 'lucide-react';
 import { MatchShareModal, copyToClipboard, getMatchShareUrl } from './MatchShareModal.js';
 import { MatchDetailModal } from './MatchDetailModal.js';
@@ -25,6 +26,7 @@ import { ScoutReportModal } from './ScoutReportModal.js';
 import { TeamCalendarExportButton } from './TeamCalendarExportButton.js';
 import { LaglederModal } from './LaglederModal.js';
 import { PlayerOfTheMatchModal } from './PlayerOfTheMatchModal.js';
+import { MatchStatsAnalyticsView } from './MatchStatsAnalyticsView.js';
 
 interface MatchesViewProps {
   matches: Match[];
@@ -49,7 +51,7 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
 }) => {
   const [onlyHomeMatches, setOnlyHomeMatches] = useState(false);
   const [seasonFilter, setSeasonFilter] = useState<'all' | 'host' | 'var'>('all');
-  const [tab, setTab] = useState<'upcoming' | 'finished'>('upcoming');
+  const [tab, setTab] = useState<'upcoming' | 'finished' | 'stats'>('upcoming');
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
   const [loadingMatchId, setLoadingMatchId] = useState<string | null>(null);
   const [isScrapingAll, setIsScrapingAll] = useState(false);
@@ -127,13 +129,15 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
       return true;
     })
     .sort((a, b) => {
+      const aKey = (a.date || '') + (a.time || '');
+      const bKey = (b.date || '') + (b.time || '');
       if (tab === 'upcoming') {
-        return (a.date + a.time).localeCompare(b.date + b.time);
+        return aKey.localeCompare(bKey);
       }
       if (tab === 'finished') {
-        return (b.date + b.time).localeCompare(a.date + a.time);
+        return bKey.localeCompare(aKey);
       }
-      return (a.date + a.time).localeCompare(b.date + b.time);
+      return aKey.localeCompare(bKey);
     });
 
   const totalHomeUpcoming = localMatches.filter(m => m.isHome && m.status !== 'finished').length;
@@ -258,11 +262,29 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
             }`}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Siste resultater</span>
+            <span>Fullførte kamper</span>
             <span className={`ml-1 px-1.5 py-0.2 rounded-full text-[10px] ${
               tab === 'finished' ? 'bg-[#2E6C29] text-green-100' : 'bg-slate-200 text-slate-700'
             }`}>
               {localMatches.filter(m => m.status === 'finished').length}
+            </span>
+          </button>
+
+          <button
+            id="tab-stats-matches"
+            onClick={() => setTab('stats')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+              tab === 'stats'
+                ? 'bg-[#165094] text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <BarChart2 className="w-3.5 h-3.5" />
+            <span>Kampstatistikk</span>
+            <span className={`ml-1 px-1.5 py-0.2 rounded-full text-[10px] ${
+              tab === 'stats' ? 'bg-[#0F3A6D] text-blue-100' : 'bg-slate-200 text-slate-700'
+            }`}>
+              Recharts
             </span>
           </button>
         </div>
@@ -334,41 +356,53 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
 
       </div>
 
-      {/* Match Cards List (Standardized Sofascore Design) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-        {filteredMatches.length === 0 ? (
-          <div className="col-span-full bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500">
-            <Calendar className="w-10 h-10 mx-auto text-slate-400 mb-2 opacity-60" />
-            <p className="font-semibold">Ingen kamper funnet med gjeldende filter.</p>
-            <p className="text-xs text-slate-400 mt-1">Prøv å velge "Alle lag" eller nullstill hjemmekamp-filteret.</p>
-          </div>
-        ) : (
-          filteredMatches.map((match) => (
-            <SofascoreMatchCard
-              key={match.id}
-              match={match}
-              isFavorite={false}
-              onToggleFavorite={(e) => {
-                e.stopPropagation();
-              }}
-              onOpenDetail={() => {
-                setDetailModalMatch(match);
-                setIsDetailModalOpen(true);
-              }}
-              onOpenLineup={() => onViewLineup && onViewLineup(match)}
-              onOpenScout={(m) => setScoutModalMatch(m)}
-              onOpenReport={(m) => {
-                setLaglederMatch(m);
-                setIsLaglederOpen(true);
-              }}
-              onOpenPOTM={(m) => {
-                setPotmMatch(m);
-                setIsPotmOpen(true);
-              }}
-            />
-          ))
-        )}
-      </div>
+      {/* Match Content: Either Recharts Match Analytics or Match Cards List */}
+      {tab === 'stats' ? (
+        <MatchStatsAnalyticsView
+          matches={localMatches}
+          selectedTeamId={selectedTeamId}
+          teams={teams}
+          onSelectMatch={(match) => {
+            setDetailModalMatch(match);
+            setIsDetailModalOpen(true);
+          }}
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+          {filteredMatches.length === 0 ? (
+            <div className="col-span-full bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500">
+              <Calendar className="w-10 h-10 mx-auto text-slate-400 mb-2 opacity-60" />
+              <p className="font-semibold">Ingen kamper funnet med gjeldende filter.</p>
+              <p className="text-xs text-slate-400 mt-1">Prøv å velge "Alle lag" eller nullstill hjemmekamp-filteret.</p>
+            </div>
+          ) : (
+            filteredMatches.map((match) => (
+              <SofascoreMatchCard
+                key={match.id}
+                match={match}
+                isFavorite={false}
+                onToggleFavorite={(e) => {
+                  e.stopPropagation();
+                }}
+                onOpenDetail={() => {
+                  setDetailModalMatch(match);
+                  setIsDetailModalOpen(true);
+                }}
+                onOpenLineup={() => onViewLineup && onViewLineup(match)}
+                onOpenScout={(m) => setScoutModalMatch(m)}
+                onOpenReport={(m) => {
+                  setLaglederMatch(m);
+                  setIsLaglederOpen(true);
+                }}
+                onOpenPOTM={(m) => {
+                  setPotmMatch(m);
+                  setIsPotmOpen(true);
+                }}
+              />
+            ))
+          )}
+        </div>
+      )}
 
       {/* Del Modal */}
       <MatchShareModal

@@ -7,6 +7,11 @@ import {
 } from '../utils/playerStatsCalculator.js';
 import { syncPlayerStatsFromNff } from '../services/playerStatsApi.js';
 import {
+  calculateClubRatingLeaderboards,
+  LeaderboardPlayerRating,
+} from '../utils/playerRatingEngine.js';
+import { PlayerD3TrendChart } from './PlayerD3TrendChart.js';
+import {
   Flame,
   Search,
   Users,
@@ -20,6 +25,8 @@ import {
   RefreshCw,
   Layers,
   ShieldCheck,
+  Activity,
+  Star,
 } from 'lucide-react';
 
 interface PlayerStatsViewProps {
@@ -29,7 +36,7 @@ interface PlayerStatsViewProps {
   onSelectPlayer: (playerName: string, teamId?: string) => void;
 }
 
-type SortField = 'goals' | 'assists' | 'points' | 'cards' | 'matches' | 'name';
+type SortField = 'goals' | 'assists' | 'points' | 'cards' | 'matches' | 'name' | 'rating';
 
 export const PlayerStatsView: React.FC<PlayerStatsViewProps> = ({
   data,
@@ -45,6 +52,16 @@ export const PlayerStatsView: React.FC<PlayerStatsViewProps> = ({
   const [viewMode, setViewMode] = useState<'aggregated' | 'per_squad'>('aggregated');
   const [isSyncingNff, setIsSyncingNff] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [chartPlayerName, setChartPlayerName] = useState<string>('');
+  const chartSectionRef = React.useRef<HTMLDivElement>(null);
+
+  const handleViewPlayerChart = (name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setChartPlayerName(name);
+    if (chartSectionRef.current) {
+      chartSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
 
   // Compute stats for all squad entries
   const allSquadPlayerStats = useMemo(() => {
@@ -108,11 +125,35 @@ export const PlayerStatsView: React.FC<PlayerStatsViewProps> = ({
     });
   }, [basePlayersList, searchQuery, selectedCategory, selectedPosition]);
 
+  // Derived algorithmic rating lookup with position weights & opponent table strength
+  const playerRatingsMap = useMemo(() => {
+    if (!data?.matches || data.matches.length === 0) {
+      return new Map<string, LeaderboardPlayerRating>();
+    }
+    const leaderboards = calculateClubRatingLeaderboards(
+      data.matches,
+      data.players && data.players.length > 0 ? data.players : [],
+      data.tables
+    );
+    const map = new Map<string, LeaderboardPlayerRating>();
+    for (const item of leaderboards.allSeasonRanked) {
+      map.set(item.name.toLowerCase().trim(), item);
+      if (item.fiksId) {
+        map.set(`fiks-${item.fiksId}`, item);
+      }
+    }
+    return map;
+  }, [data?.matches, data?.players, data?.tables]);
+
   // Sort players
   const sortedPlayers = useMemo(() => {
     return [...filteredPlayers].sort((a, b) => {
       let comparison = 0;
-      if (sortField === 'goals') {
+      if (sortField === 'rating') {
+        const aRating = playerRatingsMap.get(a.name.toLowerCase().trim())?.seasonAvgRating || 0;
+        const bRating = playerRatingsMap.get(b.name.toLowerCase().trim())?.seasonAvgRating || 0;
+        comparison = bRating - aRating || b.matches - a.matches;
+      } else if (sortField === 'goals') {
         comparison = b.goals - a.goals || b.points - a.points;
       } else if (sortField === 'assists') {
         comparison = b.assists - a.assists || b.points - a.points;
@@ -129,7 +170,7 @@ export const PlayerStatsView: React.FC<PlayerStatsViewProps> = ({
       }
       return sortAsc ? -comparison : comparison;
     });
-  }, [filteredPlayers, sortField, sortAsc]);
+  }, [filteredPlayers, sortField, sortAsc, playerRatingsMap]);
 
   // Podiums: Leaders across the current context (Club-wide unique or squad-specific)
   const podiumSource = useMemo(() => {
@@ -386,6 +427,16 @@ export const PlayerStatsView: React.FC<PlayerStatsViewProps> = ({
         )}
       </div>
 
+      {/* D3 Player Rating Evolution Trend Chart */}
+      <div ref={chartSectionRef}>
+        <PlayerD3TrendChart
+          data={data}
+          initialPlayerName={chartPlayerName}
+          selectedTeamId={selectedTeamId}
+          onSelectPlayer={onSelectPlayer}
+        />
+      </div>
+
       {/* Search & Filter Controls */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
         <div className="flex flex-col sm:flex-row gap-2.5">
@@ -517,9 +568,179 @@ export const PlayerStatsView: React.FC<PlayerStatsViewProps> = ({
         </div>
       </div>
 
-      {/* Main Players Statistics Table */}
+      {/* Mobile-Friendly Quick Sort Tabs (Phone View) */}
+      <div className="md:hidden bg-slate-100 p-1 rounded-xl flex items-center justify-between text-xs font-bold gap-1 overflow-x-auto scrollbar-none">
+        <span className="text-[10px] text-slate-400 uppercase tracking-wider px-2 shrink-0">Sorter:</span>
+        {(
+          [
+            { key: 'rating', label: '⭐ Rating' },
+            { key: 'goals', label: '⚽ Mål' },
+            { key: 'assists', label: '🎯 Ass' },
+            { key: 'points', label: '⭐ Poeng' },
+            { key: 'matches', label: '🏟️ Kamper' },
+            { key: 'cards', label: '🟨 Kort' },
+            { key: 'name', label: 'Navn' },
+          ] as { key: SortField; label: string }[]
+        ).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => handleSort(tab.key)}
+            className={`px-2.5 py-1.5 rounded-lg whitespace-nowrap transition-all cursor-pointer text-xs ${
+              sortField === tab.key
+                ? 'bg-[#165094] text-white shadow-2xs font-extrabold'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Main Players Container: Mobile Cards (Phone) + Full Table (Desktop) */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
+        
+        {/* MOBILE VIEW (Phones): Native vertical card list (NO SWIPING) */}
+        <div className="block md:hidden divide-y divide-slate-100">
+          {sortedPlayers.length === 0 ? (
+            <div className="py-12 text-center text-slate-500 text-xs px-4">
+              Ingen spillere matcher søket eller filterkombinasjonen.
+            </div>
+          ) : (
+            sortedPlayers.map((p) => {
+              const hasMultiTeams = p.isMultiTeam && p.teamsPlayedFor && p.teamsPlayedFor.length > 1;
+              const ratingData = playerRatingsMap.get(p.name.toLowerCase().trim());
+
+              return (
+                <div
+                  key={`mobile-${p.id}`}
+                  onClick={() => onSelectPlayer(p.name, p.teamId)}
+                  className="p-3.5 hover:bg-blue-50/60 active:bg-blue-100/50 transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center justify-between gap-2.5">
+                    {/* Left: Avatar + Names */}
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-800 font-black text-xs flex items-center justify-center shrink-0 border border-slate-200 group-hover:bg-[#165094] group-hover:text-white transition-colors">
+                        {p.jerseyNumber}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-1.5 flex-wrap">
+                          <span className="font-black text-slate-900 text-sm truncate group-hover:text-[#165094]">
+                            {p.name}
+                          </span>
+                          {p.isCaptain && (
+                            <span className="text-[10px] bg-amber-100 text-amber-900 font-black px-1.5 py-0.2 rounded border border-amber-300">
+                              C
+                            </span>
+                          )}
+                          {hasMultiTeams && (
+                            <span className="text-[9px] bg-purple-100 text-purple-900 font-bold px-1.5 py-0.2 rounded">
+                              Flere lag
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-1.5 text-xs text-slate-500 mt-0.5 truncate">
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                              p.position === 'Keeper'
+                                ? 'bg-amber-100 text-amber-900'
+                                : p.position === 'Forsvar'
+                                ? 'bg-blue-100 text-blue-900'
+                                : p.position === 'Midtbane'
+                                ? 'bg-emerald-100 text-emerald-900'
+                                : 'bg-rose-100 text-rose-900'
+                            }`}
+                          >
+                            {p.position}
+                          </span>
+                          <span>•</span>
+                          <span className="truncate">{p.teamName.replace('Bønes ', '')}</span>
+                          {ratingData && ratingData.seasonAvgRating > 0 && (
+                            <span className="text-[10px] font-black font-mono text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-200 ml-1">
+                              ★ {ratingData.seasonAvgRating.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Primary Highlight Stat + Chevron */}
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <div className="text-right">
+                        {sortField === 'rating' && (
+                          <span className="text-base font-black font-mono text-amber-700 block leading-tight">
+                            ★ {ratingData ? ratingData.seasonAvgRating.toFixed(2) : '-'}
+                          </span>
+                        )}
+                        {sortField === 'goals' && (
+                          <span className="text-base font-black font-mono text-amber-600 block leading-tight">
+                            {p.goals} <span className="text-[10px] font-sans font-bold text-slate-400">mål</span>
+                          </span>
+                        )}
+                        {sortField === 'assists' && (
+                          <span className="text-base font-black font-mono text-emerald-600 block leading-tight">
+                            {p.assists} <span className="text-[10px] font-sans font-bold text-slate-400">ass</span>
+                          </span>
+                        )}
+                        {sortField === 'points' && (
+                          <span className="text-base font-black font-mono text-[#165094] block leading-tight">
+                            {p.points} <span className="text-[10px] font-sans font-bold text-slate-400">p</span>
+                          </span>
+                        )}
+                        {sortField === 'matches' && (
+                          <span className="text-base font-black font-mono text-slate-700 block leading-tight">
+                            {p.matches} <span className="text-[10px] font-sans font-bold text-slate-400">kamper</span>
+                          </span>
+                        )}
+                        {sortField === 'cards' && (
+                          <span className="text-xs font-bold text-amber-700 block leading-tight">
+                            {p.yellowCards}🟨 {p.redCards > 0 ? `${p.redCards}🟥` : ''}
+                          </span>
+                        )}
+                        {sortField === 'name' && (
+                          <span className="text-xs font-bold text-slate-600 block leading-tight">
+                            {p.goals} mål
+                          </span>
+                        )}
+                        <span className="text-[10px] text-slate-400 block font-mono mt-0.5">
+                          {p.matches}k • {p.goals}m • {p.assists}a
+                        </span>
+                      </div>
+
+                      {/* Quick Rating Button */}
+                      <button
+                        onClick={(e) => handleViewPlayerChart(p.name, e)}
+                        className="p-1 px-1.5 text-[10px] font-bold text-[#165094] hover:bg-blue-100 bg-blue-50 rounded-md border border-blue-200 transition-colors flex items-center gap-0.5 cursor-pointer shrink-0"
+                        title="Se ratinggraf over de siste 5 kampene"
+                      >
+                        <Activity className="w-3 h-3 text-[#165094]" />
+                        <span>Form</span>
+                      </button>
+
+                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600 transition-colors" />
+                    </div>
+                  </div>
+
+                  {/* Compact Status indicator row if suspended or warning */}
+                  {(p.cardStatus === 'Karantene' || p.cardStatus.includes('Advarsel')) && (
+                    <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                      <span
+                        className={`font-bold px-2 py-0.5 rounded-md ${
+                          p.cardStatus === 'Karantene' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {p.cardStatus}
+                      </span>
+                      <span className="text-slate-400 text-[10px]">Trykk for kampoversikt →</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* DESKTOP VIEW (Tablets & Desktop): Full 9-column comparison table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-black uppercase tracking-wider text-slate-600 select-none">
@@ -541,6 +762,18 @@ export const PlayerStatsView: React.FC<PlayerStatsViewProps> = ({
                 >
                   <div className="flex items-center justify-center space-x-0.5">
                     <span>Kamper</span>
+                    <ArrowUpDown className="w-3 h-3 opacity-60" />
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('rating')}
+                  className={`py-3 px-3 text-center cursor-pointer transition-colors ${
+                    sortField === 'rating' ? 'bg-amber-100/60 text-amber-900 font-extrabold' : 'hover:text-slate-900'
+                  }`}
+                  title="Sesongbørs basert på avansert posisjonsvekting og motstanderstyrke"
+                >
+                  <div className="flex items-center justify-center space-x-0.5">
+                    <span>⭐ Børs</span>
                     <ArrowUpDown className="w-3 h-3 opacity-60" />
                   </div>
                 </th>
@@ -593,13 +826,14 @@ export const PlayerStatsView: React.FC<PlayerStatsViewProps> = ({
             <tbody className="divide-y divide-slate-100 text-xs">
               {sortedPlayers.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-500">
+                  <td colSpan={10} className="py-12 text-center text-slate-500">
                     Ingen spillere matcher søket eller filterkombinasjonen.
                   </td>
                 </tr>
               ) : (
                 sortedPlayers.map((p) => {
                   const hasMultiTeams = p.isMultiTeam && p.teamsPlayedFor && p.teamsPlayedFor.length > 1;
+                  const ratingData = playerRatingsMap.get(p.name.toLowerCase().trim());
 
                   return (
                     <tr
@@ -674,6 +908,21 @@ export const PlayerStatsView: React.FC<PlayerStatsViewProps> = ({
                         {p.matches}
                       </td>
 
+                      {/* Rating / Snittbørs */}
+                      <td className="py-3 px-3 text-center font-mono">
+                        {ratingData && ratingData.seasonAvgRating > 0 ? (
+                          <span
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-amber-50 text-amber-900 border border-amber-200 font-black text-xs shadow-2xs"
+                            title={`Sesongbørs: ${ratingData.seasonAvgRating.toFixed(2)} (${ratingData.matches} kamper, siste 3: ${ratingData.last3AvgRating.toFixed(2)})`}
+                          >
+                            <Star className="w-3 h-3 text-amber-500 fill-amber-400 shrink-0" />
+                            <span>{ratingData.seasonAvgRating.toFixed(2)}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 font-normal">-</span>
+                        )}
+                      </td>
+
                       {/* Goals */}
                       <td className="py-3 px-3 text-center">
                         <span
@@ -741,6 +990,15 @@ export const PlayerStatsView: React.FC<PlayerStatsViewProps> = ({
                       {/* Status & Arrow */}
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={(e) => handleViewPlayerChart(p.name, e)}
+                            className="p-1 px-2 text-[11px] font-bold text-[#165094] hover:bg-blue-100 bg-blue-50 rounded-lg border border-blue-200 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                            title="Vis ratingutvikling over de siste 5 kampene"
+                          >
+                            <Activity className="w-3 h-3 text-[#165094]" />
+                            <span>Ratinggraf</span>
+                          </button>
+
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                               p.cardStatus === 'Karantene'

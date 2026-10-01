@@ -7741,17 +7741,6 @@
       "isBonesPlayer": true
     },
     {
-      "id": "ts-sander_b_nes-g19_1",
-      "name": "Sander Bønes",
-      "teamId": "g19-1",
-      "teamName": "Bønes G19-1",
-      "goals": 1,
-      "matches": 1,
-      "penalties": 0,
-      "goalsPerMatch": 1,
-      "isBonesPlayer": true
-    },
-    {
       "id": "ts-torje_s_ter_reigstad-g16_3",
       "name": "Torje Sæter Reigstad",
       "teamId": "g16-3",
@@ -8963,23 +8952,10 @@
       "time": "20:00",
       "venue": "Follese Tertnes Holding Arena",
       "venueCity": "Vestland",
-      "status": "finished",
-      "homeScore": 0,
-      "awayScore": 1,
+      "status": "upcoming",
       "category": "Junior",
       "referee": "NFF Hordaland dommer",
-      "events": [
-        {
-          "id": "ev-lagleder-1789630864641",
-          "minute": 42,
-          "type": "goal",
-          "player": "Sander Bønes",
-          "team": "Bønes G19-1",
-          "description": "Praktscoring i krysset",
-          "source": "lagleder",
-          "reportedBy": "Ola Hansen (Trener)"
-        }
-      ],
+      "events": [],
       "lineup": {
         "formation": "4-3-3",
         "coach": "Christer Brandsdal",
@@ -83934,24 +83910,6 @@
       "description": "Offisielt arrangement registrert på Bønes ILs kalender. Se detaljer på bonesil.no/arrangementer/event-one-rg2bh-mx2wm-5dbzb.",
       "badgeText": "ARRANGEMENT • bonesil.no",
       "venue": "Fjellsdalen idrettsplass / Bøneshallen"
-    },
-    {
-      "id": "feed-1789630864641-6sto",
-      "timestamp": "07:41",
-      "timeAgo": "Akkurat nå",
-      "type": "goal",
-      "teamId": "g19-1",
-      "teamName": "Bønes G19-1",
-      "title": "⚽ MÅL: Bønes G19-1 (undefined - 1)",
-      "description": "Praktscoring i krysset (Innrapportert av Ola Hansen (Trener))",
-      "badgeText": "⭐ LAGLEDER • 42'",
-      "isHomeMatch": false,
-      "venue": "Follese Tertnes Holding Arena",
-      "score": "0 - 1",
-      "minute": 42,
-      "player": "Sander Bønes",
-      "source": "lagleder",
-      "reportedBy": "Ola Hansen (Trener)"
     },
     {
       "id": "feed-1",

@@ -249,7 +249,7 @@ export const LaglederModal: React.FC<LaglederModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden my-6 flex flex-col max-h-[92vh]">
         
         {/* Header with Bønes IL Club Colors Accent Line */}
@@ -502,7 +502,7 @@ export const LaglederModal: React.FC<LaglederModalProps> = ({
                     </label>
                     <input
                       type="text"
-                      placeholder="F.eks. Sander Lie eller Ingen assist"
+                      placeholder="F.eks. Sander Herstad Ogne eller Ingen assist"
                       value={assistPlayerName}
                       onChange={(e) => setAssistPlayerName(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white"
@@ -562,7 +562,7 @@ export const LaglederModal: React.FC<LaglederModalProps> = ({
                     <input
                       type="text"
                       required
-                      placeholder="F.eks. Sander Lie"
+                      placeholder="F.eks. Sander Herstad Ogne"
                       value={assistPlayerName || playerName}
                       onChange={(e) => {
                         setAssistPlayerName(e.target.value);

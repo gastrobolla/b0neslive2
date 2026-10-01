@@ -30,6 +30,7 @@ import { SofascoreMatchCard } from './SofascoreMatchCard.js';
 import { ScoutReportModal } from './ScoutReportModal.js';
 import { DualLiveView } from './DualLiveView.js';
 import { PlayerOfTheMatchModal } from './PlayerOfTheMatchModal.js';
+import { ClubGoalsD3Widget } from './ClubGoalsD3Widget.js';
 
 interface LivescoreDashboardProps {
   data: BonesClubData;
@@ -210,11 +211,13 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
     // For kommende kamper: kamper som kommer nærmest i tid skal vises først (stigende dato + tid)
     // For ferdige kamper: nyligst spilte kamper vises først (synkende dato + tid)
     return list.sort((a, b) => {
+      const aKey = String(a.date || '') + String(a.time || '');
+      const bKey = String(b.date || '') + String(b.time || '');
       if (activeStatusTab === 'upcoming') {
-        return (a.date + a.time).localeCompare(b.date + b.time);
+        return aKey.localeCompare(bKey);
       }
       if (activeStatusTab === 'finished') {
-        return (b.date + b.time).localeCompare(a.date + a.time);
+        return bKey.localeCompare(aKey);
       }
 
       // For 'all', 'home', 'favorites', 'live':
@@ -224,17 +227,17 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
 
       // 2. Begge er kommende: nærmest i tid først
       if (a.status === 'upcoming' && b.status === 'upcoming') {
-        return (a.date + a.time).localeCompare(b.date + b.time);
+        return aKey.localeCompare(bKey);
       }
       // 3. Begge er ferdige: nyligst spilte først
       if (a.status === 'finished' && b.status === 'finished') {
-        return (b.date + b.time).localeCompare(a.date + a.time);
+        return bKey.localeCompare(aKey);
       }
       // 4. Kommende kamper før ferdigspilte kamper
       if (a.status === 'upcoming' && b.status === 'finished') return -1;
       if (a.status === 'finished' && b.status === 'upcoming') return 1;
 
-      return (a.date + a.time).localeCompare(b.date + b.time);
+      return aKey.localeCompare(bKey);
     });
   }, [data.matches, searchQuery, quickFilter, selectedTeamId, activeStatusTab, favoriteTeamIds]);
 
@@ -246,13 +249,13 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
   const upcomingMatches = useMemo(() => {
     return filteredMatches
       .filter((m) => m.status === 'upcoming')
-      .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+      .sort((a, b) => (String(a.date || '') + String(a.time || '')).localeCompare(String(b.date || '') + String(b.time || '')));
   }, [filteredMatches]);
 
   const finishedMatches = useMemo(() => {
     return filteredMatches
       .filter((m) => m.status === 'finished')
-      .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+      .sort((a, b) => (String(b.date || '') + String(b.time || '')).localeCompare(String(a.date || '') + String(a.time || '')));
   }, [filteredMatches]);
 
   const favoriteMatches = useMemo(() => {
@@ -404,6 +407,14 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Klubbens samlede målscore og baklengsmål (D3 Bar Chart Widget) */}
+      <ClubGoalsD3Widget
+        data={data}
+        onSelectTeam={(teamId) => {
+          setSelectedTeamId(teamId);
+        }}
+      />
 
       {/* Sofascore Status Tabs: Live står først, Alle flyttes til etter Favoritter */}
       <div className="flex flex-wrap items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
@@ -880,7 +891,7 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
         onSelectPlayer={onSelectPlayer}
         onViewLineup={onViewLineup}
         allMatches={data.matches}
-        divisionTable={selectedMatch ? data.tables[selectedMatch.teamId] : undefined}
+        divisionTable={selectedMatch && data.tables ? data.tables[selectedMatch.teamId] : undefined}
       />
 
       {/* Lagleder Modal */}

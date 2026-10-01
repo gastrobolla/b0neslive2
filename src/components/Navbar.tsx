@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell } from 'lucide-react';
+import { Bell, RefreshCw } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton.js';
 import { ClubWeatherBadge } from './ClubWeatherBadge.js';
 
@@ -9,12 +9,16 @@ interface NavbarProps {
   onOpenNotifications?: () => void;
   unreadNotificationCount?: number;
   hasLiveMatch?: boolean;
+  onCheckUpdate?: () => void;
+  isUpdatingApp?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenNotifications,
   unreadNotificationCount = 0,
   hasLiveMatch = false,
+  onCheckUpdate,
+  isUpdatingApp = false,
 }) => {
   return (
     <header id="app-header" className="sticky top-0 z-40 bg-[#0c1e38] border-b border-slate-800 text-white shadow-xs">
@@ -76,6 +80,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
                   </span>
                 )}
+              </button>
+            )}
+
+            {/* Quick App Refresh / Check Update Button */}
+            {onCheckUpdate && (
+              <button
+                id="btn-check-app-update"
+                onClick={onCheckUpdate}
+                disabled={isUpdatingApp}
+                className="relative flex items-center justify-center p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors cursor-pointer"
+                title="Sjekk og oppdater til nyeste versjon av appen"
+              >
+                <RefreshCw className={`w-4 h-4 ${isUpdatingApp ? 'animate-spin text-blue-400' : ''}`} />
               </button>
             )}
 

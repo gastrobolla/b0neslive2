@@ -103,7 +103,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
 
   // Compute latest POTM awards for the spotlight header
   const latestPOTMAwards = useMemo(() => {
-    const list: { match: Match; winnerName: string; rating: number; votes: number; totalVotes: number; team: string }[] = [];
+    const list: { match: Match; winnerName: string; rating?: number; votes: number; totalVotes: number; team: string }[] = [];
     const seen = new Set<string>();
 
     const targetMatches = matches.filter(

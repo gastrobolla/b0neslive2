@@ -1,7 +1,8 @@
-import { Match, PlayerOfTheMatchData, PlayerOfTheMatchCandidate } from '../types.js';
+import { Match, PlayerOfTheMatchData, PlayerOfTheMatchCandidate, DivisionTable } from '../types.js';
 import { calculatePlayerPerformanceRating } from './playerRatingEngine.js';
 import { getPlayerPositionInMatch } from './positionEngine.js';
 import { isOwnGoalEvent } from './derivedStats.js';
+import { getMatchLineup, getSquadForTeam } from '../data/bonesSquads.js';
 
 /**
  * Calculates or updates Banens Beste (Player of the Match) for a given match.
@@ -11,7 +12,8 @@ export function calculateMatchPOTM(
   match: Match,
   incomingVotes?: Record<string, number>,
   jurySelectedPlayer?: string,
-  juryNotes?: string
+  juryNotes?: string,
+  tables?: DivisionTable[] | Record<string, DivisionTable>
 ): PlayerOfTheMatchData {
   const existingPOTM = match.playerOfTheMatch;
   const votesMap: Record<string, number> = { ...(incomingVotes || {}) };
@@ -32,7 +34,8 @@ export function calculateMatchPOTM(
     name: string,
     team: string,
     pos?: string,
-    num?: number
+    num?: number,
+    inFiksLineup: boolean = true
   ): PlayerOfTheMatchCandidate => {
     const key = name.trim();
     if (!candidateMap.has(key)) {
@@ -48,13 +51,18 @@ export function calculateMatchPOTM(
         redCards: 0,
         algoRating: 7.0,
         votes: votesMap[key] || 0,
-        combinedScore: 7.0
+        combinedScore: 7.0,
+        isInFiksLineup: inFiksLineup,
+        fiksStatus: inFiksLineup ? 'innmeldt' : 'ikke_innmeldt'
       });
     }
     return candidateMap.get(key)!;
   };
 
-  // 1. Extract from lineups if present
+  // 1. Extract from lineups if present (Verified FIKS-innmeldt tropp)
+  const startersSet = new Set<string>();
+  const benchSet = new Set<string>();
+
   const lineups = [
     { lineup: match.homeLineup, team: match.homeTeam },
     { lineup: match.awayLineup, team: match.awayTeam },
@@ -63,11 +71,19 @@ export function calculateMatchPOTM(
 
   for (const { lineup, team } of lineups) {
     if (!lineup) continue;
-    const allLineupPlayers = [...(lineup.starters || []), ...(lineup.bench || []), ...(lineup.subs || [])];
-    for (const p of allLineupPlayers) {
+    for (const p of lineup.starters || []) {
       if (!p.name) continue;
+      startersSet.add(p.name.trim().toLowerCase());
       const dynPos = getPlayerPositionInMatch(p.name, p.fiksId, match, p.position);
-      getOrCreateCandidate(p.name, team, dynPos, p.jerseyNumber || p.number);
+      const c = getOrCreateCandidate(p.name, team, dynPos, p.jerseyNumber || p.number, true);
+      c.isStarter = true;
+    }
+    for (const p of lineup.bench || lineup.subs || []) {
+      if (!p.name) continue;
+      benchSet.add(p.name.trim().toLowerCase());
+      const dynPos = getPlayerPositionInMatch(p.name, p.fiksId, match, p.position);
+      const c = getOrCreateCandidate(p.name, team, dynPos, p.jerseyNumber || p.number, true);
+      if (c.isStarter === undefined) c.isStarter = false;
     }
   }
 
@@ -76,7 +92,7 @@ export function calculateMatchPOTM(
     for (const ev of match.events) {
       if (ev.player) {
         const dynPos = getPlayerPositionInMatch(ev.player, undefined, match);
-        const c = getOrCreateCandidate(ev.player, ev.team, dynPos);
+        const c = getOrCreateCandidate(ev.player, ev.team, dynPos, undefined, true);
         if (ev.type === 'goal') {
           if (isOwnGoalEvent(ev)) {
             c.ownGoals = (c.ownGoals || 0) + 1;
@@ -89,7 +105,7 @@ export function calculateMatchPOTM(
       }
       if (ev.assistPlayer) {
         const dynPos = getPlayerPositionInMatch(ev.assistPlayer, undefined, match);
-        const c = getOrCreateCandidate(ev.assistPlayer, ev.team, dynPos);
+        const c = getOrCreateCandidate(ev.assistPlayer, ev.team, dynPos, undefined, true);
         c.assists += 1;
       }
     }
@@ -107,23 +123,32 @@ export function calculateMatchPOTM(
     }
   }
 
-  // 3. If still empty, add default recognizable key players for the teams
-  if (candidateMap.size === 0) {
-    const isBonesHome = match.homeTeam.toLowerCase().includes('bønes');
-    const bonesTeam = isBonesHome ? match.homeTeam : match.awayTeam;
-    const oppTeam = isBonesHome ? match.awayTeam : match.homeTeam;
-
-    getOrCreateCandidate('Henrik Sølvberg', bonesTeam, 'Midtbane', 10);
-    getOrCreateCandidate('Sander Lie', bonesTeam, 'Angrep', 9);
-    getOrCreateCandidate('Thea Karlsen', bonesTeam, 'Keeper', 1);
-    getOrCreateCandidate('Kaptein ' + oppTeam, oppTeam, 'Midtbane', 8);
+  // 3. If still empty, pull the real club squad for this team (15-min FIKS synk)
+  if (candidateMap.size === 0 && match.teamId) {
+    const squadLineup = getMatchLineup(match.teamId);
+    const bonesTeam = match.isHome ? match.homeTeam : match.awayTeam;
+    if (squadLineup) {
+      for (const p of squadLineup.starters || []) {
+        if (!p.name) continue;
+        startersSet.add(p.name.trim().toLowerCase());
+        const dynPos = getPlayerPositionInMatch(p.name, p.fiksId, match, p.position);
+        const c = getOrCreateCandidate(p.name, bonesTeam, dynPos, p.jerseyNumber || p.number, true);
+        c.isStarter = true;
+      }
+      for (const p of squadLineup.bench || []) {
+        if (!p.name) continue;
+        benchSet.add(p.name.trim().toLowerCase());
+        const dynPos = getPlayerPositionInMatch(p.name, p.fiksId, match, p.position);
+        const c = getOrCreateCandidate(p.name, bonesTeam, dynPos, p.jerseyNumber || p.number, true);
+        if (c.isStarter === undefined) c.isStarter = false;
+      }
+    }
   }
 
   // Determine winner score differential
   const homeScore = match.homeScore ?? 0;
   const awayScore = match.awayScore ?? 0;
-  const homeWon = homeScore > awayScore;
-  const awayWon = awayScore > homeScore;
+  const isMatchPlayed = match.status === 'finished' || (match.status as string) === 'live';
 
   // Calculate algorithm ratings using Context-Aware Game-State Engine
   const candidates = Array.from(candidateMap.values());
@@ -131,6 +156,28 @@ export function calculateMatchPOTM(
 
   for (const c of candidates) {
     totalVotes += c.votes;
+    const pNorm = c.playerName.trim().toLowerCase();
+
+    // Check if player took part in the match
+    const isStarter = c.isStarter ?? startersSet.has(pNorm);
+    const hasEvents = (c.goals > 0 || (c.ownGoals || 0) > 0 || c.assists > 0 || c.yellowCards > 0 || c.redCards > 0);
+    const wasSubbedIn = (match.events || []).some(
+      e => e.subInPlayer && e.subInPlayer.trim().toLowerCase() === pNorm
+    );
+    const playedInMatch = Boolean(isStarter || hasEvents || wasSubbedIn);
+
+    c.playedInMatch = playedInMatch;
+    c.isStarter = isStarter;
+    c.isUnusedSub = !playedInMatch && benchSet.has(pNorm);
+
+    // Rule: UPCOMING matches get NO ratings. Unused reserves get NO ratings.
+    if (!isMatchPlayed || !playedInMatch) {
+      c.algoRating = undefined;
+      c.ratingBreakdown = undefined;
+      c.tags = c.isUnusedSub ? ['Ubenyttet reserve'] : [];
+      c.combinedScore = c.votes > 0 ? parseFloat((c.votes * 1.0).toFixed(2)) : 0;
+      continue;
+    }
 
     const perf = calculatePlayerPerformanceRating(
       {
@@ -138,13 +185,15 @@ export function calculateMatchPOTM(
         team: c.team,
         position: c.position,
         jerseyNumber: c.jerseyNumber,
+        isStarter,
         goals: c.goals,
         ownGoals: c.ownGoals,
         assists: c.assists,
         yellowCards: c.yellowCards,
         redCards: c.redCards,
       },
-      match
+      match,
+      tables
     );
 
     c.algoRating = perf.rating;
@@ -154,6 +203,10 @@ export function calculateMatchPOTM(
 
   // Incorporate public votes and apply disqualification rules for own goals
   for (const c of candidates) {
+    if (!isMatchPlayed || !c.playedInMatch || c.algoRating === undefined) {
+      continue;
+    }
+
     const hasOwnGoal = (c.ownGoals || 0) > 0;
     if (hasOwnGoal) {
       c.disqualified = true;
@@ -173,14 +226,20 @@ export function calculateMatchPOTM(
 
   // Sort candidates: eligible players first by combinedScore descending; disqualified players at the very bottom
   candidates.sort((a, b) => {
+    // Players who played come before players who didn't play
+    if (a.playedInMatch && !b.playedInMatch) return -1;
+    if (!a.playedInMatch && b.playedInMatch) return 1;
+
     if (a.disqualified && !b.disqualified) return 1;
     if (!a.disqualified && b.disqualified) return -1;
-    return b.combinedScore - a.combinedScore || b.votes - a.votes || b.algoRating - a.algoRating;
+    return b.combinedScore - a.combinedScore || b.votes - a.votes || (b.algoRating || 0) - (a.algoRating || 0);
   });
 
-  // Pick winner / leader: Must NEVER be a player who scored an own goal
-  const eligibleCandidates = candidates.filter((c) => !c.disqualified && (c.ownGoals || 0) === 0);
-  const eligiblePool = eligibleCandidates.length > 0 ? eligibleCandidates : candidates;
+  // Pick winner / leader: Must NEVER be a player who scored an own goal, was absent from FIKS lineup, or did not play
+  const eligibleCandidates = candidates.filter(
+    (c) => c.playedInMatch && c.algoRating !== undefined && !c.disqualified && (c.ownGoals || 0) === 0 && c.isInFiksLineup !== false
+  );
+  const eligiblePool = eligibleCandidates.length > 0 ? eligibleCandidates : [];
 
   const leader = jurySelectedPlayer
     ? eligiblePool.find((c) => c.playerName === jurySelectedPlayer) || eligiblePool[0]
@@ -189,16 +248,20 @@ export function calculateMatchPOTM(
   const status: 'voting_open' | 'decided' =
     match.status === 'finished' ? 'decided' : 'voting_open';
 
+  const defaultSyncText = match.fiksSyncedAt || (match.isOfficialFiks ? 'Synkronisert 15 min før avspark' : 'Synkronisert fra NFF');
+
   return {
-    winnerName: leader?.playerName,
-    winnerTeam: leader?.team,
-    winnerRating: leader?.algoRating,
-    winnerVotes: leader?.votes,
+    winnerName: isMatchPlayed ? leader?.playerName : undefined,
+    winnerTeam: isMatchPlayed ? leader?.team : undefined,
+    winnerRating: isMatchPlayed ? leader?.algoRating : undefined,
+    winnerVotes: isMatchPlayed ? leader?.votes : undefined,
     candidates,
     totalVotes,
     status,
     jurySelectedPlayer: jurySelectedPlayer || existingPOTM?.jurySelectedPlayer,
     juryNotes: juryNotes || existingPOTM?.juryNotes,
-    lastVoteAt: new Date().toISOString()
+    lastVoteAt: new Date().toISOString(),
+    isFiksOfficial: !!match.isOfficialFiks,
+    fiksSyncedAt: defaultSyncText
   };
 }

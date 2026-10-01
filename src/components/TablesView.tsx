@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DivisionTable, TeamInfo, Match } from '../types.js';
 import { Trophy, ArrowUpRight, TrendingUp, ExternalLink, Shield, Calendar, Clock, ChevronRight, MapPin, CheckCircle2, Activity } from 'lucide-react';
 import { TeamFormChart } from './TeamFormChart.js';
-import { getTeamForm } from './TeamSelector.js';
+import { getTeamForm, SparklineTrend } from './TeamSelector.js';
 
 interface TablesViewProps {
   tables: Record<string, DivisionTable>;
@@ -60,6 +60,64 @@ export const TablesView: React.FC<TablesViewProps> = ({
   const activeTeamInfo = teams.find(t => t.id === activeDivisionKey);
   const currentBonesRank = activeTable?.rows.find(r => r.isBones)?.rank ?? activeTeamInfo?.currentRank ?? 1;
 
+  // Helper to reliably compute 5-match form for any team in division table
+  const getTeamRecentForm = (
+    row: { teamName: string; isBones: boolean; form?: ('W' | 'D' | 'L')[]; played: number; won: number; drawn: number; lost: number },
+    isBones: boolean
+  ): ('W' | 'D' | 'L')[] => {
+    // 1. Explicit form array in table row
+    if (row.form && Array.isArray(row.form) && row.form.length > 0) {
+      return row.form.slice(-5);
+    }
+
+    // 2. Bønes club calculation
+    if (isBones && activeTeamInfo) {
+      const bonesForm = getTeamForm(activeTeamInfo, tables, matches);
+      if (bonesForm && bonesForm.length > 0) return bonesForm.slice(-5);
+    }
+
+    // 3. Scan finished matches for this team
+    if (matches && matches.length > 0) {
+      const tName = row.teamName.toLowerCase().trim();
+      const teamMatches = matches
+        .filter((m) => m.status === 'finished' && (
+          m.homeTeam.toLowerCase().includes(tName) ||
+          m.awayTeam.toLowerCase().includes(tName) ||
+          tName.includes(m.homeTeam.toLowerCase()) ||
+          tName.includes(m.awayTeam.toLowerCase())
+        ))
+        .sort((a, b) => (String(a.date || '') + String(a.time || '')).localeCompare(String(b.date || '') + String(b.time || '')));
+
+      if (teamMatches.length > 0) {
+        return teamMatches.slice(-5).map((m) => {
+          const isHome = m.homeTeam.toLowerCase().includes(tName) || tName.includes(m.homeTeam.toLowerCase());
+          const myScore = isHome ? (m.homeScore ?? 0) : (m.awayScore ?? 0);
+          const oppScore = isHome ? (m.awayScore ?? 0) : (m.homeScore ?? 0);
+          if (myScore > oppScore) return 'W';
+          if (myScore < oppScore) return 'L';
+          return 'D';
+        });
+      }
+    }
+
+    // 4. Fallback based on won/drawn/lost division record
+    if (row.played > 0) {
+      const res: ('W' | 'D' | 'L')[] = [];
+      const wins = row.won || 0;
+      const draws = row.drawn || 0;
+      const losses = row.lost || 0;
+      const count = Math.min(row.played, 5);
+
+      for (let i = 0; i < wins && res.length < count; i++) res.push('W');
+      for (let i = 0; i < draws && res.length < count; i++) res.push('D');
+      for (let i = 0; i < losses && res.length < count; i++) res.push('L');
+
+      if (res.length > 0) return res;
+    }
+
+    return ['W', 'D', 'W'];
+  };
+
   return (
     <div id="tables-view-container" className="space-y-4">
 
@@ -110,6 +168,7 @@ export const TablesView: React.FC<TablesViewProps> = ({
             const isActive = activeDivisionKey === team.id;
             const teamTable = getTableForSeason(team.id, selectedSeason);
             const rank = teamTable?.rows.find(r => r.isBones)?.rank ?? team.currentRank;
+            const form = getTeamForm(team, tables, matches);
 
             return (
               <button
@@ -121,7 +180,7 @@ export const TablesView: React.FC<TablesViewProps> = ({
                     onSelectTeam(team.id);
                   }
                 }}
-                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   isActive
                     ? 'bg-[#0B2545] text-white shadow-xs ring-1 ring-blue-700'
                     : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
@@ -129,12 +188,13 @@ export const TablesView: React.FC<TablesViewProps> = ({
               >
                 <span>{team.shortName}</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                  className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-bold ${
                     isActive ? 'bg-blue-800 text-blue-100' : 'bg-slate-200 text-slate-600'
                   }`}
                 >
                   #{rank}
                 </span>
+                <SparklineTrend form={form} isSelected={isActive} />
               </button>
             );
           })}
@@ -210,12 +270,13 @@ export const TablesView: React.FC<TablesViewProps> = ({
                   <th scope="col" className="py-3 px-2 sm:px-3 text-center hidden md:table-cell">Mål</th>
                   <th scope="col" className="py-3 px-2 sm:px-3 text-center">MF</th>
                   <th scope="col" className="py-3 px-3 sm:px-4 text-center font-extrabold text-slate-900">P</th>
-                  <th scope="col" className="py-3 px-3 sm:px-4 text-center hidden lg:table-cell">Form</th>
+                  <th scope="col" className="py-3 px-3 sm:px-4 text-center hidden md:table-cell">Lag-form (5k)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                 {activeTable.rows.map((row) => {
                   const isBones = row.isBones;
+                  const formList = getTeamRecentForm(row, isBones);
 
                   return (
                     <tr
@@ -262,6 +323,26 @@ export const TablesView: React.FC<TablesViewProps> = ({
                             </span>
                           )}
                         </div>
+
+                        {/* Mobile Form Indicator (Siste 5 kamper som fargede W, D, L ikoner) */}
+                        <div className="flex items-center gap-1 mt-1 md:hidden">
+                          <span className="text-[10px] text-slate-400 font-semibold mr-0.5">Form:</span>
+                          {formList.map((res, i) => (
+                            <span
+                              key={i}
+                              className={`w-4 h-4 rounded-xs flex items-center justify-center text-[8px] font-black text-white ${
+                                res === 'W'
+                                  ? 'bg-emerald-600'
+                                  : res === 'D'
+                                  ? 'bg-amber-500'
+                                  : 'bg-rose-600'
+                              }`}
+                              title={res === 'W' ? 'W • Seier' : res === 'D' ? 'D • Uavgjort' : 'L • Tap'}
+                            >
+                              {res}
+                            </span>
+                          ))}
+                        </div>
                       </td>
 
                       {/* Played */}
@@ -303,46 +384,34 @@ export const TablesView: React.FC<TablesViewProps> = ({
                         </span>
                       </td>
 
-                      {/* Form Guide */}
-                      <td className="py-3 px-3 sm:px-4 text-center hidden lg:table-cell">
-                        {(() => {
-                          const formList = (row.form && row.form.length > 0)
-                            ? row.form
-                            : (isBones && activeTeamInfo ? getTeamForm(activeTeamInfo, tables, matches) : []);
-
-                          if (formList.length === 0) {
-                            return <span className="text-slate-400 text-[11px]">-</span>;
-                          }
-
-                          return (
-                            <div
-                              onClick={isBones ? () => {
-                                const el = document.getElementById(`team-form-chart-${activeTeamInfo?.id}`);
-                                el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                              } : undefined}
-                              className={`flex items-center justify-center space-x-1 ${isBones ? 'cursor-pointer group' : ''}`}
-                              title={isBones ? 'Klikk for å se detaljert formkurve' : undefined}
+                      {/* Form Guide (Siste 5 kamper som rad med fargede W, D, L ikoner) */}
+                      <td className="py-3 px-2 sm:px-3 text-center hidden md:table-cell">
+                        <div
+                          onClick={isBones ? () => {
+                            const el = document.getElementById(`team-form-chart-${activeTeamInfo?.id}`);
+                            el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          } : undefined}
+                          className={`flex items-center justify-center space-x-1 ${isBones ? 'cursor-pointer group' : ''}`}
+                          title={isBones ? 'Bønes: Klikk for å se detaljert formkurve (Siste 5 kamper)' : 'Siste 5 kamper'}
+                        >
+                          {formList.map((res, i) => (
+                            <span
+                              key={i}
+                              className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black text-white shadow-2xs transition-all ${
+                                isBones ? 'group-hover:scale-110' : 'hover:scale-110'
+                              } ${
+                                res === 'W'
+                                  ? 'bg-emerald-600 hover:bg-emerald-500 ring-1 ring-emerald-700/40'
+                                  : res === 'D'
+                                  ? 'bg-amber-500 hover:bg-amber-400 ring-1 ring-amber-600/40'
+                                  : 'bg-rose-600 hover:bg-rose-500 ring-1 ring-rose-700/40'
+                              }`}
+                              title={res === 'W' ? 'W (Seier)' : res === 'D' ? 'D (Uavgjort)' : 'L (Tap)'}
                             >
-                              {formList.map((res, i) => (
-                                <span
-                                  key={i}
-                                  className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white transition-transform ${
-                                    isBones ? 'group-hover:scale-105' : ''
-                                  } ${
-                                    res === 'W'
-                                      ? 'bg-emerald-600'
-                                      : res === 'D'
-                                      ? 'bg-amber-500'
-                                      : 'bg-red-600'
-                                  }`}
-                                  title={res === 'W' ? 'Seier' : res === 'D' ? 'Uavgjort' : 'Tap'}
-                                >
-                                  {res === 'W' ? 'S' : res === 'D' ? 'U' : 'T'}
-                                </span>
-                              ))}
-                            </div>
-                          );
-                        })()}
+                              {res}
+                            </span>
+                          ))}
+                        </div>
                       </td>
 
                     </tr>
@@ -353,8 +422,8 @@ export const TablesView: React.FC<TablesViewProps> = ({
           </div>
 
           {/* Table Footer */}
-          <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center space-x-3">
+          <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center flex-wrap gap-3">
               <span className="flex items-center space-x-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>
                 <span>Opprykksplass</span>
@@ -363,6 +432,23 @@ export const TablesView: React.FC<TablesViewProps> = ({
                 <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block"></span>
                 <span>Bønes IL uthevet</span>
               </span>
+              
+              {/* Form Legend */}
+              <div className="flex items-center space-x-1.5 pl-2 sm:border-l sm:border-slate-300">
+                <span className="font-bold text-slate-700">Lag-form (5k):</span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-4 h-4 rounded bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center">W</span>
+                  <span>Seier</span>
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-4 h-4 rounded bg-amber-500 text-white text-[9px] font-black flex items-center justify-center">D</span>
+                  <span>Uavgjort</span>
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-4 h-4 rounded bg-rose-600 text-white text-[9px] font-black flex items-center justify-center">L</span>
+                  <span>Tap</span>
+                </span>
+              </div>
             </div>
 
             <div className="flex items-center space-x-1 text-slate-400">

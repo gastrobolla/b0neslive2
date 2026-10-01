@@ -108,8 +108,8 @@ export const DualLiveView: React.FC<DualLiveViewProps> = ({
                 }`}
                 title={
                   isPotmDecided
-                    ? `Banens Beste er kåret: ${leader.playerName} (Score ${leader.algoRating.toFixed(1)})`
-                    : `Stemmegivning er åpen! Leder: ${leader.playerName} (Score ${leader.algoRating.toFixed(1)})`
+                    ? `Banens Beste er kåret: ${leader.playerName}${leader.algoRating !== undefined ? ` (Score ${leader.algoRating.toFixed(1)})` : ''}`
+                    : `Stemmegivning er åpen! Leder: ${leader.playerName}${leader.algoRating !== undefined ? ` (Score ${leader.algoRating.toFixed(1)})` : ''}`
                 }
               >
                 <Star
@@ -121,9 +121,11 @@ export const DualLiveView: React.FC<DualLiveViewProps> = ({
                   {isPotmDecided ? 'Banens beste: ' : 'Leder: '}
                   {leader.playerName}
                 </span>
-                <span className="font-mono text-[9px] bg-black/10 px-1 rounded font-black shrink-0">
-                  {leader.algoRating.toFixed(1)}
-                </span>
+                {leader.algoRating !== undefined && (
+                  <span className="font-mono text-[9px] bg-black/10 px-1 rounded font-black shrink-0">
+                    {leader.algoRating.toFixed(1)}
+                  </span>
+                )}
               </button>
             )}
           </div>
@@ -328,10 +330,12 @@ export const DualLiveView: React.FC<DualLiveViewProps> = ({
                 <span className="font-bold text-slate-900 truncate text-[11px]">
                   {leader.playerName}
                 </span>
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 text-[10px] font-mono font-black shrink-0">
-                  <Star className="w-2.5 h-2.5 fill-slate-950" />
-                  {leader.algoRating.toFixed(1)}
-                </span>
+                {leader.algoRating !== undefined && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 text-[10px] font-mono font-black shrink-0">
+                    <Star className="w-2.5 h-2.5 fill-slate-950" />
+                    {leader.algoRating.toFixed(1)}
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex items-center space-x-1.5 shrink-0 ml-1">

@@ -780,10 +780,46 @@ export async function scrapeMatchLineup(fiksIdOrMatch: string | number | Match):
   if (!kampId) return null;
 
   try {
-    const url = `https://www.fotball.no/fotballdata/kamp/?fiksId=${kampId}&underside=kamptropper`;
-    const res = await fetchWithTimeout(url, 9000);
-    if (!res || !res.ok) return null;
-    const html = await res.text();
+    const urls = [
+      `https://www.fotball.no/fotballdata/kamp/?fiksId=${kampId}`,
+      `https://www.fotball.no/fotballdata/kamp/?fiksId=${kampId}&underside=kamptropper`
+    ];
+
+    let html = '';
+
+    // Check local file cache first if available
+    try {
+      const fs = await import('fs');
+      const tmpPath = `/tmp/match_${kampId}.html`;
+      if (fs.existsSync(tmpPath)) {
+        const cached = fs.readFileSync(tmpPath, 'utf8');
+        if (cached && (cached.includes('Startoppstilling') || cached.includes('startoppstilling'))) {
+          html = cached;
+        }
+      }
+    } catch {}
+
+    // Fetch from NFF fotball.no if not in cache
+    if (!html) {
+      for (const url of urls) {
+        const res = await fetchWithTimeout(url, 10000);
+        if (res && res.ok) {
+          const text = await res.text();
+          if (text.includes('Startoppstilling') || text.includes('startoppstilling')) {
+            html = text;
+            try {
+              const fs = await import('fs');
+              fs.writeFileSync(`/tmp/match_${kampId}.html`, text, 'utf8');
+            } catch {}
+            break;
+          } else if (!html) {
+            html = text;
+          }
+        }
+      }
+    }
+
+    if (!html) return null;
 
     const sections = html.split(/<h[234][^>]*>/i);
     let homeTeam = matchObj?.homeTeam || '';

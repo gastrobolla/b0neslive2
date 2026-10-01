@@ -84,6 +84,23 @@ export interface PlayerTeamRepresentation {
   autumnMatches: number;
 }
 
+export interface CoachNote {
+  id: string;
+  playerId: string;
+  playerName: string;
+  author: string;
+  authorRole?: string;
+  date: string;
+  category: 'holdning' | 'taktisk' | 'teknisk' | 'fysisk' | 'fokus' | 'generelt';
+  title: string;
+  content: string;
+  tags?: string[];
+  matchId?: string;
+  opponent?: string;
+  isHighlight?: boolean;
+  createdAt: string;
+}
+
 export interface PlayerMatchLog {
   id: string;
   date: string;
@@ -93,15 +110,19 @@ export interface PlayerMatchLog {
   score: string;
   result: 'W' | 'D' | 'L';
   goals: number;
+  assists?: number;
   yellowCard: boolean;
   redCard: boolean;
   minutes: number;
   rating: number; // 6.0 - 9.8
+  ratingBreakdown?: PlayerRatingBreakdown;
+  tags?: string[];
   highlight?: string;
   teamId?: string;
   teamName?: string;
   division?: string;
   role?: string;
+  fiksStatus?: 'Startet' | 'Innbytter' | 'Ubenyttet reserve';
   position?: PlayerPosition;
 }
 
@@ -114,6 +135,18 @@ export interface PlayerSeasonStats {
   goalsPerMatch: number;
   divisionName: string;
   minutesPlayed: number;
+}
+
+export interface PlayerCareerStats {
+  totalMatches: number;
+  totalGoals: number;
+  goalsAverage: number;
+  matchesYouth: number;
+  matchesAdult: number;
+  goalsYouth: number;
+  goalsAdult: number;
+  yellowCards: number;
+  redCards: number;
 }
 
 export interface PlayerProfile {
@@ -137,6 +170,7 @@ export interface PlayerProfile {
   };
   isBonesPlayer: boolean;
   teamsPlayedFor?: PlayerTeamRepresentation[];
+  career?: PlayerCareerStats;
   spring: PlayerSeasonStats;
   autumn: PlayerSeasonStats;
   total: {
@@ -156,6 +190,10 @@ export interface PlayerProfile {
   formSummary: ('W' | 'D' | 'L')[];
   formTrend: 'rising' | 'steady' | 'declining';
   matchHistory: PlayerMatchLog[];
+  averageRating?: number;
+  last3AverageRating?: number;
+  highestRating?: number;
+  coachNotes?: CoachNote[];
   officialNffData?: any;
 }
 
@@ -203,6 +241,9 @@ export interface Player {
   yellowCards: number;
   redCards: number;
   isStarter?: boolean;
+  averageRating?: number;
+  last3AverageRating?: number;
+  highestRating?: number;
 }
 
 export interface MatchLineup {
@@ -226,7 +267,7 @@ export interface MatchEvent {
   minute: number;
   type: MatchEventType;
   goalType?: 'own_goal' | 'penalty' | 'normal';
-  playerId?: string; // Canonical person ID (e.g. "fiks-123456" or "legacy_sander_fjellstad")
+  playerId?: string; // Canonical person ID (e.g. "fiks-3898455" or "fiks-123456")
   fiksId?: number; // Numeric FIKS person ID if available
   player?: string; // Display name
   ambiguous?: boolean; // True if name match was ambiguous across multiple players
@@ -253,6 +294,7 @@ export interface MatchStats {
   possession?: { home: number; away: number };
   shotsTotal?: { home: number; away: number };
   shotsOnTarget?: { home: number; away: number };
+  passAccuracy?: { home: number; away: number };
   bigChances?: { home: number; away: number };
   corners?: { home: number; away: number };
   fouls?: { home: number; away: number };
@@ -320,6 +362,9 @@ export interface Match {
   opponentFiksId?: number;
   opponentName?: string;
   playerOfTheMatch?: PlayerOfTheMatchData;
+  fiksSyncedAt?: string;
+  fiksSyncAttempted?: '15min' | 'kickoff' | 'retry' | 'manual';
+  fiksSyncFailedAt15?: boolean;
 }
 
 export interface ScanLog {
@@ -538,12 +583,18 @@ export interface PlayerRatingBreakdown {
   anchorStabilization?: number;
   goalImpact?: number;
   assistImpact?: number;
+  savesImpact?: number;
+  tackleImpact?: number;
+  blockImpact?: number;
+  possessionImpact?: number;
+  opponentStrengthBonus?: number;
   disciplinePenalty?: number;
   tags?: string[];
 }
 
 export interface PlayerOfTheMatchCandidate {
   playerId?: string;
+  fiksId?: number;
   playerName: string;
   team: string;
   jerseyNumber?: number;
@@ -555,11 +606,16 @@ export interface PlayerOfTheMatchCandidate {
   assists: number;
   yellowCards: number;
   redCards: number;
-  algoRating: number; // 3.5 - 9.8 based on performance
+  algoRating?: number; // 3.5 - 9.8 based on performance (undefined for upcoming matches or unused reserves)
+  isStarter?: boolean;
+  playedInMatch?: boolean;
+  isUnusedSub?: boolean;
   votes: number; // public spectator votes
   combinedScore: number; // composite of algoRating and public votes
   ratingBreakdown?: PlayerRatingBreakdown;
   tags?: string[];
+  isInFiksLineup?: boolean; // True if player was formally registered in the FIKS match squad
+  fiksStatus?: 'innmeldt' | 'ikke_innmeldt';
 }
 
 export interface PlayerOfTheMatchData {
@@ -573,6 +629,8 @@ export interface PlayerOfTheMatchData {
   jurySelectedPlayer?: string;
   juryNotes?: string;
   lastVoteAt?: string;
+  fiksSyncedAt?: string; // Timestamp for 15-min pre-match FIKS sync
+  isFiksOfficial?: boolean;
 }
 
 export interface MomentumPoint {

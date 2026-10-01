@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useId } from 'react';
 import { TeamInfo, DivisionTable, Match } from '../types.js';
 import { Users, ChevronDown, Check, Search, X, TrendingUp } from 'lucide-react';
 
@@ -79,89 +79,152 @@ export function getTeamForm(
 }
 
 /**
- * Mini-trend sparkline component showing form over last 5 matches
+ * Mini-trend sparkline component showing color-coded trendline over matches:
+ * Grønn for seier (W), gul for uavgjort (D), rød for tap (L).
  */
 export const SparklineTrend: React.FC<{
   form: ('W' | 'D' | 'L')[];
   isSelected: boolean;
-}> = ({ form, isSelected }) => {
+  width?: number;
+  height?: number;
+  showChips?: boolean;
+}> = ({ form, isSelected, width = 36, height = 14, showChips = true }) => {
   if (!form || form.length === 0) return null;
 
-  // Map results to coordinates for an SVG sparkline
-  // W = 1 (top, y=2), D = 0 (middle, y=6), L = -1 (bottom, y=10)
-  const height = 12;
-  const width = 28;
-  const step = form.length > 1 ? width / (form.length - 1) : width / 2;
+  const step = form.length > 1 ? (width - 4) / (form.length - 1) : (width - 4) / 2;
 
   const points = form.map((res, i) => {
-    const x = Math.round(i * step);
-    const y = res === 'W' ? 2 : res === 'D' ? 6 : 10;
+    const x = Math.round(2 + i * step);
+    const y = res === 'W' ? 2.5 : res === 'D' ? 7 : 11.5;
     return { x, y, res };
   });
 
-  const polylinePoints = points.map((p) => `${p.x},${p.y}`).join(' ');
+  const getResultColor = (res: 'W' | 'D' | 'L', selected: boolean) => {
+    if (res === 'W') return selected ? '#4ade80' : '#10b981'; // Grønn for seier
+    if (res === 'D') return selected ? '#fde047' : '#eab308'; // Gul for uavgjort
+    return selected ? '#f87171' : '#ef4444'; // Rød for tap
+  };
 
-  // Last match color
-  const lastResult = form[form.length - 1];
-  const lastPointColor =
-    lastResult === 'W'
-      ? isSelected ? '#86efac' : '#10b981'
-      : lastResult === 'L'
-      ? isSelected ? '#fda4af' : '#f43f5e'
-      : isSelected ? '#e2e8f0' : '#94a3b8';
-
-  const strokeColor = isSelected ? 'rgba(255, 255, 255, 0.75)' : '#94a3b8';
+  const formText = form
+    .map((f) => (f === 'W' ? 'Seier (grønn)' : f === 'D' ? 'Uavgjort (gul)' : 'Tap (rød)'))
+    .join(' ➔ ');
 
   return (
     <div
-      className="inline-flex items-center space-x-1 pl-1"
-      title={`Form siste 5 kamper: ${form.map((f) => (f === 'W' ? 'S' : f === 'D' ? 'U' : 'T')).join('-')}`}
+      className="inline-flex items-center space-x-1 pl-0.5 select-none"
+      title={`Trendlinje: ${formText}`}
     >
-      <svg width={width} height={height} className="overflow-visible">
-        {/* Baseline line */}
+      <svg
+        width={width}
+        height={height}
+        className="overflow-visible shrink-0"
+        aria-label={`Trendkurve: ${formText}`}
+      >
+        <defs>
+          {/* Subtle glow filter for the active trendline */}
+          <filter id={`sparkline-glow-${isSelected ? 'sel' : 'def'}`} x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="0.5" stdDeviation="0.6" floodOpacity={isSelected ? '0.4' : '0.25'} />
+          </filter>
+          {/* Gradients for smooth transition between match outcomes */}
+          {points.slice(0, points.length - 1).map((p, idx) => {
+            const next = points[idx + 1];
+            const c1 = getResultColor(p.res, isSelected);
+            const c2 = getResultColor(next.res, isSelected);
+            return (
+              <linearGradient
+                key={`grad-${idx}`}
+                id={`spark-grad-${isSelected ? 's' : 'd'}-${idx}`}
+                x1={p.x}
+                y1={p.y}
+                x2={next.x}
+                y2={next.y}
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop offset="0%" stopColor={c1} />
+                <stop offset="100%" stopColor={c2} />
+              </linearGradient>
+            );
+          })}
+        </defs>
+
+        {/* Mid-level neutral dotted baseline (Uavgjort-referanselinje) */}
         <line
-          x1="0"
-          y1="6"
-          x2={width}
-          y2="6"
-          stroke={isSelected ? 'rgba(255,255,255,0.2)' : 'rgba(148,163,184,0.3)'}
-          strokeWidth="0.75"
-          strokeDasharray="1 1"
+          x1="1"
+          y1="7"
+          x2={width - 1}
+          y2="7"
+          stroke={isSelected ? 'rgba(255,255,255,0.3)' : 'rgba(148,163,184,0.45)'}
+          strokeWidth="0.8"
+          strokeDasharray="2 1.5"
         />
-        {/* Trend Polyline */}
-        <polyline
-          fill="none"
-          stroke={strokeColor}
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          points={polylinePoints}
-        />
-        {/* Latest match dot */}
-        {points.length > 0 && (
-          <circle
-            cx={points[points.length - 1].x}
-            cy={points[points.length - 1].y}
-            r="2"
-            fill={lastPointColor}
-          />
-        )}
+
+        {/* Color-coded trendline segments: grønn (W), gul (D), rød (L) */}
+        {points.slice(0, points.length - 1).map((p, idx) => {
+          const next = points[idx + 1];
+          return (
+            <line
+              key={`seg-${idx}`}
+              x1={p.x}
+              y1={p.y}
+              x2={next.x}
+              y2={next.y}
+              stroke={`url(#spark-grad-${isSelected ? 's' : 'd'}-${idx})`}
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              filter={`url(#sparkline-glow-${isSelected ? 'sel' : 'def'})`}
+            />
+          );
+        })}
+
+        {/* Color-coded vertex dots on each match point */}
+        {points.map((p, idx) => {
+          const isLatest = idx === points.length - 1;
+          const color = getResultColor(p.res, isSelected);
+          return (
+            <g key={`pt-${idx}`}>
+              {isLatest && (
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r="4"
+                  fill="none"
+                  stroke={color}
+                  strokeWidth="0.8"
+                  opacity="0.6"
+                  className="animate-ping"
+                />
+              )}
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={isLatest ? 2.8 : 2}
+                fill={color}
+                stroke={isSelected ? '#0B2545' : '#ffffff'}
+                strokeWidth={isLatest ? 1.2 : 0.8}
+              />
+            </g>
+          );
+        })}
       </svg>
-      {/* 5 Form chips mini preview */}
-      <span className="hidden xl:inline-flex items-center space-x-0.5">
-        {form.map((res, idx) => (
-          <span
-            key={idx}
-            className={`w-1.5 h-1.5 rounded-full ${
-              res === 'W'
-                ? isSelected ? 'bg-emerald-300' : 'bg-emerald-500'
-                : res === 'L'
-                ? isSelected ? 'bg-rose-300' : 'bg-rose-500'
-                : isSelected ? 'bg-slate-300' : 'bg-slate-400'
-            }`}
-          />
-        ))}
-      </span>
+
+      {/* Mini dots sequence preview: Grønn (seier), Gul (uavgjort), Rød (tap) */}
+      {showChips && (
+        <span className="hidden xl:inline-flex items-center space-x-0.5 ml-0.5">
+          {form.map((res, idx) => (
+            <span
+              key={idx}
+              className={`w-1.5 h-1.5 rounded-full ${
+                res === 'W'
+                  ? isSelected ? 'bg-emerald-300' : 'bg-emerald-500'
+                  : res === 'D'
+                  ? isSelected ? 'bg-amber-300' : 'bg-amber-400'
+                  : isSelected ? 'bg-rose-300' : 'bg-rose-500'
+              }`}
+              title={res === 'W' ? 'Seier (grønn)' : res === 'D' ? 'Uavgjort (gul)' : 'Tap (rød)'}
+            />
+          ))}
+        </span>
+      )}
     </div>
   );
 };

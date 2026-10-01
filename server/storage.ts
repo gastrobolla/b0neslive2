@@ -252,6 +252,35 @@ export function loadPersistedData(): BonesClubData {
         }
         parsed.matches = Array.from(matchMap.values());
 
+        // Strictly purge mockup players and reset any mockup matches (e.g. nff-9183579)
+        for (const m of parsed.matches) {
+          if (m.id === 'nff-9183579') {
+            m.status = 'upcoming';
+            delete m.homeScore;
+            delete m.awayScore;
+            m.events = [];
+            delete m.playerOfTheMatch;
+          }
+          if (m.events) {
+            m.events = m.events.filter(e => !e.player || !e.player.toLowerCase().includes('sander bønes'));
+          }
+          if (m.playerOfTheMatch?.winnerName?.toLowerCase().includes('sander bønes')) {
+            delete m.playerOfTheMatch;
+          }
+        }
+        if (Array.isArray(parsed.topScorers)) {
+          parsed.topScorers = parsed.topScorers.filter(p => !p.name || !p.name.toLowerCase().includes('sander bønes'));
+        }
+        if (Array.isArray(parsed.players)) {
+          parsed.players = parsed.players.filter(p => !p.name || !p.name.toLowerCase().includes('sander bønes'));
+        }
+        if (Array.isArray(parsed.feed)) {
+          parsed.feed = parsed.feed.filter(f => !f.player || !f.player.toLowerCase().includes('sander bønes'));
+        }
+        if (Array.isArray(parsed.processedEventIds)) {
+          parsed.processedEventIds = parsed.processedEventIds.filter(id => !id.includes('sander_boenes'));
+        }
+
         const eventsFile = path.join(DATA_DIR, 'real_match_events.json');
         if (fs.existsSync(eventsFile)) {
           try {

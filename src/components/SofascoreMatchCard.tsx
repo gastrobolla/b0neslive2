@@ -254,10 +254,12 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
                 <span className="font-extrabold text-slate-900 truncate">
                   {leader.playerName}
                 </span>
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 text-[10px] font-mono font-black shrink-0">
-                  <Star className="w-2.5 h-2.5 fill-slate-950" />
-                  {(leader.algoRating ?? (leader as any).rating ?? 0).toFixed(1)}
-                </span>
+                {leader.algoRating !== undefined && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 text-[10px] font-mono font-black shrink-0">
+                    <Star className="w-2.5 h-2.5 fill-slate-950" />
+                    {leader.algoRating.toFixed(1)}
+                  </span>
+                )}
               </div>
             </div>
 

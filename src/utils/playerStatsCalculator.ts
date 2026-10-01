@@ -41,25 +41,8 @@ export interface EnrichedPlayerStat {
   isOfficialNff?: boolean;
 }
 
-// Known assist contributors based on playmakers & match logs in Bønes IL
-const KNOWN_ASSIST_CONTRIBUTIONS: Record<string, number> = {
-  'Sander Fjellstad': 6,
-  'Kasper Haukeland': 5,
-  'Emma Sofie Solheim': 5,
-  'Eirik Helle Soltvedt': 4,
-  'Henrik Vindenes': 3,
-  'Mathias Bønes Lind': 5,
-  'Ingrid Møller': 4,
-  'Jonas Haukeland': 4,
-  'Thea Berg': 4,
-  'Mikkel Sandven': 3,
-  'Eskil Møller': 3,
-  'Tobias Fjellbirkeland': 3,
-  'Markus Tveit': 2,
-  'Sander Bønes': 3,
-  'Håkon Sandven': 2,
-  'Kristian Bøe': 3,
-};
+// Known assist contributors based on verified match logs in Bønes IL
+const KNOWN_ASSIST_CONTRIBUTIONS: Record<string, number> = {};
 
 /**
  * Calculates the authoritative Top Scorers list purely from the season match log (`data.matches`).
@@ -102,17 +85,31 @@ export function calculateCardsFromSeasonLog(
 }
 
 /**
+ * Computes the authoritative cutoff date for a player's static official statistics snapshot.
+ * Any match played after this date is a newly completed or live match that must increment stats.
+ */
+export function getOfficialCutoffDate(official?: any): string {
+  if (official?.matches2026 && official.matches2026.length > 0) {
+    const dates = official.matches2026.map((m: any) => {
+      const parts = m.date.split('.');
+      return parts.length === 2 ? `2026-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}` : m.date;
+    });
+    dates.sort();
+    return dates[dates.length - 1];
+  }
+  return official?.lastUpdated ? official.lastUpdated.slice(0, 10) : '2026-09-20';
+}
+
+/**
  * Calculates unified player statistics for ALL players across ALL 16 Bønes football teams,
- * prioritizing official NFF statistics from fotball.no (FIKS) and ensuring that players
- * who participate on multiple teams have accurate per-team and club-wide aggregated stats
- * without duplicate or inflated match counts.
+ * prioritizing official NFF statistics from fotball.no (FIKS) while dynamically and authoritatively
+ * incorporating the latest completed and live matches from data.matches.
+ * Ensures that players who participate on multiple teams have accurate per-team and club-wide
+ * aggregated stats without duplicate or inflated match counts.
  */
 export function calculateAllPlayerStats(data: BonesClubData): EnrichedPlayerStat[] {
   const squadPlayerMap = new Map<string, EnrichedPlayerStat>();
   const initialPlayers = data.players && data.players.length > 0 ? data.players : ALL_BONES_PLAYERS;
-
-  // Track match participations per (personId + teamId) from local match logs
-  const teamMatchSet = new Map<string, Set<string>>();
 
   // 1. Initialize from squad rosters
   for (const p of initialPlayers) {
@@ -128,11 +125,11 @@ export function calculateAllPlayerStats(data: BonesClubData): EnrichedPlayerStat
     // Check if official NFF stats exist for this player
     const officialStats = getOfficialStatsForPlayer(fiksId);
 
-    let matches = 0;
-    let goals = 0;
-    let yellowCards = 0;
-    let redCards = 0;
-    let goalsPerMatch = 0;
+    let matches = p.matches || 0;
+    let goals = p.goals || 0;
+    let yellowCards = p.yellowCards || 0;
+    let redCards = p.redCards || 0;
+    let goalsPerMatch = matches > 0 ? Number((goals / matches).toFixed(2)) : 0;
 
     if (officialStats) {
       const teamStat = officialStats.season2026.teams.find((t) => t.teamId === teamId);
@@ -142,8 +139,19 @@ export function calculateAllPlayerStats(data: BonesClubData): EnrichedPlayerStat
         yellowCards = teamStat.yellowCards;
         redCards = teamStat.redCards;
         goalsPerMatch = teamStat.goalsPerMatch;
+      } else if (officialStats.season2026.teams.length === 1 && matches === 0) {
+        const singleTeam = officialStats.season2026.teams[0];
+        matches = singleTeam.matches;
+        goals = singleTeam.goals;
+        yellowCards = singleTeam.yellowCards;
+        redCards = singleTeam.redCards;
+        goalsPerMatch = singleTeam.goalsPerMatch;
       }
     }
+
+    const clonedTeams = officialStats?.season2026?.teams
+      ? officialStats.season2026.teams.map((t) => ({ ...t }))
+      : undefined;
 
     const enriched: EnrichedPlayerStat = {
       id: squadKey,
@@ -154,7 +162,13 @@ export function calculateAllPlayerStats(data: BonesClubData): EnrichedPlayerStat
       teamName: p.teamName || squad?.teamName || 'Bønes IL',
       category: squad?.category || 'Ungdom',
       jerseyNumber: p.jerseyNumber || 10,
-      position: p.position || 'Midtbane',
+      position: (fiksId === 3862970 || p.name.toLowerCase().includes('emma bjelde cortez'))
+        ? 'Keeper'
+        : (fiksId === 4009621 || p.name.toLowerCase().includes('maja sadownik bruvik') || p.name.toLowerCase().includes('maja bruvik'))
+        ? 'Forsvar'
+        : (p.name.toLowerCase().includes('sunniva stavrum') || (goals >= 3 && p.position === 'Keeper'))
+        ? 'Angrep'
+        : (p.position || 'Midtbane'),
       matches,
       goals,
       assists: 0,
@@ -165,7 +179,7 @@ export function calculateAllPlayerStats(data: BonesClubData): EnrichedPlayerStat
       cardStatus: redCards > 0 || yellowCards >= 4 ? 'Karantene' : yellowCards === 3 ? 'Advarsel (1 fra soning)' : 'Klar',
       isCaptain: p.role === 'Kaptein',
       isMultiTeam: officialStats ? officialStats.season2026.teams.length > 1 : false,
-      teamsPlayedFor: officialStats ? officialStats.season2026.teams : undefined,
+      teamsPlayedFor: clonedTeams,
       totalClubStats: officialStats
         ? {
             matches: officialStats.season2026.totalMatches,
@@ -206,7 +220,13 @@ export function calculateAllPlayerStats(data: BonesClubData): EnrichedPlayerStat
             teamName: t.teamName || squad?.teamName || 'Bønes IL',
             category: squad?.category || (t.ageCategory.includes('Voksen') ? 'Senior' : 'Ungdom'),
             jerseyNumber: p.jerseyNumber || 10,
-            position: p.position || 'Midtbane',
+            position: (fiksId === 3862970 || p.name.toLowerCase().includes('emma bjelde cortez'))
+              ? 'Keeper'
+              : (fiksId === 4009621 || p.name.toLowerCase().includes('maja sadownik bruvik') || p.name.toLowerCase().includes('maja bruvik'))
+              ? 'Forsvar'
+              : (p.name.toLowerCase().includes('sunniva stavrum') || (t.goals >= 3 && p.position === 'Keeper'))
+              ? 'Angrep'
+              : (p.position || 'Midtbane'),
             matches: t.matches,
             goals: t.goals,
             assists: 0,
@@ -217,7 +237,7 @@ export function calculateAllPlayerStats(data: BonesClubData): EnrichedPlayerStat
             cardStatus: t.redCards > 0 || t.yellowCards >= 4 ? 'Karantene' : t.yellowCards === 3 ? 'Advarsel (1 fra soning)' : 'Klar',
             isCaptain: false,
             isMultiTeam: true,
-            teamsPlayedFor: officialStats.season2026.teams,
+            teamsPlayedFor: officialStats.season2026.teams.map((tm) => ({ ...tm })),
             totalClubStats: {
               matches: officialStats.season2026.totalMatches,
               goals: officialStats.season2026.totalGoals,
@@ -234,68 +254,194 @@ export function calculateAllPlayerStats(data: BonesClubData): EnrichedPlayerStat
     }
   }
 
-  // 2. Scan match events from season log for assists & non-NFF fallbacks
-  for (const m of data.matches || []) {
-    if (!m.events || m.events.length === 0) continue;
+  // 2. Scan finished and live matches to dynamically include the latest matches, goals and cards
+  const processedPlayerMatches = new Set<string>(); // key: `${personId}_${matchId}`
 
-    for (const ev of m.events) {
+  for (const m of data.matches || []) {
+    // Only count completed or active live matches
+    if (m.status !== 'finished' && (m.status as string) !== 'live') continue;
+
+    const matchFiksId = m.fiksId || (m.id ? parseInt(m.id.replace('nff-', ''), 10) : undefined);
+
+    // Identify all match participants for Bønes
+    const matchLineup = [
+      ...(m.lineup?.starters || []),
+      ...(m.lineup?.bench || []),
+      ...(m.lineup?.subs || []),
+      ...(m.homeLineup?.starters || []),
+      ...(m.homeLineup?.bench || []),
+      ...(m.homeLineup?.subs || []),
+      ...(m.awayLineup?.starters || []),
+      ...(m.awayLineup?.bench || []),
+      ...(m.awayLineup?.subs || []),
+    ];
+
+    const potmCandidates = m.playerOfTheMatch?.candidates || [];
+
+    const bonesEvents = (m.events || []).filter((ev) => {
       const pName = (ev.player || '').trim();
       if (!pName || pName.toLowerCase().includes('personinfo') || pName.toLowerCase().includes('ikke tilgjengelig')) {
-        continue;
+        return false;
       }
-
-      // Check if event belongs to Bønes
-      const isBonesEvent =
+      return (
         (ev.team && ev.team.toLowerCase().includes('bønes')) ||
         (m.homeTeam.toLowerCase().includes('bønes') && ev.team === m.homeTeam) ||
         (m.awayTeam.toLowerCase().includes('bønes') && ev.team === m.awayTeam) ||
-        (!ev.team && (m.homeTeam.toLowerCase().includes('bønes') || m.awayTeam.toLowerCase().includes('bønes')));
+        (!ev.team && (m.homeTeam.toLowerCase().includes('bønes') || m.awayTeam.toLowerCase().includes('bønes')))
+      );
+    });
 
-      if (!isBonesEvent) continue;
+    // Map unique participants in this match
+    const participantsMap = new Map<string, { fiksId?: number; name: string }>();
 
-      // Find squad player entry for this match's teamId
-      const targetSquadKey = ev.fiksId
-        ? `fiks-${ev.fiksId}_${m.teamId}`
-        : `${sanitizeSlug(pName)}_${m.teamId}`;
+    for (const lp of matchLineup) {
+      const pName = (lp.name || '').trim();
+      if (!pName || pName.toLowerCase().includes('personinfo')) continue;
+      const key = lp.fiksId ? `fiks-${lp.fiksId}` : sanitizeSlug(pName);
+      if (!participantsMap.has(key)) {
+        participantsMap.set(key, { fiksId: lp.fiksId, name: pName });
+      }
+    }
+
+    for (const c of potmCandidates) {
+      const pName = (c.playerName || '').trim();
+      if (!pName || pName.toLowerCase().includes('personinfo')) continue;
+      const key = c.fiksId ? `fiks-${c.fiksId}` : sanitizeSlug(pName);
+      if (!participantsMap.has(key)) {
+        participantsMap.set(key, { fiksId: c.fiksId, name: pName });
+      }
+    }
+
+    for (const ev of bonesEvents) {
+      const pName = (ev.player || '').trim();
+      if (pName && !pName.toLowerCase().includes('personinfo')) {
+        const key = ev.fiksId ? `fiks-${ev.fiksId}` : sanitizeSlug(pName);
+        if (!participantsMap.has(key)) {
+          participantsMap.set(key, { fiksId: ev.fiksId, name: pName });
+        }
+      }
+      const subIn = (ev.subInPlayer || '').trim();
+      if (subIn && !subIn.toLowerCase().includes('personinfo')) {
+        const key = sanitizeSlug(subIn);
+        if (!participantsMap.has(key)) {
+          participantsMap.set(key, { name: subIn });
+        }
+      }
+    }
+
+    // Now update participant stats for newly finished or live matches
+    for (const [, partInfo] of participantsMap.entries()) {
+      const targetSquadKey = partInfo.fiksId
+        ? `fiks-${partInfo.fiksId}_${m.teamId}`
+        : `${sanitizeSlug(partInfo.name)}_${m.teamId}`;
 
       let p = squadPlayerMap.get(targetSquadKey);
 
-      // Fallback: match by personId across teams if not found in this specific team
-      if (!p && ev.fiksId) {
+      // Fallback: match by fiksId or name across teams
+      if (!p) {
         for (const entry of squadPlayerMap.values()) {
-          if (entry.fiksId === ev.fiksId) {
+          if (
+            (partInfo.fiksId && entry.fiksId === partInfo.fiksId) ||
+            entry.name.toLowerCase() === partInfo.name.toLowerCase()
+          ) {
             p = entry;
             break;
           }
         }
       }
 
-      if (p) {
-        // Tally assists
-        let assistName: string | null = null;
-        let assistFiksId = ev.assistFiksId;
-        if (ev.assistPlayer) {
-          assistName = ev.assistPlayer.trim();
-        } else if (ev.description) {
-          const descLower = ev.description.toLowerCase();
-          if (descLower.includes('målgivende:') || descLower.includes('assist:') || descLower.includes('innlegg fra')) {
-            const matchRegex = ev.description.match(/(?:målgivende|assist|innlegg fra)\s*:?\s*([A-ZÆØÅa-zæøå\s]+)/i);
-            if (matchRegex && matchRegex[1]) {
-              assistName = matchRegex[1].trim();
-            }
-          }
+      if (!p) continue;
+
+      const playerMatchKey = `${p.personId}_${m.id}`;
+      if (processedPlayerMatches.has(playerMatchKey)) continue;
+      processedPlayerMatches.add(playerMatchKey);
+
+      // Check if this match was already part of the player's official stats baseline
+      const official = getOfficialStatsForPlayer(p.fiksId);
+      let isOfficialBaselineMatch = false;
+      if (official && official.season2026) {
+        const cutoff = getOfficialCutoffDate(official);
+        isOfficialBaselineMatch = m.date <= cutoff;
+      }
+
+      // If NOT in official baseline (e.g. newly finished match, latest match, or non-official player):
+      if (!isOfficialBaselineMatch) {
+        p.matches += 1;
+        if (p.totalClubStats) {
+          p.totalClubStats.matches += 1;
         }
 
-        if (assistName || assistFiksId) {
-          for (const aEntry of squadPlayerMap.values()) {
-            if (
-              (assistFiksId && aEntry.fiksId === assistFiksId && aEntry.teamId === m.teamId) ||
-              (assistName && aEntry.name.toLowerCase() === assistName.toLowerCase() && aEntry.teamId === m.teamId)
-            ) {
-              aEntry.assists += 1;
-              aEntry.points = aEntry.goals + aEntry.assists;
-              break;
-            }
+        // Tally events for this player in this new match
+        const playerEvents = bonesEvents.filter((ev) => {
+          if (partInfo.fiksId && ev.fiksId) return ev.fiksId === partInfo.fiksId;
+          return ev.player && ev.player.trim().toLowerCase() === partInfo.name.toLowerCase();
+        });
+
+        const newGoals = playerEvents.filter((e) => e.type === 'goal').length;
+        const newYellow = playerEvents.filter((e) => e.type === 'yellow_card').length;
+        const newRed = playerEvents.filter((e) => e.type === 'red_card').length;
+
+        p.goals += newGoals;
+        p.yellowCards += newYellow;
+        p.redCards += newRed;
+
+        if (p.totalClubStats) {
+          p.totalClubStats.goals += newGoals;
+          p.totalClubStats.yellowCards += newYellow;
+          p.totalClubStats.redCards += newRed;
+        }
+
+        // Update teamsPlayedFor
+        if (p.teamsPlayedFor) {
+          let teamEntry = p.teamsPlayedFor.find((t) => t.teamId === m.teamId);
+          if (!teamEntry) {
+            const squad = ALL_BONES_SQUADS.find((s) => s.teamId === m.teamId);
+            teamEntry = {
+              teamId: m.teamId,
+              teamName: m.teamName || squad?.teamName || 'Bønes IL',
+              ageCategory: squad?.category || 'Ungdom',
+              matches: 0,
+              goals: 0,
+              goalsPerMatch: 0,
+              yellowCards: 0,
+              redCards: 0,
+            };
+            p.teamsPlayedFor.push(teamEntry);
+            p.isMultiTeam = p.teamsPlayedFor.length > 1;
+          }
+          teamEntry.matches += 1;
+          teamEntry.goals += newGoals;
+          teamEntry.yellowCards += newYellow;
+          teamEntry.redCards += newRed;
+          teamEntry.goalsPerMatch = teamEntry.matches > 0 ? Number((teamEntry.goals / teamEntry.matches).toFixed(2)) : 0;
+        }
+      }
+    }
+
+    // Assists scanning from match events
+    for (const ev of bonesEvents) {
+      let assistName: string | null = null;
+      let assistFiksId = ev.assistFiksId;
+      if (ev.assistPlayer) {
+        assistName = ev.assistPlayer.trim();
+      } else if (ev.description) {
+        const descLower = ev.description.toLowerCase();
+        if (descLower.includes('målgivende:') || descLower.includes('assist:') || descLower.includes('innlegg fra')) {
+          const matchRegex = ev.description.match(/(?:målgivende|assist|innlegg fra)\s*:?\s*([A-ZÆØÅa-zæøå\s]+)/i);
+          if (matchRegex && matchRegex[1]) {
+            assistName = matchRegex[1].trim();
+          }
+        }
+      }
+
+      if (assistName || assistFiksId) {
+        for (const aEntry of squadPlayerMap.values()) {
+          if (
+            (assistFiksId && aEntry.fiksId === assistFiksId && aEntry.teamId === m.teamId) ||
+            (assistName && aEntry.name.toLowerCase() === assistName.toLowerCase() && aEntry.teamId === m.teamId)
+          ) {
+            aEntry.assists += 1;
+            break;
           }
         }
       }
@@ -307,16 +453,61 @@ export function calculateAllPlayerStats(data: BonesClubData): EnrichedPlayerStat
     for (const p of squadPlayerMap.values()) {
       if (p.name.toLowerCase() === name.toLowerCase()) {
         p.assists = Math.max(p.assists, defaultAssists);
-        p.points = p.goals + p.assists;
-        if (p.totalClubStats) {
-          p.totalClubStats.assists = Math.max(p.totalClubStats.assists, p.assists);
-          p.totalClubStats.points = p.totalClubStats.goals + p.totalClubStats.assists;
-        }
       }
     }
   }
 
-  // 4. Return enriched list
+  // 4. Synchronize totalClubStats for multi-team players and finalize calculated metrics
+  const personClubStatsMap = new Map<string, { matches: number; goals: number; assists: number; yellowCards: number; redCards: number }>();
+  for (const p of squadPlayerMap.values()) {
+    const existing = personClubStatsMap.get(p.personId);
+    if (!existing) {
+      personClubStatsMap.set(p.personId, {
+        matches: p.totalClubStats?.matches ?? p.matches,
+        goals: p.totalClubStats?.goals ?? p.goals,
+        assists: p.totalClubStats?.assists ?? p.assists,
+        yellowCards: p.totalClubStats?.yellowCards ?? p.yellowCards,
+        redCards: p.totalClubStats?.redCards ?? p.redCards,
+      });
+    } else {
+      if (!p.isOfficialNff) {
+        existing.matches += p.matches;
+        existing.goals += p.goals;
+        existing.assists += p.assists;
+        existing.yellowCards += p.yellowCards;
+        existing.redCards += p.redCards;
+      } else {
+        existing.matches = Math.max(existing.matches, p.totalClubStats?.matches ?? p.matches);
+        existing.goals = Math.max(existing.goals, p.totalClubStats?.goals ?? p.goals);
+        existing.assists = Math.max(existing.assists, p.totalClubStats?.assists ?? p.assists);
+        existing.yellowCards = Math.max(existing.yellowCards, p.totalClubStats?.yellowCards ?? p.yellowCards);
+        existing.redCards = Math.max(existing.redCards, p.totalClubStats?.redCards ?? p.redCards);
+      }
+    }
+  }
+
+  for (const p of squadPlayerMap.values()) {
+    p.points = p.goals + p.assists;
+    p.goalsPerMatch = p.matches > 0 ? Number((p.goals / p.matches).toFixed(2)) : 0;
+    p.cardStatus = p.redCards > 0 || p.yellowCards >= 4 ? 'Karantene' : p.yellowCards === 3 ? 'Advarsel (1 fra soning)' : 'Klar';
+
+    const club = personClubStatsMap.get(p.personId);
+    if (club) {
+      const pts = club.goals + club.assists;
+      const gpm = club.matches > 0 ? Number((club.goals / club.matches).toFixed(2)) : 0;
+      p.totalClubStats = {
+        matches: club.matches,
+        goals: club.goals,
+        assists: club.assists,
+        points: pts,
+        yellowCards: club.yellowCards,
+        redCards: club.redCards,
+        goalsPerMatch: gpm,
+      };
+    }
+  }
+
+  // 5. Return enriched list
   return Array.from(squadPlayerMap.values());
 }
 
@@ -374,3 +565,65 @@ export function calculateAggregatedClubPlayerStats(squadPlayers: EnrichedPlayerS
     return p;
   });
 }
+
+/**
+ * Forces a complete re-calculation of all player data, top scorers, and card statistics
+ * immediately after a match has changed status to 'finished' or when a new match data bundle is fetched.
+ */
+export function recalculateAllPlayerData(
+  data: BonesClubData,
+  options?: {
+    finishedMatchId?: string;
+    reason?: 'match_finished' | 'data_fetched' | 'manual';
+  }
+): BonesClubData {
+  if (!data) return data;
+
+  // 1. Calculate enriched stats for every squad player
+  const enrichedSquadPlayers = calculateAllPlayerStats(data);
+
+  // 2. Map enriched squad players into Player[] for data.players
+  const updatedPlayers: Player[] = enrichedSquadPlayers.map((esp) => ({
+    id: esp.id,
+    fiksId: esp.fiksId,
+    name: esp.name,
+    teamId: esp.teamId,
+    teamName: esp.teamName,
+    jerseyNumber: esp.jerseyNumber,
+    position: esp.position,
+    matches: esp.matches,
+    goals: esp.goals,
+    assists: esp.assists,
+    yellowCards: esp.yellowCards,
+    redCards: esp.redCards,
+    role: esp.isCaptain ? 'Kaptein' : undefined,
+  }));
+
+  // 3. Recalculate authoritative Top Scorers and Cards from the season log
+  const nextData: BonesClubData = {
+    ...data,
+    players: updatedPlayers,
+  };
+
+  const nextTopScorers = calculateTopScorersFromSeasonLog(nextData);
+  const nextCards = calculateCardsFromSeasonLog(nextData);
+
+  return {
+    ...nextData,
+    topScorers: nextTopScorers,
+    cards: nextCards,
+    dataVersion: (data.dataVersion || 1) + 1,
+    lastDiskSaved: new Date().toISOString(),
+  };
+}
+
+export const forceRecalculatePlayerData = recalculateAllPlayerData;
+
+export function onMatchStatusChangedToFinished(data: BonesClubData, matchId?: string): BonesClubData {
+  return recalculateAllPlayerData(data, { finishedMatchId: matchId, reason: 'match_finished' });
+}
+
+export function onNewMatchDataFetched(data: BonesClubData): BonesClubData {
+  return recalculateAllPlayerData(data, { reason: 'data_fetched' });
+}
+

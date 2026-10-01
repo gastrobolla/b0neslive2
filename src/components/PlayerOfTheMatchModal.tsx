@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Match, PlayerOfTheMatchData, PlayerOfTheMatchCandidate } from '../types.js';
 import { calculateMatchPOTM } from '../utils/potmCalculator.js';
 import {
@@ -101,19 +101,29 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
   const [jurySelectedPlayer, setJurySelectedPlayer] = useState<string>('');
   const [juryNotes, setJuryNotes] = useState<string>('');
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (match) {
+      setPotmData(match.playerOfTheMatch || calculateMatchPOTM(match));
+      setHasVotedPlayer(localStorage.getItem(`bones_potm_vote_${match.id}`) || null);
+      setFeedbackMsg(null);
+      setIsJuryMode(false);
+      setJurySelectedPlayer('');
+      setJuryNotes('');
+    }
+  }, [match]);
 
-  const totalVotes = potmData.totalVotes || 0;
-  const winner = potmData.candidates.find((c) => c.playerName === potmData.winnerName) || potmData.candidates[0];
+  const totalVotes = potmData?.totalVotes || 0;
+  const winner = potmData?.candidates?.find((c) => c.playerName === potmData.winnerName) || potmData?.candidates?.[0];
 
   const chartData = useMemo(() => {
+    if (!potmData?.candidates) return [];
     return [...potmData.candidates]
       .sort((a, b) => {
         if (b.votes !== a.votes) return b.votes - a.votes;
-        return b.algoRating - a.algoRating;
+        return (b.algoRating ?? 0) - (a.algoRating ?? 0);
       })
       .map((c) => {
-        const nameParts = c.playerName.trim().split(/\s+/);
+        const nameParts = (c.playerName || '').trim().split(/\s+/);
         const shortName = nameParts.length > 1
           ? `${nameParts[0]} ${nameParts[nameParts.length - 1][0]}.`
           : nameParts[0];
@@ -134,7 +144,9 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
           jerseyNumber: c.jerseyNumber
         };
       });
-  }, [potmData.candidates, potmData.winnerName, totalVotes, hasVotedPlayer]);
+  }, [potmData?.candidates, potmData?.winnerName, totalVotes, hasVotedPlayer]);
+
+  if (!isOpen || !match) return null;
 
   const handleCastVote = async (candidate: PlayerOfTheMatchCandidate) => {
     setIsSubmitting(true);
@@ -228,7 +240,7 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
+      className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-900/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
       onClick={onClose}
     >
       <div
@@ -268,6 +280,19 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
         {/* Content Body */}
         <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           
+          {/* FIKS 15-min Sync Info Banner */}
+          <div className="flex items-center justify-between p-2.5 bg-blue-50/90 border border-blue-200 rounded-xl text-xs text-blue-900 shadow-2xs">
+            <div className="flex items-center space-x-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <span className="font-semibold text-[11px]">
+                Offisiell FIKS-kamptropp: Innmeldt 1t før • Automatisk synket 15 min før avspark
+              </span>
+            </div>
+            <span className="text-[10px] font-bold text-[#165094] bg-white px-2 py-0.5 rounded border border-blue-200 shrink-0 hidden sm:inline-block">
+              Kun bekreftede spillere kan stemmes på
+            </span>
+          </div>
+
           {/* Explanation Banner */}
           <div className="p-3.5 bg-gradient-to-r from-amber-50 to-blue-50 border border-amber-200/80 rounded-xl text-xs text-slate-700 flex items-start space-x-3">
             <Sparkles className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
@@ -500,6 +525,16 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
                             {c.assists > 0 && <span className="text-blue-700 font-bold">• 👟 {c.assists} assist</span>}
                           </div>
                           <div className="mt-1 flex flex-wrap gap-1 items-center">
+                            {c.isInFiksLineup !== false ? (
+                              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded flex items-center gap-1">
+                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                                Innmeldt i FIKS-kamptropp
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded flex items-center gap-1">
+                                ✕ Ikke i kamptropp (fraværende)
+                              </span>
+                            )}
                             {c.disqualified && (
                               <span className="text-[10px] font-bold text-rose-800 bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-md">
                                 🚫 Ikke valgbar til Banens beste ({c.disqualificationReason || 'Selvmål'})
@@ -524,23 +559,34 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
                       </div>
 
                       <div className="flex items-center space-x-3 shrink-0">
-                        {/* Rating pill */}
+                        {/* Rating pill - only for participants with genuine rating */}
                         <div className="text-right">
-                          <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-mono text-xs font-bold ${
-                            (c.algoRating ?? 0) <= 5.0
-                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                              : 'bg-slate-100 text-slate-800'
-                          }`}>
-                            <Star className={`w-3 h-3 ${(c.algoRating ?? 0) <= 5.0 ? 'text-rose-600 fill-rose-600' : 'text-amber-500 fill-amber-500'}`} />
-                            <span>{(c.algoRating ?? (c as any).rating ?? 0).toFixed(1)}</span>
-                          </div>
+                          {c.algoRating !== undefined && !c.isUnusedSub ? (
+                            <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-mono text-xs font-bold ${
+                              c.algoRating <= 5.0
+                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                : 'bg-slate-100 text-slate-800'
+                            }`}>
+                              <Star className={`w-3 h-3 ${c.algoRating <= 5.0 ? 'text-rose-600 fill-rose-600' : 'text-amber-500 fill-amber-500'}`} />
+                              <span>{c.algoRating.toFixed(1)}</span>
+                            </div>
+                          ) : c.isUnusedSub ? (
+                            <span className="text-[10px] text-slate-400 font-semibold italic">Ubenyttet</span>
+                          ) : null}
                           <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
                             {c.votes} {c.votes === 1 ? 'stemme' : 'stemmer'} ({votePercentage}%)
                           </div>
                         </div>
 
                         {/* Vote Button */}
-                        {c.disqualified ? (
+                        {c.isInFiksLineup === false ? (
+                          <span
+                            className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed text-center"
+                            title="Spilleren er ikke innmeldt i FIKS-kamptroppen og kan ikke stemmes på"
+                          >
+                            Ikke i tropp
+                          </span>
+                        ) : c.disqualified ? (
                           <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed text-center">
                             Diskvalifisert
                           </span>
