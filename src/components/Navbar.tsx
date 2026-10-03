@@ -2,8 +2,10 @@ import React from 'react';
 import { Bell, RefreshCw } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton.js';
 import { ClubWeatherBadge } from './ClubWeatherBadge.js';
+import { ClubConfig, getClubConfig } from '../config/clubConfig.js';
 
 interface NavbarProps {
+  clubConfig?: ClubConfig;
   onSyncNff?: () => void;
   isSyncing?: boolean;
   onOpenNotifications?: () => void;
@@ -14,19 +16,27 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
+  clubConfig,
   onOpenNotifications,
   unreadNotificationCount = 0,
   hasLiveMatch = false,
   onCheckUpdate,
   isUpdatingApp = false,
 }) => {
+  const activeClub = clubConfig || getClubConfig();
+  const primary = activeClub.branding?.primaryColor || '#165094';
+  const secondary = activeClub.branding?.secondaryColor || '#dc2626';
+
   return (
     <header id="app-header" className="sticky top-0 z-40 bg-[#0c1e38] border-b border-slate-800 text-white shadow-xs">
-      {/* Bønes ILs lagfarger: diskré aksentlinje (Kongeblå & Rød) */}
+      {/* Dynamic club accent line */}
       <div
-        id="bones-club-accent-line"
-        className="h-1 w-full bg-gradient-to-r from-[#165094] via-[#dc2626] to-[#165094]"
-        title="Bønes IL klubbfarger: Kongeblå & Rød"
+        id="club-accent-line"
+        className="h-1 w-full"
+        style={{
+          background: `linear-gradient(to right, ${primary}, ${secondary}, ${primary})`
+        }}
+        title={`${activeClub.name} klubbfarger`}
       />
       <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 sm:h-16">
@@ -35,8 +45,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center space-x-3">
             <div id="club-badge" className="relative shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white p-1 shadow-xs border border-white/20 overflow-hidden flex items-center justify-center">
               <img
-                src="/bones-logo.svg"
-                alt="Bønes IL"
+                src={activeClub.branding?.logoUrl || '/bones-logo.svg'}
+                alt={activeClub.name}
                 className="w-full h-full object-contain"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/bones-logo.png';
@@ -46,7 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-black text-base sm:text-lg tracking-tight text-white">
-                  Bønes IL
+                  {activeClub.name}
                 </span>
                 {hasLiveMatch && (
                   <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] font-bold border border-red-500/30">
@@ -56,7 +66,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </div>
               <p className="text-[11px] text-slate-400 hidden md:block">
-                16 lag i seriespill • Kampsenter, tabeller og lagoppstillinger
+                {activeClub.scraper?.teams?.length || 16} lag i seriespill • Kampsenter, tabeller og lagoppstillinger
               </p>
             </div>
           </div>

@@ -1,14 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  ReferenceLine,
-} from 'recharts';
+import * as d3 from 'd3';
 import { BonesClubData, PlayerPosition } from '../types.js';
 import { buildPlayerProfile } from '../utils/playerHistory.js';
 import { TrendingUp, TrendingDown, Star, Sparkles, User, Award, Activity } from 'lucide-react';
@@ -41,6 +32,7 @@ export const PlayerRatingEvolutionChart: React.FC<PlayerRatingEvolutionChartProp
     if (initialPlayerName) return initialPlayerName;
     return candidatePlayers.length > 0 ? candidatePlayers[0].name : 'Sunniva Stavrum';
   });
+  const [hoveredPoint, setHoveredPoint] = useState<any | null>(null);
 
   // Keep in sync if prop changes
   React.useEffect(() => {
@@ -276,65 +268,194 @@ export const PlayerRatingEvolutionChart: React.FC<PlayerRatingEvolutionChartProp
         </div>
       )}
 
-      {/* Main Recharts Rating Graph */}
-      <div className="w-full pt-2">
+      {/* Main SVG Rating Graph */}
+      <div className="w-full pt-2 relative select-none">
         {chartData.length === 0 ? (
           <div className="h-44 flex flex-col items-center justify-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
             <User className="w-6 h-6 text-slate-300 mb-1" />
             <span>Ingen spilte kamper registrert for {selectedName} ennå</span>
           </div>
         ) : (
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 15, left: -25, bottom: 5 }}>
-                <defs>
-                  <linearGradient id="ratingGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#165094" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#165094" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="opponent"
-                  tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }}
-                  tickLine={false}
-                  axisLine={{ stroke: '#cbd5e1' }}
-                  interval={0}
-                />
-                <YAxis
-                  domain={[5.0, 10.0]}
-                  ticks={[5.5, 6.5, 7.5, 8.5, 9.5]}
-                  tick={{ fontSize: 10, fill: '#94a3b8', fontFamily: 'monospace' }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <ReferenceLine
-                  y={statsSummary.avg}
-                  stroke="#94a3b8"
-                  strokeDasharray="4 4"
-                  strokeWidth={1.5}
-                  label={{
-                    value: `Snitt ${statsSummary.avg.toFixed(1)}`,
-                    fill: '#64748b',
-                    fontSize: 10,
-                    fontWeight: 700,
-                    position: 'insideTopRight',
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="rating"
-                  stroke="#165094"
-                  strokeWidth={3}
-                  fillOpacity={1}
-                  fill="url(#ratingGradient)"
-                  dot={{ r: 4.5, fill: '#165094', stroke: '#ffffff', strokeWidth: 2 }}
-                  activeDot={{ r: 6.5, fill: '#0284c7', stroke: '#ffffff', strokeWidth: 2 }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          (() => {
+            const svgWidth = 600;
+            const svgHeight = 220;
+            const chartMargin = { top: 15, right: 35, bottom: 35, left: 35 };
+            const innerW = svgWidth - chartMargin.left - chartMargin.right;
+            const innerH = svgHeight - chartMargin.top - chartMargin.bottom;
+
+            const n = chartData.length;
+            const getX = (idx: number) => {
+              if (n === 1) return chartMargin.left + innerW / 2;
+              return chartMargin.left + (idx / (n - 1)) * innerW;
+            };
+
+            const yScale = d3
+              .scaleLinear()
+              .domain([5.0, 10.0])
+              .range([svgHeight - chartMargin.bottom, chartMargin.top]);
+
+            const areaGen = d3
+              .area<typeof chartData[0]>()
+              .x((_, idx) => getX(idx))
+              .y0(svgHeight - chartMargin.bottom)
+              .y1((d) => yScale(d.rating))
+              .curve(d3.curveMonotoneX);
+
+            const lineGen = d3
+              .line<typeof chartData[0]>()
+              .x((_, idx) => getX(idx))
+              .y((d) => yScale(d.rating))
+              .curve(d3.curveMonotoneX);
+
+            const areaPath = areaGen(chartData) || '';
+            const linePath = lineGen(chartData) || '';
+
+            const yTicks = [5.5, 6.5, 7.5, 8.5, 9.5];
+            const avgY = yScale(statsSummary.avg);
+
+            return (
+              <div className="h-56 w-full relative">
+                <svg
+                  viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                  className="w-full h-full overflow-visible"
+                  onMouseLeave={() => setHoveredPoint(null)}
+                >
+                  <defs>
+                    <linearGradient id="ratingGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#165094" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#165094" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+
+                  {/* Horizontal grid lines */}
+                  {yTicks.map((tickVal) => {
+                    const yPos = yScale(tickVal);
+                    return (
+                      <g key={`ygrid-${tickVal}`}>
+                        <line
+                          x1={chartMargin.left}
+                          x2={svgWidth - chartMargin.right}
+                          y1={yPos}
+                          y2={yPos}
+                          stroke="#f1f5f9"
+                          strokeDasharray="3 3"
+                        />
+                        <text
+                          x={chartMargin.left - 6}
+                          y={yPos + 3}
+                          textAnchor="end"
+                          fontSize="10"
+                          fill="#94a3b8"
+                          fontFamily="monospace"
+                        >
+                          {tickVal.toFixed(1)}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Average Reference Line */}
+                  <line
+                    x1={chartMargin.left}
+                    x2={svgWidth - chartMargin.right}
+                    y1={avgY}
+                    y2={avgY}
+                    stroke="#94a3b8"
+                    strokeDasharray="4 4"
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x={svgWidth - chartMargin.right}
+                    y={avgY - 4}
+                    textAnchor="end"
+                    fill="#64748b"
+                    fontSize="10"
+                    fontWeight="700"
+                    fontFamily="system-ui, sans-serif"
+                  >
+                    Snitt {statsSummary.avg.toFixed(1)}
+                  </text>
+
+                  {/* X Axis Labels */}
+                  {chartData.map((d, idx) => {
+                    const xPos = getX(idx);
+                    return (
+                      <g key={`xaxis-${idx}`}>
+                        <text
+                          x={xPos}
+                          y={svgHeight - chartMargin.bottom + 18}
+                          textAnchor="middle"
+                          fontSize="11"
+                          fill="#475569"
+                          fontWeight="600"
+                          fontFamily="system-ui, sans-serif"
+                        >
+                          {d.opponent}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Area */}
+                  {areaPath && <path d={areaPath} fill="url(#ratingGradient)" stroke="none" />}
+
+                  {/* Line */}
+                  {linePath && (
+                    <path
+                      d={linePath}
+                      fill="none"
+                      stroke="#165094"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  )}
+
+                  {/* Interactive Points */}
+                  {chartData.map((d, idx) => {
+                    const xPos = getX(idx);
+                    const yPos = yScale(d.rating);
+                    const isHovered = hoveredPoint?.matchIndex === d.matchIndex;
+
+                    return (
+                      <g
+                        key={`pt-${idx}`}
+                        className="cursor-pointer"
+                        onMouseEnter={() => setHoveredPoint(d)}
+                      >
+                        {isHovered && (
+                          <circle
+                            cx={xPos}
+                            cy={yPos}
+                            r={14}
+                            fill="#0284c7"
+                            fillOpacity={0.25}
+                            className="animate-pulse"
+                          />
+                        )}
+                        <circle
+                          cx={xPos}
+                          cy={yPos}
+                          r={isHovered ? 6.5 : 4.5}
+                          fill={isHovered ? '#0284c7' : '#165094'}
+                          stroke="#ffffff"
+                          strokeWidth={2}
+                          className="transition-all duration-150"
+                        />
+                      </g>
+                    );
+                  })}
+                </svg>
+
+                {/* Floating Tooltip */}
+                {hoveredPoint && (
+                  <div className="absolute top-2 right-4 z-30 pointer-events-none">
+                    <CustomTooltip active={true} payload={[{ payload: hoveredPoint }]} />
+                  </div>
+                )}
+              </div>
+            );
+          })()
         )}
       </div>
 

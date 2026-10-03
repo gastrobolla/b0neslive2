@@ -1,5 +1,6 @@
 import { DivisionTable, Match, MatchEvent, TopScorer, CardStatistic, FeedItem, TableRow, MatchLineup, Player } from '../src/types.js';
 import { calculateMatchScore } from '../src/utils/derivedStats.js';
+import { ClubConfig, getClubConfig, isClubTeam, BONES_CLUB_CONFIG } from '../src/config/clubConfig.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -330,17 +331,17 @@ async function scrapeTeamMatches(fiksId: number, teamId: string, teamName: strin
 }
 
 /**
- * Scrapes bonesil.no news and events
+ * Scrapes official club website news and events dynamically based on ClubConfig
  */
-export async function scrapeBonesWebsite(): Promise<FeedItem[]> {
+export async function scrapeClubWebsite(clubConfig: ClubConfig = getClubConfig()): Promise<FeedItem[]> {
   const newsItems: FeedItem[] = [];
+  const siteUrl = clubConfig.scraper?.officialWebsiteUrl || 'https://bonesil.no';
 
   try {
-    const res = await fetch('https://www.bonesil.no/nyheter', {
-      headers: { 'User-Agent': USER_AGENT }
-    });
+    const nyheterUrl = siteUrl.endsWith('/nyheter') ? siteUrl : `${siteUrl}/nyheter`;
+    const res = await fetchWithTimeout(nyheterUrl, 8000);
 
-    if (res.ok) {
+    if (res && res.ok) {
       const html = await res.text();
       const articles = [...html.matchAll(/<article[^>]*>([\s\S]*?)<\/article>/gi)].map(m => m[1]);
 
@@ -354,31 +355,29 @@ export async function scrapeBonesWebsite(): Promise<FeedItem[]> {
         if (titleMatch) {
           const rawTitle = titleMatch[1].replace(/<[^>]+>/g, '').trim();
           const cleanTitle = decodeEntities(rawTitle);
-          const link = linkMatch ? (linkMatch[1].startsWith('http') ? linkMatch[1] : `https://www.bonesil.no${linkMatch[1]}`) : 'https://www.bonesil.no/nyheter';
+          const link = linkMatch ? (linkMatch[1].startsWith('http') ? linkMatch[1] : `${siteUrl}${linkMatch[1]}`) : nyheterUrl;
           const date = dateMatch ? dateMatch[1].replace(/<[^>]+>/g, '').trim() : 'Nylig';
-          const desc = excerptMatch ? decodeEntities(excerptMatch[1].replace(/<[^>]+>/g, '').trim()) : 'Offisiell klubbnyhet fra Bønes Idrettslag.';
+          const desc = excerptMatch ? decodeEntities(excerptMatch[1].replace(/<[^>]+>/g, '').trim()) : `Offisiell klubbnyhet fra ${clubConfig.name}.`;
 
           newsItems.push({
-            id: `feed-bones-${Date.now()}-${i}`,
+            id: `feed-${clubConfig.id}-${Date.now()}-${i}`,
             timestamp: date,
             timeAgo: date,
             type: 'announcement',
             teamId: 'all',
-            teamName: 'Bønes IL Klubbnytt',
+            teamName: `${clubConfig.name} Klubbnytt`,
             title: cleanTitle,
-            description: `${desc} (Kilde: bonesil.no)`,
-            badgeText: 'KLUBBNYTT • bonesil.no',
-            venue: 'Bønesbanen / Fjellsdalen'
+            description: `${desc} (Kilde: ${clubConfig.shortName})`,
+            badgeText: `KLUBBNYTT • ${clubConfig.shortName}`,
+            venue: clubConfig.branding?.badgeText || clubConfig.name
           });
         }
       }
     }
 
-    const arrRes = await fetch('https://www.bonesil.no/arrangementer', {
-      headers: { 'User-Agent': USER_AGENT }
-    });
-
-    if (arrRes.ok) {
+    // Try events page if applicable
+    const arrRes = await fetchWithTimeout(`${siteUrl}/arrangementer`, 8000);
+    if (arrRes && arrRes.ok) {
       const arrHtml = await arrRes.text();
       const arrEvents = [...arrHtml.matchAll(/class="eventlist-title"[^>]*>[\s\S]*?<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)];
       
@@ -386,27 +385,29 @@ export async function scrapeBonesWebsite(): Promise<FeedItem[]> {
         const href = arrEvents[j][1];
         const title = decodeEntities(arrEvents[j][2].replace(/<[^>]+>/g, '').trim());
         newsItems.push({
-          id: `feed-event-${Date.now()}-${j}`,
+          id: `feed-event-${clubConfig.id}-${Date.now()}-${j}`,
           timestamp: 'Kommende',
           timeAgo: 'Arrangement',
           type: 'announcement',
           teamId: 'all',
-          teamName: 'Bønes Idrettslag',
+          teamName: clubConfig.name,
           title: `Arrangement: ${title}`,
-          description: `Offisielt arrangement registrert på Bønes ILs kalender. Se detaljer på bonesil.no${href}.`,
-          badgeText: 'ARRANGEMENT • bonesil.no',
-          venue: 'Fjellsdalen idrettsplass / Bøneshallen'
+          description: `Offisielt arrangement registrert på ${clubConfig.name}s kalender. Se detaljer på ${siteUrl}${href}.`,
+          badgeText: `ARRANGEMENT • ${clubConfig.shortName}`,
+          venue: clubConfig.branding?.badgeText || clubConfig.name
         });
       }
     }
 
-    console.log(`[Scraper] bonesil.no scraped: ${newsItems.length} articles/events found.`);
+    console.log(`[Scraper] ${clubConfig.name} website scraped: ${newsItems.length} articles/events found.`);
     return newsItems;
   } catch (err: any) {
-    console.error('[Scraper] Error scraping bonesil.no:', err.message);
+    console.error(`[Scraper] Error scraping ${clubConfig.name} website:`, err.message);
     return [];
   }
 }
+
+export const scrapeBonesWebsite = () => scrapeClubWebsite(getClubConfig('bones'));
 
 /**
  * Fetches the specific match page on fotball.no to enrich match details:
@@ -545,23 +546,25 @@ export async function enrichMatchResultFromFiks(match: Match): Promise<{ match: 
 }
 
 /**
- * Main coordinator function to scrape all 16 Bønes teams + club news
+ * Main coordinator function to scrape any club's teams, tables, matches, and news.
+ * Klubbagnostisk: fungerer for Bønes IL, Fana IL eller enhver vilkårlig ClubConfig.
  */
-export async function runFullClubScrape(): Promise<ScrapedClubData> {
-  console.log('[Scraper] Starting full real-data scrape for all 16 Bønes teams from fotball.no and bonesil.no...');
+export async function scrapeClub(clubConfig: ClubConfig = getClubConfig()): Promise<ScrapedClubData> {
+  console.log(`[Scraper] Starting full real-data scrape for ${clubConfig.name} (Club ID: ${clubConfig.id}, FIKS: ${clubConfig.fiksClubId})...`);
 
   const tables: Record<string, DivisionTable> = {};
   const allMatches: Match[] = [];
+  const teamsToScrape = clubConfig.scraper?.teams?.length > 0 ? clubConfig.scraper.teams : BONES_16_TEAMS;
 
   // Scrape teams in parallel batches of 4
   const batchSize = 4;
-  for (let i = 0; i < BONES_16_TEAMS.length; i += batchSize) {
-    const batch = BONES_16_TEAMS.slice(i, i + batchSize);
+  for (let i = 0; i < teamsToScrape.length; i += batchSize) {
+    const batch = teamsToScrape.slice(i, i + batchSize);
     await Promise.all(batch.map(async (t) => {
       const [hostTable, varTable, matches] = await Promise.all([
-        scrapeTeamTable(t.tourneyId, t.id, t.name, t.division),
+        t.tourneyId ? scrapeTeamTable(t.tourneyId, t.id, t.name, t.division) : Promise.resolve(null),
         t.springTourneyId ? scrapeTeamTable(t.springTourneyId, t.id, t.name, t.springDivision || t.division) : Promise.resolve(null),
-        scrapeTeamMatches(t.fiksId, t.id, t.name, t.division)
+        t.fiksId ? scrapeTeamMatches(t.fiksId, t.id, t.name, t.division) : Promise.resolve([])
       ]);
       if (hostTable) {
         tables[t.id] = hostTable;
@@ -570,14 +573,17 @@ export async function runFullClubScrape(): Promise<ScrapedClubData> {
       if (varTable) {
         tables[`${t.id}_var`] = varTable;
       }
-      if (matches.length > 0) {
+      if (matches && matches.length > 0) {
+        for (const m of matches) {
+          m.clubId = clubConfig.id;
+        }
         allMatches.push(...matches);
       }
     }));
   }
 
-  // Scrape club news from bonesil.no
-  const bonesNews = await scrapeBonesWebsite();
+  // Scrape club news from configured website
+  const clubNews = await scrapeClubWebsite(clubConfig);
 
   // Deduplicate matches by stable match id
   const matchMap = new Map<string, Match>();
@@ -588,7 +594,7 @@ export async function runFullClubScrape(): Promise<ScrapedClubData> {
   }
   const deduplicatedMatches = Array.from(matchMap.values());
 
-  // Enrich any past matches that are not marked as finished yet (e.g. results missing from overview cards)
+  // Enrich any past matches that are not marked as finished yet
   const todayStr = new Date().toISOString().split('T')[0];
   const unfinalizedPastMatches = deduplicatedMatches.filter(
     m => m.date <= todayStr && m.status !== 'finished'
@@ -609,7 +615,7 @@ export async function runFullClubScrape(): Promise<ScrapedClubData> {
             m.awayScore = enriched.awayScore;
           }
           if (m.events && m.events.length > 0 && m.events.some((e) => e.type === 'goal')) {
-            const derived = calculateMatchScore(m.events, m.homeScore, m.awayScore, m.homeTeam, m.awayTeam);
+            const derived = calculateMatchScore(m.events, m.homeScore, m.awayScore, m.homeTeam, m.awayTeam, clubConfig);
             m.homeScore = derived.homeScore;
             m.awayScore = derived.awayScore;
           }
@@ -623,17 +629,28 @@ export async function runFullClubScrape(): Promise<ScrapedClubData> {
   // Sort matches by date descending
   deduplicatedMatches.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
 
-  // If scrape succeeded with matches, cache them
+  // Cache data per club
   if (deduplicatedMatches.length > 0) {
     try {
-      const jsonPath = path.resolve(process.cwd(), './server/scrapedData16.json');
+      const jsonPath = path.resolve(process.cwd(), `./server/scrapedData_${clubConfig.id}.json`);
       const existing = fs.existsSync(jsonPath) ? JSON.parse(fs.readFileSync(jsonPath, 'utf-8')) : {};
       fs.writeFileSync(jsonPath, JSON.stringify({
         ...existing,
+        clubId: clubConfig.id,
         tables,
         matches: deduplicatedMatches,
         lastScraped: new Date().toISOString()
       }, null, 2));
+
+      // Backward-compatibility: maintain server/scrapedData16.json for Bønes
+      if (clubConfig.id === 'bones') {
+        const legacyPath = path.resolve(process.cwd(), './server/scrapedData16.json');
+        fs.writeFileSync(legacyPath, JSON.stringify({
+          tables,
+          matches: deduplicatedMatches,
+          lastScraped: new Date().toISOString()
+        }, null, 2));
+      }
     } catch (e) {
       // ignore cache write error
     }
@@ -658,14 +675,16 @@ export async function runFullClubScrape(): Promise<ScrapedClubData> {
     matches: deduplicatedMatches,
     topScorers,
     cards,
-    clubNews: bonesNews,
+    clubNews,
     lastScraped: new Date().toLocaleString('no-NO'),
-    source: 'NFF (fotball.no - 16 Bønes-lag) & Bønes IL (bonesil.no)',
+    source: `NFF (fotball.no) & ${clubConfig.name}`,
     realDataActive: true
   };
 
   return result;
 }
+
+export const runFullClubScrape = (clubConfig?: ClubConfig) => scrapeClub(clubConfig || getClubConfig());
 
 /**
  * Scrapes or populates detailed match events for a single match from fotball.no
@@ -756,12 +775,13 @@ export async function scrapeMatchEvents(match: Match): Promise<MatchEvent[]> {
  * Scrapes official team squads/lineups from fotball.no for a match using fiksId
  * Example: https://www.fotball.no/fotballdata/kamp/?fiksId=9188463&underside=kamptropper
  */
-export async function scrapeMatchLineup(fiksIdOrMatch: string | number | Match): Promise<{
+export async function scrapeMatchLineup(fiksIdOrMatch: string | number | Match, clubConfig?: ClubConfig): Promise<{
   fiksId: string;
   homeTeam: string;
   awayTeam: string;
   homeLineup: MatchLineup;
   awayLineup: MatchLineup;
+  clubLineup?: MatchLineup;
   bonesLineup?: MatchLineup;
   isOfficialFiks: boolean;
 } | null> {
@@ -922,9 +942,10 @@ export async function scrapeMatchLineup(fiksIdOrMatch: string | number | Match):
       formation: awayStarters.length >= 11 ? '4-3-3' : awayStarters.length === 9 ? '3-3-2' : '3-2-1'
     };
 
-    const isBonesHome = homeTeam.toLowerCase().includes('bønes');
-    const isBonesAway = awayTeam.toLowerCase().includes('bønes');
-    const bonesLineup = isBonesHome ? homeLineup : isBonesAway ? awayLineup : homeLineup;
+    const activeClub = clubConfig || getClubConfig();
+    const isClubHome = isClubTeam(homeTeam, activeClub);
+    const isClubAway = isClubTeam(awayTeam, activeClub);
+    const clubLineup = isClubHome ? homeLineup : isClubAway ? awayLineup : homeLineup;
 
     return {
       fiksId: kampId,
@@ -932,7 +953,8 @@ export async function scrapeMatchLineup(fiksIdOrMatch: string | number | Match):
       awayTeam,
       homeLineup,
       awayLineup,
-      bonesLineup,
+      clubLineup,
+      bonesLineup: clubLineup,
       isOfficialFiks: true
     };
   } catch (err: any) {

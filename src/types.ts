@@ -1,7 +1,11 @@
+import type { ClubConfig } from './config/clubConfig.js';
+export type { ClubConfig, ClubBranding, ClubScraperConfig, ClubTeamConfig } from './config/clubConfig.js';
+
 export type TeamCategory = 'Senior' | 'Ungdom' | 'Junior' | 'Barnefotball';
 
 export interface TeamInfo {
   id: string;
+  clubId?: string;
   name: string;
   shortName: string;
   category: TeamCategory;
@@ -23,6 +27,8 @@ export interface TableRow {
   rank: number;
   teamName: string;
   isBones: boolean;
+  isClubTeam?: boolean;
+  clubId?: string;
   played: number;
   won: number;
   drawn: number;
@@ -76,12 +82,24 @@ export interface CardStatistic {
 export interface PlayerTeamRepresentation {
   teamId: string;
   teamName: string;
+  clubId?: string;
+  season?: string;
+  jerseyNumber?: number;
+  position?: PlayerPosition;
+  positionSource?: PositionSource;
   matches: number;
   goals: number;
   yellowCards: number;
   redCards: number;
   springMatches: number;
   autumnMatches: number;
+  stats?: {
+    matches: number;
+    goals: number;
+    assists?: number;
+    yellowCards: number;
+    redCards: number;
+  };
 }
 
 export interface CoachNote {
@@ -198,17 +216,27 @@ export interface PlayerProfile {
 }
 
 export type PlayerPosition = 'Keeper' | 'Forsvar' | 'Midtbane' | 'Angrep' | 'Ukjent' | 'unknown';
-export type PositionSource = 'NFF' | 'unknown';
+export type PositionSource = 'NFF' | 'manual' | 'import' | 'unknown';
 
 export interface Person {
   canonicalId: string; // e.g. "fiks-123456" or "legacy_ola_nordmann" (never contains teamId)
+  canonicalPlayerId?: string; // alias for canonicalId
   fiksId?: number;
   displayName: string;
   birthYear?: number;
   gender?: 'G' | 'J' | 'M' | 'K' | 'U';
+  clubId?: string;
   teams: PlayerTeamRepresentation[];
   position?: PlayerPosition;
   positionSource?: PositionSource;
+  totalStats?: {
+    matches: number;
+    goals: number;
+    assists: number;
+    yellowCards: number;
+    redCards: number;
+  };
+  officialStats?: any;
 }
 
 export interface IdentityResolutionResult {
@@ -218,6 +246,7 @@ export interface IdentityResolutionResult {
   method: 'fiksId' | 'canonicalPlayerId' | 'legacyMapping' | 'scopedNameMatch' | 'unresolved';
   confidence: 'authoritative' | 'verified' | 'ambiguous' | 'unresolved';
   isAmbiguous: boolean;
+  ambiguous?: boolean; // alias for isAmbiguous
   unresolved?: boolean;
   ambiguousName?: string;
   candidateCount?: number;
@@ -226,9 +255,12 @@ export interface IdentityResolutionResult {
 
 export interface Player {
   id: string; // canonical format: "fiks-${fiksId}" or "legacy_${nameSlug}" (never "p-" or team-scoped)
+  personId?: string;
+  clubId?: string;
   name: string;
   teamId?: string;
   teamName?: string;
+  season?: string;
   jerseyNumber?: number;
   number?: number;
   position?: PlayerPosition;
@@ -244,6 +276,7 @@ export interface Player {
   averageRating?: number;
   last3AverageRating?: number;
   highestRating?: number;
+  officialNffStats?: any;
 }
 
 export interface MatchLineup {
@@ -284,6 +317,7 @@ export interface MatchEvent {
   linkedEventType?: MatchEventType; // Type of linked event
   team: string; // Display team name
   teamId?: string; // Identifier for team if known
+  clubId?: string; // Identifier for club
   description: string;
   source?: MatchEventSource;
   reportedBy?: string;
@@ -329,6 +363,7 @@ export interface MatchWeather {
 export interface Match {
   id: string; // e.g. "nff-8051234"
   fiksId?: number;
+  clubId?: string;
   teamId: string;
   teamName: string;
   division: string;
@@ -377,6 +412,13 @@ export interface ScanLog {
 
 export interface ScannerState {
   isActive: boolean;
+  isScanning?: boolean;
+  lastScan?: string;
+  scanDuration?: string;
+  totalMatchesFound?: number;
+  errors?: string[];
+  progress?: number;
+  currentTask?: string;
   lastScanned: string;
   nextScanSeconds: number;
   autoScanEnabled: boolean;
@@ -425,13 +467,16 @@ export interface FeedItem {
   };
 }
 
-export interface BonesClubData {
+export interface ClubData {
+  clubId?: string;
+  clubConfig?: ClubConfig;
   teams: TeamInfo[];
   tables: Record<string, DivisionTable>;
   topScorers: TopScorer[];
   cards: CardStatistic[];
   matches: Match[];
   players?: Player[];
+  persons?: Person[];
   scanner: ScannerState;
   feed: FeedItem[];
   stats: {
@@ -454,6 +499,8 @@ export interface BonesClubData {
   schemaVersion?: string;
   lastDiskSaved?: string;
 }
+
+export type BonesClubData = ClubData;
 
 export interface DatabaseSchemaV2 extends BonesClubData {
   dataVersion: 2;

@@ -2,16 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Match, PlayerOfTheMatchData, PlayerOfTheMatchCandidate } from '../types.js';
 import { calculateMatchPOTM } from '../utils/potmCalculator.js';
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Cell,
-  LabelList
-} from 'recharts';
-import {
   Trophy,
   Star,
   X,
@@ -27,50 +17,6 @@ import {
   ChevronRight,
   BarChart3
 } from 'lucide-react';
-
-interface CustomVoteTooltipProps {
-  active?: boolean;
-  payload?: any[];
-}
-
-const CustomVoteTooltip: React.FC<CustomVoteTooltipProps> = ({ active, payload }) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    return (
-      <div className="bg-slate-900/95 backdrop-blur-xs text-white p-2.5 rounded-xl shadow-2xl border border-slate-700 text-xs space-y-1.5 min-w-[170px] z-50">
-        <div className="flex items-center gap-1.5 font-bold text-amber-300 border-b border-slate-700/80 pb-1">
-          <Star className="w-3.5 h-3.5 fill-amber-300 text-amber-300 shrink-0" />
-          <span className="truncate">{data.fullName}</span>
-        </div>
-        <div className="text-[11px] text-slate-300 flex items-center justify-between gap-3">
-          <span>Stemmer:</span>
-          <span className="font-mono font-bold text-white">
-            {data.votes} {data.votes === 1 ? 'stemme' : 'stemmer'} ({data.percentage}%)
-          </span>
-        </div>
-        <div className="text-[11px] text-slate-300 flex items-center justify-between gap-3">
-          <span>Algorating:</span>
-          <span className="font-mono font-bold text-amber-400">
-            {(data.algoRating ?? 0).toFixed(1)} / 10
-          </span>
-        </div>
-        {data.isWinner && (
-          <div className="text-[10px] font-bold text-amber-400 pt-0.5 border-t border-slate-700/60 flex items-center gap-1">
-            <Trophy className="w-3 h-3 text-amber-400" />
-            <span>Leder Banens Beste</span>
-          </div>
-        )}
-        {data.hasUserVoted && (
-          <div className="text-[10px] font-bold text-emerald-400 pt-0.5 border-t border-slate-700/60 flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-            <span>Din stemme</span>
-          </div>
-        )}
-      </div>
-    );
-  }
-  return null;
-};
 
 interface PlayerOfTheMatchModalProps {
   isOpen: boolean;
@@ -90,7 +36,14 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
   });
 
   const [hasVotedPlayer, setHasVotedPlayer] = useState<string | null>(() => {
-    return localStorage.getItem(`bones_potm_vote_${match.id}`) || null;
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      try {
+        return localStorage.getItem(`bones_potm_vote_${match.id}`) || null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
   });
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -404,44 +357,38 @@ export const PlayerOfTheMatchModal: React.FC<PlayerOfTheMatchModalProps> = ({
               </div>
             </div>
 
-            {/* Recharts BarChart container */}
-            <div className="w-full" style={{ height: Math.max(140, chartData.length * 34) }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={chartData}
-                  layout="vertical"
-                  margin={{ top: 2, right: 45, left: 10, bottom: 2 }}
-                >
-                  <XAxis type="number" hide domain={[0, totalVotes > 0 ? 'dataMax + 1' : 5]} />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 11, fill: '#1e293b', fontWeight: 700 }}
-                    width={85}
-                  />
-                  <Tooltip content={<CustomVoteTooltip />} cursor={{ fill: 'rgba(226, 232, 240, 0.4)' }} />
-                  <Bar dataKey="votes" radius={[0, 6, 6, 0]} barSize={16}>
-                    {chartData.map((entry, idx) => (
-                      <Cell
-                        key={`cell-${idx}`}
-                        fill={entry.isWinner ? '#f59e0b' : entry.hasUserVoted ? '#059669' : '#3b82f6'}
+            {/* Native Horizontal Bar Chart */}
+            <div className="w-full space-y-2.5 py-1">
+              {chartData.map((entry, idx) => {
+                const maxVotes = Math.max(1, ...chartData.map((c) => c.votes));
+                const pctOfMax = totalVotes > 0 ? (entry.votes / maxVotes) * 100 : 0;
+                const pctOfTotal = totalVotes > 0 ? Math.round((entry.votes / totalVotes) * 100) : 0;
+                const barColor = entry.isWinner
+                  ? 'bg-amber-500'
+                  : entry.hasUserVoted
+                  ? 'bg-emerald-600'
+                  : 'bg-blue-600';
+
+                return (
+                  <div key={`vote-bar-${idx}`} className="flex items-center gap-3 text-xs">
+                    <span
+                      className="w-24 truncate font-bold text-slate-800 text-right shrink-0"
+                      title={entry.fullName}
+                    >
+                      {entry.name}
+                    </span>
+                    <div className="flex-1 bg-slate-200/70 rounded-full h-4 overflow-hidden relative">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${barColor}`}
+                        style={{ width: `${Math.max(entry.votes > 0 ? 6 : 0, pctOfMax)}%` }}
                       />
-                    ))}
-                    <LabelList
-                      dataKey="votes"
-                      position="right"
-                      formatter={(val: any) => {
-                        const count = Number(val) || 0;
-                        const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
-                        return `${count} (${pct}%)`;
-                      }}
-                      style={{ fontSize: '10px', fontWeight: 700, fill: '#475569' }}
-                    />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+                    </div>
+                    <span className="w-16 font-mono font-bold text-slate-600 text-[11px] shrink-0 text-right">
+                      {entry.votes} ({pctOfTotal}%)
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Mini Legend / Guide */}

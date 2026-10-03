@@ -27,6 +27,7 @@ import {
 import { getClubData } from './data/bonesData.js';
 import { ALL_BONES_PLAYERS } from './data/bonesSquads.js';
 import { calculateClubRatingLeaderboards } from './utils/playerRatingEngine.js';
+import { ClubConfig, getClubConfig, listClubConfigs } from './config/clubConfig.js';
 import { MatchdayHeroBanner } from './components/MatchdayHeroBanner.js';
 import { PlayerOfTheMatchModal } from './components/PlayerOfTheMatchModal.js';
 import { LaglederModal } from './components/LaglederModal.js';
@@ -68,11 +69,19 @@ import {
 const CACHE_KEY = 'bones_club_data_cache_v4';
 
 export default function App() {
+  const [clubId, setClubId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return (params.get('club') || params.get('clubId') || 'bones').toLowerCase();
+    }
+    return 'bones';
+  });
+
   const [data, setData] = useState<BonesClubData | null>(() => {
     try {
-      // Invalidate legacy cache if present
+      const cacheKey = `club_data_cache_${clubId}_v4`;
       localStorage.removeItem('bones_club_data_cache');
-      const cached = localStorage.getItem(CACHE_KEY);
+      const cached = localStorage.getItem(cacheKey) || (clubId === 'bones' ? localStorage.getItem(CACHE_KEY) : null);
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed.matches) && Array.isArray(parsed.teams) && parsed.teams.length > 0) {
@@ -84,6 +93,10 @@ export default function App() {
     }
     return null;
   });
+
+  const activeClub: ClubConfig = useMemo(() => {
+    return data?.clubConfig || getClubConfig(clubId);
+  }, [data?.clubConfig, clubId]);
   const [loading, setLoading] = useState(() => !data);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -163,12 +176,12 @@ export default function App() {
   // Fetch full data from backend with safe content-type verification and auto-retry
   const fetchData = async (retryCount = 0): Promise<boolean> => {
     try {
-      const res = await fetch('/api/bones/data');
+      const res = await fetch(`/api/data?clubId=${clubId}`);
       const contentType = res.headers.get('content-type') || '';
 
       // If server returned non-200 or returned HTML (e.g. warmup.html during server spinup)
       if (!res.ok || !contentType.includes('application/json')) {
-        console.warn(`[API] /api/bones/data returned non-JSON response (status: ${res.status}, type: ${contentType})`);
+        console.warn(`[API] /api/data?clubId=${clubId} returned non-JSON response (status: ${res.status}, type: ${contentType})`);
 
         // Auto-retry up to 5 times while server is warming up
         if (retryCount < 5) {
@@ -194,7 +207,8 @@ export default function App() {
         setData(freshData);
         setFetchError(null);
         try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify(freshData));
+          const cacheKey = `club_data_cache_${clubId}_v4`;
+          localStorage.setItem(cacheKey, JSON.stringify(freshData));
         } catch {
           // LocalStorage quota
         }
@@ -202,7 +216,7 @@ export default function App() {
       }
       return false;
     } catch (err: any) {
-      console.warn('[API] Failed to fetch Bønes club data:', err?.message || err);
+      console.warn(`[API] Failed to fetch club data for ${clubId}:`, err?.message || err);
       if (retryCount < 5) {
         const delay = Math.min(1000 * Math.pow(1.5, retryCount), 4000);
         setTimeout(() => {
@@ -219,17 +233,17 @@ export default function App() {
     }
   };
 
-  // Trigger on-demand real scrape from fotball.no and bonesil.no
+  // Trigger on-demand real scrape from fotball.no and club website
   const handleRealScrape = async () => {
     setIsRealScraping(true);
     try {
-      const res = await fetch('/api/bones/scrape-real', { method: 'POST' });
+      const res = await fetch(`/api/scrape?clubId=${clubId}`, { method: 'POST' });
       const ct = res.headers.get('content-type') || '';
       if (res.ok && ct.includes('application/json')) {
         const result = await res.json();
         const freshData = recalculateAllPlayerData(result.data, { reason: 'data_fetched' });
         setData(freshData);
-        showToast('Fersk scraping fullført! Alle 16 Bønes-lag, tabeller og kamper er lagret til databasen.');
+        showToast(`Fersk scraping fullført for ${activeClub.name}! Tabeller og kamper er lagret til databasen.`);
       } else {
         showToast('Kunne ikke fullføre scraping akkurat nå.');
       }
@@ -244,7 +258,7 @@ export default function App() {
   const handleManualScan = async () => {
     setIsScanning(true);
     try {
-      const res = await fetch('/api/bones/scan', { method: 'POST' });
+      const res = await fetch(`/api/scan?clubId=${clubId}`, { method: 'POST' });
       const ct = res.headers.get('content-type') || '';
       if (res.ok && ct.includes('application/json')) {
         const result = await res.json();
@@ -264,7 +278,7 @@ export default function App() {
   // Toggle auto-scan
   const handleToggleAutoScan = async () => {
     try {
-      const res = await fetch('/api/bones/scanner-toggle', { method: 'POST' });
+      const res = await fetch(`/api/scanner-toggle?clubId=${clubId}`, { method: 'POST' });
       const ct = res.headers.get('content-type') || '';
       if (res.ok && ct.includes('application/json')) {
         const result = await res.json();
@@ -298,7 +312,7 @@ export default function App() {
 
     const checkInterval = setInterval(async () => {
       try {
-        const res = await fetch('/api/bones/data/check');
+        const res = await fetch(`/api/data/check?clubId=${clubId}`);
         const ct = res.headers.get('content-type') || '';
         if (res.ok && ct.includes('application/json')) {
           const check = await res.json();
@@ -315,7 +329,7 @@ export default function App() {
     }, 180000); // 3 minutes (180,000 ms) as specified for real FIKS live updates
 
     return () => clearInterval(checkInterval);
-  }, []);
+  }, [clubId]);
 
   // Derive scorers and cards directly from the season log matches (single source of truth)
   // MUST be called before any early returns to respect the Rules of Hooks
@@ -353,8 +367,8 @@ export default function App() {
           <Shield className="w-7 h-7 text-white" />
         </div>
         <div className="text-center">
-          <h2 className="text-lg font-bold tracking-tight">Bønes IL Fotball Live</h2>
-          <p className="text-xs text-slate-400 mt-1">Laster persistent klubbdatabase for alle 16 lag...</p>
+          <h2 className="text-lg font-bold tracking-tight">{activeClub.name} Fotball Live</h2>
+          <p className="text-xs text-slate-400 mt-1">Laster persistent klubbdatabase for {activeClub.name}...</p>
         </div>
         <RefreshCw className="w-5 h-5 text-red-500 animate-spin" />
       </div>
@@ -405,8 +419,12 @@ export default function App() {
   const mostCarded = derivedCards[0] || data.cards[0];
   const upcomingHomeCount = data.matches.filter(m => m.isHome && m.status !== 'finished').length;
 
-  const bestSeasonPlayer = ratingLeaderboards.bestPlayer;
-  const bestFormPlayer = ratingLeaderboards.formPlayer;
+  const bestSeasonPlayer = (selectedTeamId !== 'all'
+    ? ratingLeaderboards.allSeasonRanked.find(p => p.teamId === selectedTeamId)
+    : null) || ratingLeaderboards.bestPlayer;
+  const bestFormPlayer = (selectedTeamId !== 'all'
+    ? ratingLeaderboards.allFormRanked.find(p => p.teamId === selectedTeamId)
+    : null) || ratingLeaderboards.formPlayer;
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-[#f4f5f8] text-slate-900 selection:bg-[#165094] selection:text-white theme-matchday">
@@ -424,6 +442,7 @@ export default function App() {
 
       {/* Navigation Bar */}
       <Navbar
+        clubConfig={activeClub}
         onSyncNff={handleRealScrape}
         isSyncing={isRealScraping || isScanning}
         onOpenNotifications={() => {
@@ -452,11 +471,14 @@ export default function App() {
         
         {/* FotMob Club Profile Header */}
         <section id="fotmob-club-header" className="relative overflow-hidden bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs">
-          {/* Bønes ILs lagfarger: diskré aksentlinje (Kongeblå & Rød) */}
+          {/* Dynamic Club Accent Strip */}
           <div
-            id="bones-club-header-accent-strip"
-            className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#165094] via-[#dc2626] to-[#165094]"
-            title="Bønes IL klubbfarger: Kongeblå & Rød"
+            id="club-header-accent-strip"
+            className="absolute top-0 left-0 right-0 h-1"
+            style={{
+              background: `linear-gradient(to right, ${activeClub.branding?.primaryColor || '#165094'}, ${activeClub.branding?.secondaryColor || '#dc2626'}, ${activeClub.branding?.primaryColor || '#165094'})`
+            }}
+            title={`${activeClub.name} klubbfarger`}
           />
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             
@@ -464,8 +486,8 @@ export default function App() {
             <div className="flex items-center space-x-3.5">
               <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-2xl bg-slate-50 border border-slate-200/90 p-1.5 flex items-center justify-center shrink-0 shadow-xs">
                 <img
-                  src="/bones-logo.svg"
-                  alt="Bønes IL"
+                  src={activeClub.branding?.logoUrl || '/bones-logo.svg'}
+                  alt={activeClub.name}
                   className="w-full h-full object-contain"
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = '/bones-logo.png';
@@ -475,7 +497,7 @@ export default function App() {
               <div>
                 <div className="flex items-center space-x-2">
                   <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                    Bønes IL
+                    {activeClub.name}
                   </h1>
                   {liveMatch && (
                     <span className="flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 animate-pulse">
@@ -485,9 +507,9 @@ export default function App() {
                   )}
                 </div>
                 <p className="text-xs text-slate-500 font-medium mt-0.5 flex flex-wrap items-center gap-x-2">
-                  <span>Fjellsdalen & Bønesbanen</span>
+                  <span>{activeClub.branding?.homeGrounds?.join(' & ') || 'Hjemmebane'}</span>
                   <span>•</span>
-                  <span>Stiftet 1995</span>
+                  <span>Stiftet {activeClub.branding?.foundedYear || 1995}</span>
                   {data.lastRealScraped && (
                     <>
                       <span>•</span>
@@ -503,6 +525,33 @@ export default function App() {
 
             {/* Header Action Chips */}
             <div className="flex items-center flex-wrap gap-2 shrink-0 self-start sm:self-center">
+              {/* Multi-Club Switcher */}
+              {listClubConfigs().length > 1 && (
+                <div className="relative">
+                  <select
+                    id="club-selector-dropdown"
+                    value={activeClub.id}
+                    onChange={(e) => {
+                      const newId = e.target.value;
+                      setClubId(newId);
+                      setSelectedTeamId('all');
+                      if (typeof window !== 'undefined') {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('club', newId);
+                        window.history.pushState({}, '', url.toString());
+                      }
+                    }}
+                    className="flex items-center px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors cursor-pointer border border-slate-300"
+                    title="Bytt klubb"
+                  >
+                    {listClubConfigs().map((c) => (
+                      <option key={c.id} value={c.id}>
+                        ⚽ {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <button
                 id="btn-fotmob-notifications"
                 onClick={() => {
@@ -1033,10 +1082,10 @@ export default function App() {
                   id="sub-tab-nightmares"
                   onClick={() => handleOpenRatingsModal('nightmare')}
                   className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 shadow-2xs"
-                  title="Se motstandere og måltyver som har scoret mot Bønes"
+                  title={`Se motstandere og måltyver som har scoret mot ${activeClub.shortName}`}
                 >
                   <Skull className="w-3.5 h-3.5 text-purple-600" />
-                  <span>Bønes-mareritt</span>
+                  <span>{activeClub.shortName}-mareritt</span>
                 </button>
               </>
             )}
@@ -1182,9 +1231,9 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-2">
             <Shield className="w-4 h-4 text-red-500" />
-            <span className="font-bold text-white">Bønes Idrettslag Fotball</span>
+            <span className="font-bold text-white">{activeClub.name} Fotball</span>
             <span>•</span>
-            <span>Hjemmebane: Fjellsdalen idrettsplass / Bønesbanen</span>
+            <span>Hjemmebane: {activeClub.branding?.homeGrounds?.join(' / ') || 'Hjemmebane'}</span>
           </div>
 
           <div className="flex items-center space-x-4 text-[11px]">
@@ -1282,6 +1331,7 @@ export default function App() {
           isOpen={isRatingsModalOpen}
           onClose={() => setIsRatingsModalOpen(false)}
           initialTab={ratingsModalTab}
+          initialTeamId={selectedTeamId}
           matches={data.matches}
           players={data.players && data.players.length > 0 ? data.players : ALL_BONES_PLAYERS}
           teams={data.teams}

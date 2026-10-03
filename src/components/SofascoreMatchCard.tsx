@@ -4,6 +4,7 @@ import { Star, Shield, ChevronRight, Binoculars, Trophy, Vote } from 'lucide-rea
 import { WeatherWidget } from './WeatherWidget.js';
 import { AddToCalendarButton } from './AddToCalendarButton.js';
 import { calculateMatchPOTM } from '../utils/potmCalculator.js';
+import { WinProbabilityBadge } from './WinProbabilityBadge.js';
 
 interface SofascoreMatchCardProps {
   match: Match;
@@ -14,6 +15,9 @@ interface SofascoreMatchCardProps {
   onOpenScout?: (match: Match) => void;
   onOpenReport?: (match: Match) => void;
   onOpenPOTM?: (match: Match) => void;
+  allMatches?: Match[];
+  tables?: Record<string, any>;
+  showWinProbability?: boolean;
 }
 
 export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
@@ -25,6 +29,9 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
   onOpenScout,
   onOpenReport,
   onOpenPOTM,
+  allMatches = [],
+  tables,
+  showWinProbability = true,
 }) => {
 
   const isBonesHome = match.homeTeam.toLowerCase().includes('bønes');
@@ -211,6 +218,13 @@ export const SofascoreMatchCard: React.FC<SofascoreMatchCardProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Win Probability Indicator for Upcoming Matches */}
+        {isUpcoming && showWinProbability && (
+          <div className="mt-2.5 pt-2 border-t border-slate-100">
+            <WinProbabilityBadge match={match} allMatches={allMatches} tables={tables} />
+          </div>
+        )}
 
         {/* Banens Beste (Player of the Match) Strip */}
         {leader && potm && (

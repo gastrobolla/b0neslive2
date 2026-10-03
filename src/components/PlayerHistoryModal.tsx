@@ -1414,6 +1414,39 @@ export const PlayerHistoryModal: React.FC<PlayerHistoryModalProps> = ({
                 );
               })()}
 
+              {/* Opponent Quick Selector for Innbyrdes Oppgjør (Siste 3 sesonger) */}
+              {(() => {
+                const uniqueOpponents = Array.from(
+                  new Set(player.matchHistory.map((m) => m.opponent).filter(Boolean))
+                ).slice(0, 8);
+
+                if (uniqueOpponents.length === 0) return null;
+
+                return (
+                  <div className="p-2.5 bg-blue-50/40 border-b border-slate-200 text-xs flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1 shrink-0">
+                      <Trophy className="w-3 h-3 text-[#165094]" />
+                      <span>Innbyrdes oppgjør (3 år):</span>
+                    </span>
+                    {uniqueOpponents.map((opp) => (
+                      <button
+                        key={opp}
+                        type="button"
+                        onClick={() => setSelectedH2hOpponent(selectedH2hOpponent === opp ? null : opp)}
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold transition-all cursor-pointer border ${
+                          selectedH2hOpponent === opp
+                            ? 'bg-[#165094] text-white border-blue-800 shadow-2xs font-bold'
+                            : 'bg-white hover:bg-blue-50 text-[#165094] border-blue-200'
+                        }`}
+                        title={`Vis Bønes' innbyrdes oppgjør mot ${opp} over de siste 3 sesongene`}
+                      >
+                        {opp} {selectedH2hOpponent === opp ? '✓' : '➜'}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">

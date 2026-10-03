@@ -162,39 +162,15 @@ export function getPlayerPositionInMatch(
         (e.player && e.player.trim().toLowerCase() === normTarget))
   );
 
-  // Specific historical calibration for Sunniva Stavrum (J-16):
-  // Autumn 2026 (høst): exclusively Angriper / Spiss (10 mål på 6 kamper)
-  // Spring 2026 (vår): kept goal in selected spring matches (e.g. Fri and Tertnes), otherwise Angrep
-  if (normTarget.includes('sunniva stavrum')) {
-    const isAutumn = match.date >= '2026-07-01';
-    if (isAutumn) return 'Angrep';
-    if (hadGoals) return 'Angrep';
-    if (match.date <= '2026-06-05') return 'Keeper';
-    return 'Angrep';
-  }
-
-  // Emma Bjelde Cortez (3862970): Official regular goalkeeper (Keeper, drakt #1) for J16-1 and J14-1
-  if (normTarget.includes('emma bjelde cortez') || fiksId === 3862970) {
-    return 'Keeper';
-  }
-
-  // Maja Sadownik Bruvik (4009621): Official regular defender (Forsvar / Back, drakt #2) for J16-1
-  if (normTarget.includes('maja sadownik bruvik') || normTarget.includes('maja bruvik') || fiksId === 4009621) {
-    return 'Forsvar';
-  }
-
-  if (hadGoals) {
-    const fb = fallbackPosition ? normalizePosition(fallbackPosition) : 'Ukjent';
-    return fb === 'Forsvar' ? 'Forsvar' : 'Angrep';
-  }
-
-  // Fallback to player profile position
+  // Position resolution according to Core Rule 6:
+  // Position is derived strictly from NFF match lineup, manual/profile position, or standard formation placement.
+  // Never guess position based on player name/ID.
   if (fallbackPosition) {
     const fb = normalizePosition(fallbackPosition);
     if (fb !== 'Ukjent') return fb;
   }
 
-  return 'Midtbane';
+  return 'Ukjent';
 }
 
 /**

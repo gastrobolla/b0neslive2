@@ -73,22 +73,24 @@ export const LivescoreDashboard: React.FC<LivescoreDashboardProps> = ({
 
   // Simultaneous matches detection (matches on same date and time)
   const concurrentSlots = useMemo(() => {
+    const list = data?.matches || [];
     const map = new Map<string, Match[]>();
-    for (const m of data.matches) {
+    for (const m of list) {
+      if (!m.date || !m.time) continue;
       const key = `${m.date} ${m.time}`;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(m);
     }
     return Array.from(map.entries())
-      .filter(([_, list]) => list.length >= 2)
-      .map(([slotKey, matches]) => ({
+      .filter(([_, matchesList]) => matchesList.length >= 2)
+      .map(([slotKey, matchesList]) => ({
         slotKey,
-        date: matches[0].date,
-        time: matches[0].time,
-        matches,
+        date: matchesList[0].date,
+        time: matchesList[0].time,
+        matches: matchesList,
       }))
       .sort((a, b) => a.slotKey.localeCompare(b.slotKey));
-  }, [data.matches]);
+  }, [data?.matches]);
 
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number>(0);
   const [dualViewMode, setDualViewMode] = useState<'dual' | 'cards'>('dual');

@@ -1,4 +1,5 @@
-import { Player, MatchEvent, IdentityResolutionResult, Person, PlayerPosition, PositionSource } from '../types.js';
+import { Player, Match, MatchEvent, IdentityResolutionResult, Person, PlayerPosition, PositionSource, PlayerTeamRepresentation } from '../types.js';
+import { ClubConfig, getClubConfig, isClubTeam } from '../config/clubConfig.js';
 
 /**
  * Standardizes slug creation from human names or raw text.
@@ -71,6 +72,8 @@ export interface ResolutionScope {
   allClubPlayers?: Player[];
   legacyMap?: Map<string, number>; // maps legacyId or nameSlug to fiksId
   targetTeam?: string;
+  clubConfig?: ClubConfig;
+  clubId?: string;
 }
 
 /**
@@ -91,10 +94,11 @@ export function resolvePlayerIdentity(
     fiksId?: number | null;
     playerId?: string | null;
     name?: string | null;
+    player?: string | null;
   },
   scope?: ResolutionScope
 ): IdentityResolutionResult {
-  const displayName = input.name?.trim() || '';
+  const displayName = input.name?.trim() || input.player?.trim() || '';
 
   // 1. Explicit numeric FIKS ID
   const numFiks = extractNumericFiksId(input.fiksId) || extractNumericFiksId(input.playerId);
@@ -140,10 +144,11 @@ export function resolvePlayerIdentity(
   }
 
   const nameSlug = sanitizePlayerNameSlug(displayName);
-  const isBonesTeam = !scope?.targetTeam || /bønes|bones/i.test(scope.targetTeam);
+  const activeClub = scope?.clubConfig || getClubConfig(scope?.clubId);
+  const isTargetClubTeam = !scope?.targetTeam || isClubTeam(scope.targetTeam, activeClub);
 
-  // 3. Verified legacy mapping (only for Bones players/teams)
-  if (isBonesTeam && scope?.legacyMap && scope.legacyMap.has(nameSlug)) {
+  // 3. Verified legacy mapping (only for club players/teams)
+  if (isTargetClubTeam && scope?.legacyMap && scope.legacyMap.has(nameSlug)) {
     const mappedFid = scope.legacyMap.get(nameSlug)!;
     return {
       canonicalId: `fiks-${mappedFid}`,
@@ -206,6 +211,7 @@ export function resolvePlayerIdentity(
       method: 'unresolved',
       confidence: 'ambiguous',
       isAmbiguous: true,
+      ambiguous: true,
       unresolved: true,
       candidateCount: uniqueLineup.size,
       candidateFiksIds: Array.from(uniqueLineup.values())
@@ -214,8 +220,8 @@ export function resolvePlayerIdentity(
     };
   }
 
-  // If this event belongs to an opponent team, do NOT search Bones club squad/players
-  if (!isBonesTeam) {
+  // If this event belongs to an opponent team, do NOT search club squad/players
+  if (!isTargetClubTeam) {
     return {
       canonicalId: undefined,
       fiksId: undefined,
@@ -290,6 +296,7 @@ export function resolvePlayerIdentity(
       method: 'unresolved',
       confidence: 'ambiguous',
       isAmbiguous: true,
+      ambiguous: true,
       unresolved: true,
       candidateCount: uniqueClubPersons.size,
       candidateFiksIds: Array.from(uniqueClubPersons.values())
@@ -645,3 +652,149 @@ export function runPlayerIdentityDiagnostics(
     },
   };
 }
+
+/**
+ * Builds canonical Person identities from team-specific Player representations and MatchEvents.
+ * Core Rules 1, 2, 4:
+ * - Canonical Person is unique per FIKS ID (or deterministic legacy ID).
+ * - Represents the individual human who may play for multiple teams and across seasons.
+ * - Total statistics (goals, assists, cards) are strictly derived from MatchEvents.
+ */
+export function buildPersonsFromPlayersAndEvents(
+  players: Player[] = [],
+  matches: Match[] = [],
+  clubId: string = 'bones'
+): Person[] {
+  const personsMap = new Map<string, Person>();
+  const matchesByPerson = new Map<string, Set<string>>();
+
+  // 1. Group player representations by canonical ID
+  for (const p of players) {
+    const numFiks = extractNumericFiksId(p.fiksId) || extractNumericFiksId(p.id);
+    const canonicalId = toCanonicalPlayerId(numFiks ? `fiks-${numFiks}` : p.id, p.name);
+    if (!canonicalId || canonicalId === 'legacy_unknown') continue;
+
+    let person = personsMap.get(canonicalId);
+    if (!person) {
+      person = {
+        canonicalId,
+        canonicalPlayerId: canonicalId,
+        fiksId: numFiks,
+        displayName: p.name.trim(),
+        clubId: p.clubId || clubId,
+        teams: [],
+        position: p.position || 'Ukjent',
+        positionSource: p.positionSource || (p.position && p.position !== 'Ukjent' ? 'import' : 'unknown'),
+        totalStats: {
+          matches: 0,
+          goals: 0,
+          assists: 0,
+          yellowCards: 0,
+          redCards: 0,
+        },
+        officialStats: p.officialNffStats,
+      };
+      personsMap.set(canonicalId, person);
+      matchesByPerson.set(canonicalId, new Set<string>());
+    }
+
+    // Add team representation if not already present
+    const teamId = p.teamId || '';
+    const season = p.season || '2026';
+    const hasRep = person.teams.some((t) => t.teamId === teamId && t.season === season);
+    if (!hasRep && teamId) {
+      const rep: PlayerTeamRepresentation = {
+        clubId: p.clubId || clubId,
+        teamId,
+        teamName: p.teamName || teamId,
+        season,
+        jerseyNumber: p.jerseyNumber || p.number,
+        position: p.position || 'Ukjent',
+        positionSource: p.positionSource || 'unknown',
+        matches: p.matches || 0,
+        goals: p.goals || 0,
+        yellowCards: p.yellowCards || 0,
+        redCards: p.redCards || 0,
+        springMatches: 0,
+        autumnMatches: 0,
+        stats: {
+          matches: p.matches || 0,
+          goals: p.goals || 0,
+          yellowCards: p.yellowCards || 0,
+          redCards: p.redCards || 0,
+        },
+      };
+      person.teams.push(rep);
+    }
+  }
+
+  // 2. Derive statistics and appearances authoritatively from MatchEvents and lineups
+  for (const m of matches) {
+    const mId = m.id;
+    // Check lineups for match appearances
+    const lineup = [
+      ...(m.lineup?.starters || []),
+      ...(m.lineup?.bench || []),
+      ...(m.lineup?.subs || []),
+      ...(m.homeLineup?.starters || []),
+      ...(m.homeLineup?.bench || []),
+      ...(m.awayLineup?.starters || []),
+      ...(m.awayLineup?.bench || []),
+    ];
+
+    for (const lp of lineup) {
+      const numFiks = extractNumericFiksId(lp.fiksId) || extractNumericFiksId(lp.id);
+      const cId = toCanonicalPlayerId(numFiks ? `fiks-${numFiks}` : lp.id, lp.name);
+      if (personsMap.has(cId)) {
+        matchesByPerson.get(cId)?.add(mId);
+      }
+    }
+
+    // Process events
+    for (const ev of m.events || []) {
+      if (ev.ambiguous) continue; // Ambiguity Guardrail: Never guess
+
+      const evFiks = extractNumericFiksId(ev.fiksId) || extractNumericFiksId(ev.playerId);
+      const cId = toCanonicalPlayerId(evFiks ? `fiks-${evFiks}` : ev.playerId, ev.player);
+      const person = personsMap.get(cId);
+
+      if (person) {
+        matchesByPerson.get(cId)?.add(mId);
+
+        // Own goals are never credited to the player as personal goals
+        const isOwnGoal = (ev as any).goalType === 'own_goal' ||
+          (ev.description || '').toLowerCase().includes('selvmål') ||
+          (ev.description || '').toLowerCase().includes('(sm)');
+
+        if (ev.type === 'goal' && !isOwnGoal) {
+          person.totalStats!.goals += 1;
+        } else if (ev.type === 'yellow_card') {
+          person.totalStats!.yellowCards += 1;
+        } else if (ev.type === 'red_card') {
+          person.totalStats!.redCards += 1;
+        }
+      }
+
+      // Check assists
+      if (ev.assistPlayer || ev.assistPlayerId || ev.assistFiksId) {
+        const aFiks = extractNumericFiksId(ev.assistFiksId) || extractNumericFiksId(ev.assistPlayerId);
+        const aId = toCanonicalPlayerId(aFiks ? `fiks-${aFiks}` : ev.assistPlayerId, ev.assistPlayer);
+        const assistPerson = personsMap.get(aId);
+        if (assistPerson && !ev.assistAmbiguous) {
+          assistPerson.totalStats!.assists += 1;
+          matchesByPerson.get(aId)?.add(mId);
+        }
+      }
+    }
+  }
+
+  // 3. Finalize match appearances count
+  for (const [cId, person] of personsMap.entries()) {
+    const trackedMatches = matchesByPerson.get(cId)?.size || 0;
+    const squadMatchesSum = person.teams.reduce((acc, t) => acc + (t.stats?.matches || 0), 0);
+    person.totalStats!.matches = Math.max(trackedMatches, squadMatchesSum);
+  }
+
+  return Array.from(personsMap.values());
+}
+

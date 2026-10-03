@@ -1,21 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-  CartesianGrid,
-  AreaChart,
-  Area,
-  ComposedChart,
-  Line,
-  Cell,
-  PieChart,
-  Pie,
-} from 'recharts';
+import * as d3 from 'd3';
 import { Match, TeamInfo } from '../types.js';
 import {
   resolveMatchStats,
@@ -125,6 +109,7 @@ export const MatchStatsAnalyticsView: React.FC<MatchStatsAnalyticsViewProps> = (
 
   // Selected single match for deep-dive
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const [hoveredMatch, setHoveredMatch] = useState<any | null>(null);
 
   // Filter finished matches
   const finishedMatches = useMemo(() => {
@@ -468,95 +453,217 @@ export const MatchStatsAnalyticsView: React.FC<MatchStatsAnalyticsViewProps> = (
             Ingen ferdigspilte kamper matcher det valgte filteret.
           </div>
         ) : (
-          <div className="h-[320px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={barChartData}
-                margin={{ top: 20, right: 20, left: -10, bottom: 25 }}
-                onClick={(e: any) => {
-                  if (e && e.activePayload && e.activePayload.length > 0) {
-                    const matchId = e.activePayload[0].payload.matchId;
-                    setSelectedMatchId(matchId);
-                  }
-                }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                <XAxis
-                  dataKey="shortOpponent"
-                  tick={{ fill: '#64748B', fontSize: 11, fontWeight: 600 }}
-                  interval={0}
-                  angle={-20}
-                  textAnchor="end"
-                  height={45}
+          <div className="w-full relative select-none">
+            {/* Legend */}
+            <div className="flex flex-wrap items-center justify-end gap-4 text-xs font-bold mb-3">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="w-3 h-3 rounded-xs inline-block"
+                  style={{
+                    backgroundColor:
+                      activeMetric === 'possession'
+                        ? '#165094'
+                        : activeMetric === 'shotsOnTarget'
+                        ? '#10B981'
+                        : '#2563EB',
+                  }}
                 />
-                <YAxis
-                  tick={{ fill: '#64748B', fontSize: 10 }}
-                  domain={
-                    activeMetric === 'possession' || activeMetric === 'passAccuracy'
-                      ? [0, 100]
-                      : [0, 'dataMax + 2']
-                  }
+                <span className="text-slate-700">
+                  {activeMetric === 'possession'
+                    ? 'Bønes IL Besittelse (%)'
+                    : activeMetric === 'shotsOnTarget'
+                    ? 'Bønes IL Skudd på Mål'
+                    : 'Bønes IL Pasningssikkerhet (%)'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="w-3 h-3 rounded-xs inline-block"
+                  style={{
+                    backgroundColor:
+                      activeMetric === 'shotsOnTarget' ? '#94A3B8' : '#CBD5E1',
+                  }}
                 />
-                <Tooltip content={<CustomBarTooltip />} />
-                <Legend
-                  verticalAlign="top"
-                  align="right"
-                  wrapperStyle={{ paddingBottom: '10px', fontSize: '12px', fontWeight: 'bold' }}
-                />
+                <span className="text-slate-500">
+                  {activeMetric === 'possession'
+                    ? 'Motstander Besittelse (%)'
+                    : activeMetric === 'shotsOnTarget'
+                    ? 'Motstander Skudd på Mål'
+                    : 'Motstander Pasningssikkerhet (%)'}
+                </span>
+              </div>
+            </div>
 
-                {/* Bars for Active Metric */}
-                {activeMetric === 'possession' && (
-                  <>
-                    <Bar
-                      dataKey="bonesPossession"
-                      name="Bønes IL Besittelse (%)"
-                      fill="#165094"
-                      radius={[4, 4, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="oppPossession"
-                      name="Motstander Besittelse (%)"
-                      fill="#CBD5E1"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </>
-                )}
+            {/* Native SVG Chart */}
+            {(() => {
+              const svgWidth = Math.max(600, barChartData.length * 60);
+              const svgHeight = 280;
+              const chartMargin = { top: 15, right: 20, bottom: 50, left: 35 };
+              const innerW = svgWidth - chartMargin.left - chartMargin.right;
+              const innerH = svgHeight - chartMargin.top - chartMargin.bottom;
 
-                {activeMetric === 'shotsOnTarget' && (
-                  <>
-                    <Bar
-                      dataKey="bonesShotsOnTarget"
-                      name="Bønes IL Skudd på Mål"
-                      fill="#10B981"
-                      radius={[4, 4, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="oppShotsOnTarget"
-                      name="Motstander Skudd på Mål"
-                      fill="#94A3B8"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </>
-                )}
+              const isPercent = activeMetric === 'possession' || activeMetric === 'passAccuracy';
+              const maxVal = isPercent
+                ? 100
+                : Math.max(
+                    6,
+                    ...barChartData.map((d) =>
+                      Math.max(d.bonesShotsOnTarget || 0, d.oppShotsOnTarget || 0)
+                    ) + 2
+                  );
 
-                {activeMetric === 'passAccuracy' && (
-                  <>
-                    <Bar
-                      dataKey="bonesPassAccuracy"
-                      name="Bønes IL Pasningssikkerhet (%)"
-                      fill="#2563EB"
-                      radius={[4, 4, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="oppPassAccuracy"
-                      name="Motstander Pasningssikkerhet (%)"
-                      fill="#CBD5E1"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </>
-                )}
-              </BarChart>
-            </ResponsiveContainer>
+              const yScale = d3
+                .scaleLinear()
+                .domain([0, maxVal])
+                .range([svgHeight - chartMargin.bottom, chartMargin.top]);
+
+              const yTicks = yScale.ticks(5);
+              const slotWidth = innerW / barChartData.length;
+              const barWidth = Math.min(18, (slotWidth - 12) / 2);
+
+              const bonesFill =
+                activeMetric === 'possession'
+                  ? '#165094'
+                  : activeMetric === 'shotsOnTarget'
+                  ? '#10B981'
+                  : '#2563EB';
+              const oppFill = activeMetric === 'shotsOnTarget' ? '#94A3B8' : '#CBD5E1';
+
+              return (
+                <div className="overflow-x-auto pb-2">
+                  <svg
+                    viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                    style={{ minWidth: `${svgWidth}px`, height: '280px' }}
+                    className="w-full overflow-visible"
+                    onMouseLeave={() => setHoveredMatch(null)}
+                  >
+                    {/* Y Grid & Ticks */}
+                    {yTicks.map((tickVal, idx) => {
+                      const yPos = yScale(tickVal);
+                      return (
+                        <g key={`ygrid-${idx}`}>
+                          <line
+                            x1={chartMargin.left}
+                            x2={svgWidth - chartMargin.right}
+                            y1={yPos}
+                            y2={yPos}
+                            stroke="#F1F5F9"
+                            strokeDasharray="3 3"
+                          />
+                          <text
+                            x={chartMargin.left - 6}
+                            y={yPos + 3.5}
+                            textAnchor="end"
+                            fontSize="10"
+                            fill="#64748B"
+                            fontFamily="system-ui, sans-serif"
+                          >
+                            {tickVal}{isPercent ? '%' : ''}
+                          </text>
+                        </g>
+                      );
+                    })}
+
+                    {/* Bars per match */}
+                    {barChartData.map((m, idx) => {
+                      const centerX = chartMargin.left + idx * slotWidth + slotWidth / 2;
+                      const isSelected = selectedMatchId === m.matchId;
+                      const isHovered = hoveredMatch?.matchId === m.matchId;
+
+                      const bonesVal =
+                        activeMetric === 'possession'
+                          ? m.bonesPossession
+                          : activeMetric === 'shotsOnTarget'
+                          ? m.bonesShotsOnTarget
+                          : m.bonesPassAccuracy;
+
+                      const oppVal =
+                        activeMetric === 'possession'
+                          ? m.oppPossession
+                          : activeMetric === 'shotsOnTarget'
+                          ? m.oppShotsOnTarget
+                          : m.oppPassAccuracy;
+
+                      const bonesY = yScale(Math.max(0, bonesVal));
+                      const bonesH = Math.max(2, (svgHeight - chartMargin.bottom) - bonesY);
+
+                      const oppY = yScale(Math.max(0, oppVal));
+                      const oppH = Math.max(2, (svgHeight - chartMargin.bottom) - oppY);
+
+                      const bonesX = centerX - barWidth - 2;
+                      const oppX = centerX + 2;
+
+                      return (
+                        <g
+                          key={m.matchId}
+                          className="cursor-pointer"
+                          onClick={() => setSelectedMatchId(m.matchId)}
+                          onMouseEnter={() => setHoveredMatch(m)}
+                        >
+                          {/* Selection / Hover Backdrop */}
+                          {(isSelected || isHovered) && (
+                            <rect
+                              x={centerX - slotWidth / 2 + 2}
+                              y={chartMargin.top}
+                              width={slotWidth - 4}
+                              height={innerH}
+                              fill="#3b82f6"
+                              fillOpacity={isSelected ? 0.12 : 0.05}
+                              rx={6}
+                              stroke={isSelected ? '#3b82f6' : 'none'}
+                              strokeWidth={isSelected ? 1.5 : 0}
+                            />
+                          )}
+
+                          {/* Bønes Bar */}
+                          <rect
+                            x={bonesX}
+                            y={bonesY}
+                            width={barWidth}
+                            height={bonesH}
+                            rx={3}
+                            fill={bonesFill}
+                            className="transition-all duration-150"
+                          />
+
+                          {/* Opponent Bar */}
+                          <rect
+                            x={oppX}
+                            y={oppY}
+                            width={barWidth}
+                            height={oppH}
+                            rx={3}
+                            fill={oppFill}
+                            className="transition-all duration-150"
+                          />
+
+                          {/* X Axis Label */}
+                          <text
+                            x={centerX}
+                            y={svgHeight - chartMargin.bottom + 18}
+                            textAnchor="end"
+                            transform={`rotate(-25, ${centerX}, ${svgHeight - chartMargin.bottom + 18})`}
+                            fontSize="11"
+                            fontWeight={isSelected ? '700' : '600'}
+                            fill={isSelected ? '#1e293b' : '#64748B'}
+                            fontFamily="system-ui, sans-serif"
+                          >
+                            {m.shortOpponent}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+              );
+            })()}
+
+            {/* Hover Tooltip Overlay */}
+            {hoveredMatch && (
+              <div className="absolute top-8 right-6 z-30 pointer-events-none">
+                <CustomBarTooltip active={true} payload={[{ payload: hoveredMatch }]} />
+              </div>
+            )}
           </div>
         )}
       </div>

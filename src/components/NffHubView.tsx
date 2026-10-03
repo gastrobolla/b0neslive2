@@ -40,7 +40,7 @@ interface OfficialLinkItem {
 }
 
 export const NffHubView: React.FC<NffHubViewProps> = ({
-  teams,
+  teams = [],
   selectedTeamId,
   onSelectTeam,
   onRealScrape,
@@ -51,8 +51,8 @@ export const NffHubView: React.FC<NffHubViewProps> = ({
   const [matchIdInput, setMatchIdInput] = useState('');
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
-  // Dynamically generate verified official links for all 16 Bønes IL teams
-  const officialLinks: OfficialLinkItem[] = teams.map((t) => ({
+  // Dynamically generate verified official links for all teams
+  const officialLinks: OfficialLinkItem[] = (teams || []).map((t) => ({
     id: t.id,
     title: t.name,
     division: t.division,

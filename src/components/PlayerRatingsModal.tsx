@@ -30,6 +30,7 @@ interface PlayerRatingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: 'season' | 'form' | 'nightmare';
+  initialTeamId?: string;
   matches: Match[];
   players?: Player[];
   teams?: Team[];
@@ -41,6 +42,7 @@ export const PlayerRatingsModal: React.FC<PlayerRatingsModalProps> = ({
   isOpen,
   onClose,
   initialTab = 'season',
+  initialTeamId = 'all',
   matches,
   players = [],
   teams = [],
@@ -49,17 +51,20 @@ export const PlayerRatingsModal: React.FC<PlayerRatingsModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'season' | 'form' | 'nightmare'>(initialTab);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTeamId, setSelectedTeamId] = useState<string>('all');
+  const [selectedTeamId, setSelectedTeamId] = useState<string>(initialTeamId || 'all');
   const [selectedPosition, setSelectedPosition] = useState<string>('all');
   const [minMatches, setMinMatches] = useState<number>(1);
   const [showRatingExplanation, setShowRatingExplanation] = useState<boolean>(true);
 
-  // Sync initial tab when opened
+  // Sync initial tab and team when opened
   useEffect(() => {
     if (isOpen) {
       setActiveTab(initialTab);
+      if (initialTeamId) {
+        setSelectedTeamId(initialTeamId);
+      }
     }
-  }, [isOpen, initialTab]);
+  }, [isOpen, initialTab, initialTeamId]);
 
   // Handle ESC key
   useEffect(() => {

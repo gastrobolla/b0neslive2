@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { BonesClubData, DatabaseSchemaV2, Match, MatchEvent, MatchStatus, Player } from '../src/types.js';
+import { BonesClubData, DatabaseSchemaV2, Match, MatchEvent, MatchStatus, Player, Person } from '../src/types.js';
 import { getClubData } from './bonesData.js';
 import {
   calculateMatchScore,
@@ -18,13 +18,25 @@ import {
   extractNumericFiksId,
   resolvePlayerIdentity,
   runPlayerIdentityDiagnostics,
+  buildPersonsFromPlayersAndEvents,
 } from '../src/utils/playerResolver.js';
 import { ALL_BONES_PLAYERS } from '../src/data/bonesSquads.js';
+import { ClubConfig, getClubConfig, isClubTeam } from '../src/config/clubConfig.js';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'bones_database.json');
 const BAK_FILE = path.join(DATA_DIR, 'bones_database.bak');
 const V1_BAK_FILE = path.join(DATA_DIR, 'bones_database.v1.bak.json');
+
+export function getDatabaseFilePath(clubId: string = 'bones'): string {
+  const clean = (clubId || 'bones').toLowerCase().trim();
+  return path.join(DATA_DIR, clean === 'bones' ? 'bones_database.json' : `${clean}_database.json`);
+}
+
+export function getBakFilePath(clubId: string = 'bones'): string {
+  const clean = (clubId || 'bones').toLowerCase().trim();
+  return path.join(DATA_DIR, clean === 'bones' ? 'bones_database.bak' : `${clean}_database.bak`);
+}
 
 /**
  * Migrates data to DatabaseSchemaV2:
@@ -35,22 +47,38 @@ const V1_BAK_FILE = path.join(DATA_DIR, 'bones_database.v1.bak.json');
  * 5. Re-derives event-driven match scores and derived stats (topScorers, cards).
  * 6. Sets schemaVersion = '2.0', dataVersion = 2.
  */
-export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
-  console.log('[Storage] Starting migration to DatabaseSchemaV2 with canonical player identities...');
+export function migrateToV2(data: BonesClubData, clubId: string = 'bones'): DatabaseSchemaV2 {
+  const cleanClubId = (clubId || data.clubId || 'bones').toLowerCase().trim();
+  const clubConfig = getClubConfig(cleanClubId);
+  console.log(`[Storage] Starting migration to DatabaseSchemaV2 for club: ${clubConfig.name} (${cleanClubId})...`);
 
-  // 1. Create .v1.bak.json backup if not already present
-  try {
-    if (fs.existsSync(DB_FILE) && !fs.existsSync(V1_BAK_FILE)) {
-      fs.copyFileSync(DB_FILE, V1_BAK_FILE);
-      console.log(`[Storage] Created migration backup at ${V1_BAK_FILE}`);
+  // 1. Create .v1.bak.json backup if not already present (for bones)
+  if (cleanClubId === 'bones') {
+    try {
+      if (fs.existsSync(DB_FILE) && !fs.existsSync(V1_BAK_FILE)) {
+        fs.copyFileSync(DB_FILE, V1_BAK_FILE);
+        console.log(`[Storage] Created migration backup at ${V1_BAK_FILE}`);
+      }
+    } catch (err: any) {
+      console.warn('[Storage] Could not create v1 backup:', err.message);
     }
-  } catch (err: any) {
-    console.warn('[Storage] Could not create v1 backup:', err.message);
   }
 
-  const allClubPlayers: Player[] = [...(data.players || []), ...ALL_BONES_PLAYERS];
+  data.clubId = cleanClubId;
+  data.clubConfig = clubConfig;
 
-  // Build unambiguous legacy map for Bones players (from officialStats and club squads)
+  // Stamp clubId on all teams
+  if (Array.isArray(data.teams)) {
+    for (const t of data.teams) {
+      t.clubId = t.clubId || cleanClubId;
+    }
+  }
+
+  const allClubPlayers: Player[] = cleanClubId === 'bones'
+    ? [...(data.players || []), ...ALL_BONES_PLAYERS]
+    : [...(data.players || [])];
+
+  // Build unambiguous legacy map for club players (from officialStats and club squads)
   const legacyMap = new Map<string, number>();
   const nameToFids = new Map<string, Set<number>>();
 
@@ -103,7 +131,9 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
       return {
         ...p,
         id: canonId,
+        personId: canonId,
         fiksId: fid,
+        clubId: p.clubId || cleanClubId,
       };
     });
   }
@@ -112,6 +142,7 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
   const processedEventIds = new Set<string>();
 
   data.matches = (data.matches || []).map((match) => {
+    match.clubId = match.clubId || cleanClubId;
     if (!match.events || match.events.length === 0) {
       return match;
     }
@@ -139,6 +170,8 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
         squadPlayers: squadList,
         allClubPlayers: allClubPlayers,
         legacyMap: legacyMap,
+        clubConfig: clubConfig,
+        clubId: cleanClubId,
       });
 
       const effectivePlayerId = enriched.ambiguous ? undefined : enriched.playerId;
@@ -157,6 +190,7 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
         matchId: match.id,
         playerId: effectivePlayerId,
         fiksId: enriched.ambiguous ? undefined : enriched.fiksId,
+        clubId: cleanClubId,
       };
 
       eventMap.set(deterministicId, normalizedEvent);
@@ -176,7 +210,8 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
         match.homeScore,
         match.awayScore,
         match.homeTeam,
-        match.awayTeam
+        match.awayTeam,
+        clubConfig
       );
       homeScore = derivedScore.homeScore;
       awayScore = derivedScore.awayScore;
@@ -190,9 +225,12 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
     };
   });
 
-  // 4. Re-derive topScorers and cards from the normalized events
-  data.topScorers = calculateTopScorers(data.matches, data.players, { bonesOnly: true });
-  data.cards = calculateCardStatistics(data.matches, data.players, { bonesOnly: true });
+  // 4. Build canonical Person identities
+  data.persons = buildPersonsFromPlayersAndEvents(data.players || [], data.matches || [], cleanClubId);
+
+  // 5. Re-derive topScorers and cards from the normalized events
+  data.topScorers = calculateTopScorers(data.matches, data.players, { clubConfig, clubOnly: true });
+  data.cards = calculateCardStatistics(data.matches, data.players, { clubConfig, clubOnly: true });
 
   const v2Data: DatabaseSchemaV2 = {
     ...data,
@@ -201,12 +239,13 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
     migratedAt: new Date().toISOString(),
     processedEventIds: Array.from(processedEventIds),
     lastDiskSaved: new Date().toISOString(),
+    persons: data.persons,
   };
 
   // Run integrity diagnostics
   const diag = runPlayerIdentityDiagnostics(v2Data);
   console.log(
-    `[Storage] Migration complete. Diagnostics: ${diag.totalUniqueFiksPersons} unique FIKS persons, ${diag.totalPlayerRecords} squad records, ${diag.eventsDiagnostics.totalEvents} match events (${diag.eventsDiagnostics.authoritativeEvents} authoritative FIKS events, ${diag.eventsDiagnostics.unresolvedEvents} legacy, ${diag.eventsDiagnostics.ambiguousEvents} ambiguous).`
+    `[Storage] Migration complete for ${cleanClubId}. Diagnostics: ${diag.totalUniqueFiksPersons} unique FIKS persons, ${diag.totalPlayerRecords} squad records, ${diag.eventsDiagnostics.totalEvents} match events (${diag.eventsDiagnostics.authoritativeEvents} authoritative FIKS events, ${diag.eventsDiagnostics.unresolvedEvents} legacy, ${diag.eventsDiagnostics.ambiguousEvents} ambiguous).`
   );
 
   return v2Data;
@@ -214,26 +253,31 @@ export function migrateToV2(data: BonesClubData): DatabaseSchemaV2 {
 
 /**
  * Loads persisted club data from disk or initializes if first time.
+ * Supports multi-club data isolation by clubId.
  */
-export function loadPersistedData(): BonesClubData {
+export function loadPersistedData(clubId: string = 'bones'): BonesClubData {
+  const cleanClubId = (clubId || 'bones').toLowerCase().trim();
+  const dbFile = getDatabaseFilePath(cleanClubId);
+  const bakFile = getBakFilePath(cleanClubId);
+
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
 
-    if (fs.existsSync(DB_FILE)) {
-      const raw = fs.readFileSync(DB_FILE, 'utf-8');
+    if (fs.existsSync(dbFile)) {
+      const raw = fs.readFileSync(dbFile, 'utf-8');
       const parsed = JSON.parse(raw) as BonesClubData;
 
       // Verify that parsed object contains minimal required structure
       if (parsed && Array.isArray(parsed.teams) && parsed.tables && Array.isArray(parsed.matches)) {
         // Check if migration to V2 is needed
-        if (parsed.schemaVersion !== '2.0' || !parsed.dataVersion || parsed.dataVersion < 2) {
+        if (parsed.schemaVersion !== '2.0' || !parsed.dataVersion || parsed.dataVersion < 2 || !parsed.persons) {
           console.log(
-            `[Storage] Database schema is not 2.0 (current schemaVersion: ${parsed.schemaVersion || 'none'}, dataVersion: ${parsed.dataVersion}). Migrating to V2...`
+            `[Storage] Database schema is not 2.0 or missing persons for ${cleanClubId}. Migrating to V2...`
           );
-          const v2 = migrateToV2(parsed);
-          savePersistedData(v2);
+          const v2 = migrateToV2(parsed, cleanClubId);
+          savePersistedData(v2, cleanClubId);
           return v2;
         }
 
@@ -281,24 +325,27 @@ export function loadPersistedData(): BonesClubData {
           parsed.processedEventIds = parsed.processedEventIds.filter(id => !id.includes('sander_boenes'));
         }
 
-        const eventsFile = path.join(DATA_DIR, 'real_match_events.json');
-        if (fs.existsSync(eventsFile)) {
-          try {
-            const eventsMap = JSON.parse(fs.readFileSync(eventsFile, 'utf-8'));
-            for (const m of parsed.matches) {
-              if (eventsMap[m.id] && (!m.events || m.events.length === 0)) {
-                m.events = eventsMap[m.id];
+        if (cleanClubId === 'bones') {
+          const eventsFile = path.join(DATA_DIR, 'real_match_events.json');
+          if (fs.existsSync(eventsFile)) {
+            try {
+              const eventsMap = JSON.parse(fs.readFileSync(eventsFile, 'utf-8'));
+              for (const m of parsed.matches) {
+                if (eventsMap[m.id] && (!m.events || m.events.length === 0)) {
+                  m.events = eventsMap[m.id];
+                }
               }
+            } catch (e) {
+              console.warn('[Storage] Could not merge real_match_events.json:', e);
             }
-          } catch (e) {
-            console.warn('[Storage] Could not merge real_match_events.json:', e);
           }
         }
 
         // Authoritatively synchronize match scores with goal events (including own goals)
+        const clubConfig = getClubConfig(cleanClubId);
         for (const m of parsed.matches) {
           if (m.events && m.events.length > 0 && m.events.some(e => e.type === 'goal')) {
-            const derived = calculateMatchScore(m.events, m.homeScore, m.awayScore, m.homeTeam, m.awayTeam);
+            const derived = calculateMatchScore(m.events, m.homeScore, m.awayScore, m.homeTeam, m.awayTeam, clubConfig);
             m.homeScore = derived.homeScore;
             m.awayScore = derived.awayScore;
           }
@@ -313,68 +360,135 @@ export function loadPersistedData(): BonesClubData {
           }
         }
 
+        if (!parsed.persons || parsed.persons.length === 0) {
+          parsed.persons = buildPersonsFromPlayersAndEvents(parsed.players || [], parsed.matches || [], cleanClubId);
+        }
+
         console.log(
-          `[Storage] Persisted database loaded successfully from ${DB_FILE} (Version: ${parsed.dataVersion}, Matches: ${parsed.matches.length}).`
+          `[Storage] Persisted database loaded successfully from ${dbFile} (Version: ${parsed.dataVersion}, Matches: ${parsed.matches.length}, Club: ${cleanClubId}).`
         );
         return parsed;
       }
     }
   } catch (err: any) {
     console.error(
-      '[Storage] Error reading persisted database file, falling back to backup or initial seed data:',
+      `[Storage] Error reading persisted database file for ${cleanClubId}, falling back to backup or initial seed data:`,
       err.message
     );
-    if (fs.existsSync(BAK_FILE)) {
+    if (fs.existsSync(bakFile)) {
       try {
-        const bakRaw = fs.readFileSync(BAK_FILE, 'utf-8');
+        const bakRaw = fs.readFileSync(bakFile, 'utf-8');
         const bakParsed = JSON.parse(bakRaw) as BonesClubData;
         if (bakParsed && Array.isArray(bakParsed.matches)) {
-          console.log('[Storage] Successfully recovered from backup file.');
+          console.log(`[Storage] Successfully recovered ${cleanClubId} from backup file.`);
           return bakParsed;
         }
       } catch (bakErr) {
-        console.error('[Storage] Backup recovery failed:', bakErr);
+        console.error(`[Storage] Backup recovery failed for ${cleanClubId}:`, bakErr);
       }
     }
   }
 
-  // If not found or error, initialize from seed data
-  console.log('[Storage] Initializing fresh database from verified seed data and saving to disk...');
-  const initial = getClubData();
-  const migrated = migrateToV2(initial);
-  savePersistedData(migrated);
+  // If not found or error, initialize from seed data or club configuration
+  console.log(`[Storage] Initializing fresh database for ${cleanClubId} and saving to disk...`);
+  let initial: BonesClubData;
+  if (cleanClubId === 'bones') {
+    initial = getClubData();
+  } else {
+    const config = getClubConfig(cleanClubId);
+    initial = {
+      clubId: cleanClubId,
+      clubConfig: config,
+      teams: config.scraper?.teams?.map(t => ({
+        id: t.id,
+        clubId: cleanClubId,
+        name: t.name,
+        shortName: t.shortName,
+        category: t.category,
+        division: t.division,
+        krets: t.krets,
+        homeGround: t.homeGround,
+        currentRank: 1,
+        totalTeamsInDivision: 8,
+        nffCode: t.nffCode,
+        fiksId: t.fiksId,
+        tourneyId: t.tourneyId,
+      })) || [],
+      tables: {},
+      topScorers: [],
+      cards: [],
+      matches: [],
+      players: [],
+      persons: [],
+      scanner: {
+        isActive: false,
+        isScanning: false,
+        lastScanned: new Date().toISOString(),
+        lastScan: new Date().toISOString(),
+        nextScanSeconds: 180,
+        autoScanEnabled: true,
+        sources: [],
+        logs: [],
+        scanDuration: '0s',
+        totalMatchesFound: 0,
+        errors: [],
+        progress: 100,
+        currentTask: 'Klar'
+      },
+      feed: [],
+      stats: {
+        totalTeams: config.scraper?.teams?.length || 0,
+        totalMatchesRecorded: 0,
+        upcomingHomeMatches: 0,
+        totalGoalsScored: 0,
+        fairPlayScore: 10.0
+      },
+      isRealData: true,
+      dataVersion: 2,
+      schemaVersion: '2.0',
+    };
+  }
+
+  const migrated = migrateToV2(initial, cleanClubId);
+  savePersistedData(migrated, cleanClubId);
   return migrated;
 }
 
 /**
  * Saves club data to disk atomically to prevent data loss on server restarts.
+ * Isolates data per club.
  */
-export function savePersistedData(data: BonesClubData): void {
+export function savePersistedData(data: BonesClubData, clubId: string = 'bones'): void {
+  const cleanClubId = (clubId || data.clubId || 'bones').toLowerCase().trim();
+  const dbFile = getDatabaseFilePath(cleanClubId);
+  const bakFile = getBakFilePath(cleanClubId);
+
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
 
+    data.clubId = cleanClubId;
     data.dataVersion = 2;
     data.schemaVersion = '2.0';
     data.lastDiskSaved = new Date().toISOString();
 
-    const tempFile = `${DB_FILE}.tmp`;
+    const tempFile = `${dbFile}.tmp`;
     const serialized = JSON.stringify(data, null, 2);
     fs.writeFileSync(tempFile, serialized, 'utf-8');
 
     // Create backup of current DB if it exists
-    if (fs.existsSync(DB_FILE)) {
+    if (fs.existsSync(dbFile)) {
       try {
-        fs.copyFileSync(DB_FILE, BAK_FILE);
+        fs.copyFileSync(dbFile, bakFile);
       } catch {
         // ignore backup copy failure
       }
     }
 
-    fs.renameSync(tempFile, DB_FILE);
+    fs.renameSync(tempFile, dbFile);
   } catch (err: any) {
-    console.error('[Storage] Error saving database to disk:', err.message);
+    console.error(`[Storage] Error saving database to disk for ${cleanClubId}:`, err.message);
   }
 }
 

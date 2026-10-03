@@ -1,16 +1,17 @@
 import express from 'express';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
-import { BonesClubData, ScanLog, MatchEvent, FeedItem, Match, LaglederReportRequest, TopScorer, CardStatistic, MatchStatus, Player } from './src/types.js';
-import { runFullClubScrape, BONES_16_TEAMS, scrapeMatchEvents, scrapeMatchLineup, enrichMatchResultFromFiks } from './server/bonesScraper.js';
-import { loadPersistedData, savePersistedData, upsertMatches, queryMatches } from './server/storage.js';
+import { BonesClubData, ScanLog, MatchEvent, FeedItem, Match, LaglederReportRequest, TopScorer, CardStatistic, MatchStatus, Player, Person } from './src/types.js';
+import { runFullClubScrape, scrapeClub, BONES_16_TEAMS, scrapeMatchEvents, scrapeMatchLineup, enrichMatchResultFromFiks } from './server/bonesScraper.js';
+import { loadPersistedData, savePersistedData, upsertMatches, queryMatches, getDatabaseFilePath } from './server/storage.js';
 import { ALL_BONES_SQUADS, ALL_BONES_PLAYERS, getSquadForTeam, getMatchLineup } from './src/data/bonesSquads.js';
 import { matchService } from './server/services/matchService.js';
 import { generateOpponentScoutReport } from './server/scoutService.js';
 import { calculateMatchPOTM } from './src/utils/potmCalculator.js';
 import { calculateMatchScore, calculateTopScorers, calculateCardStatistics, isOwnGoalEvent } from './src/utils/derivedStats.js';
-import { runPlayerIdentityDiagnostics } from './src/utils/playerResolver.js';
+import { runPlayerIdentityDiagnostics, buildPersonsFromPlayersAndEvents, toCanonicalPlayerId, extractNumericFiksId } from './src/utils/playerResolver.js';
 import { enrichPlayersWithMostPlayedPosition } from './src/utils/positionEngine.js';
+import { ClubConfig, getClubConfig, listClubConfigs, registerClubConfig, isClubTeam } from './src/config/clubConfig.js';
 import {
   getOfficialPlayerStats,
   scrapeOfficialPlayerStats,
@@ -23,117 +24,85 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Load persistent database from disk (survives container restarts)
-let currentData: BonesClubData = loadPersistedData();
+// In-memory multi-club database cache
+const clubDataCache = new Map<string, BonesClubData>();
+
+export function getClubDataState(clubId: string = 'bones'): BonesClubData {
+  const cleanId = (clubId || 'bones').toLowerCase().trim();
+  if (!clubDataCache.has(cleanId)) {
+    const data = loadPersistedData(cleanId);
+    clubDataCache.set(cleanId, data);
+  }
+  return clubDataCache.get(cleanId)!;
+}
+
+// Global active reference (defaulting to Bønes IL)
+let currentData: BonesClubData = getClubDataState('bones');
 const authSquadPlayerMap = new Map(ALL_BONES_PLAYERS.map(p => [p.name.trim().toLowerCase(), p]));
 
-// Function to authoritatively enrich squad players with official NFF statistics and match events
-function enrichClubPlayersWithStats(players: Player[], matches: Match[]): Player[] {
+// Function to authoritatively derive player statistics from match events and lineups (Core Rules 4 & 5)
+// Rule 5: official NFF stats are retained strictly as reference data, never mixed into or overwriting internal event stats
+function enrichClubPlayersWithStats(players: Player[], matches: Match[], clubId: string = 'bones'): Player[] {
   const cachedOfficial = getAllCachedPlayerStats();
   const playerMap = new Map<string, Player>();
 
   for (const p of players) {
-    let matchesCount = p.matches || 0;
-    let goalsCount = p.goals || 0;
-    let yellowCount = p.yellowCards || 0;
-    let redCount = p.redCards || 0;
-
     const fiksId = p.fiksId || (p.id?.startsWith('fiks-') ? parseInt(p.id.replace('fiks-', ''), 10) : undefined);
     const official = fiksId ? cachedOfficial[String(fiksId)] : undefined;
+    const canonId = toCanonicalPlayerId(fiksId || p.id, p.name);
 
-    if (official && official.season2026) {
-      const teamStat = official.season2026.teams?.find(t => t.teamId === p.teamId);
-      if (teamStat) {
-        matchesCount = Math.max(matchesCount, teamStat.matches);
-        goalsCount = Math.max(goalsCount, teamStat.goals);
-        yellowCount = Math.max(yellowCount, teamStat.yellowCards);
-        redCount = Math.max(redCount, teamStat.redCards);
-      } else if (official.season2026.teams?.length === 1) {
-        const onlyTeam = official.season2026.teams[0];
-        matchesCount = Math.max(matchesCount, onlyTeam.matches);
-        goalsCount = Math.max(goalsCount, onlyTeam.goals);
-        yellowCount = Math.max(yellowCount, onlyTeam.yellowCards);
-        redCount = Math.max(redCount, onlyTeam.redCards);
-      }
-    }
-
-    const key = `${p.fiksId || p.id || p.name}_${p.teamId}`;
+    const key = `${canonId}_${p.teamId || ''}`;
     playerMap.set(key, {
       ...p,
-      matches: matchesCount,
-      goals: goalsCount,
-      yellowCards: yellowCount,
-      redCards: redCount,
+      id: canonId,
+      personId: canonId,
+      clubId: p.clubId || clubId,
+      fiksId,
+      matches: 0,
+      goals: 0,
+      yellowCards: 0,
+      redCards: 0,
+      officialNffStats: official,
     });
   }
 
-  // Scan finished & live matches for newly finished matches
-  const processedMatches = new Set<string>();
+  // Scan finished & live matches for player participation and match events
   for (const m of matches || []) {
-    if (m.status !== 'finished' && (m.status as string) !== 'live') continue;
-
-    const matchFiksId = m.fiksId || (m.id ? parseInt(m.id.replace('nff-', ''), 10) : undefined);
     const matchLineup = [
       ...(m.lineup?.starters || []),
       ...(m.lineup?.bench || []),
       ...(m.lineup?.subs || []),
       ...(m.homeLineup?.starters || []),
       ...(m.homeLineup?.bench || []),
-      ...(m.homeLineup?.subs || []),
       ...(m.awayLineup?.starters || []),
       ...(m.awayLineup?.bench || []),
-      ...(m.awayLineup?.subs || []),
     ];
-    const potmCandidates = m.playerOfTheMatch?.candidates || [];
-    const bonesEvents = (m.events || []).filter(e => {
-      const pName = (e.player || '').trim();
-      return pName && !pName.toLowerCase().includes('personinfo');
-    });
 
-    for (const [, p] of playerMap.entries()) {
-      if (p.teamId !== m.teamId) continue;
-      const pmKey = `${p.id || p.name}_${m.id}`;
-      if (processedMatches.has(pmKey)) continue;
-
-      const inLineup = matchLineup.some(lp =>
-        (p.fiksId && lp.fiksId === p.fiksId) ||
-        (lp.name && lp.name.trim().toLowerCase() === p.name.trim().toLowerCase())
-      );
-      const inPotm = potmCandidates.some(c =>
-        (p.fiksId && c.fiksId === p.fiksId) ||
-        (c.playerName && c.playerName.trim().toLowerCase() === p.name.trim().toLowerCase())
-      );
-      const inEvents = bonesEvents.some(e =>
-        (p.fiksId && e.fiksId === p.fiksId) ||
-        (e.player && e.player.trim().toLowerCase() === p.name.trim().toLowerCase())
-      );
-
-      if (inLineup || inPotm || inEvents) {
-        processedMatches.add(pmKey);
-        const official = p.fiksId ? cachedOfficial[String(p.fiksId)] : undefined;
-        let isOfficialBaselineMatch = false;
-        if (official && official.season2026) {
-          const hasOfficialMatchList = Array.isArray(official.matches2026) && official.matches2026.length > 0;
-          if (hasOfficialMatchList) {
-            isOfficialBaselineMatch = Boolean(
-              matchFiksId &&
-              official.matches2026!.some(om => om.matchFiksId === matchFiksId)
-            );
-          } else {
-            const cutoff = official.lastUpdated ? official.lastUpdated.slice(0, 10) : '2026-09-20';
-            isOfficialBaselineMatch = m.date <= cutoff;
-          }
-        }
-
-        if (!isOfficialBaselineMatch) {
+    for (const lp of matchLineup) {
+      const numFiks = extractNumericFiksId(lp.fiksId) || extractNumericFiksId(lp.id);
+      const cId = toCanonicalPlayerId(numFiks ? `fiks-${numFiks}` : lp.id, lp.name);
+      for (const [, p] of playerMap.entries()) {
+        if (p.id === cId && (!p.teamId || p.teamId === m.teamId)) {
           p.matches += 1;
-          const playerEvents = bonesEvents.filter(e =>
-            (p.fiksId && e.fiksId === p.fiksId) ||
-            (e.player && e.player.trim().toLowerCase() === p.name.trim().toLowerCase())
-          );
-          p.goals += playerEvents.filter(e => e.type === 'goal').length;
-          p.yellowCards += playerEvents.filter(e => e.type === 'yellow_card').length;
-          p.redCards += playerEvents.filter(e => e.type === 'red_card').length;
+        }
+      }
+    }
+
+    for (const ev of m.events || []) {
+      if (ev.ambiguous) continue; // Ambiguity Guardrail: Never guess
+      const evFiks = extractNumericFiksId(ev.fiksId) || extractNumericFiksId(ev.playerId);
+      const cId = toCanonicalPlayerId(evFiks ? `fiks-${evFiks}` : ev.playerId, ev.player);
+      if (!cId) continue;
+
+      const isOwnGoal = (ev as any).goalType === 'own_goal' ||
+        (ev.description || '').toLowerCase().includes('selvmål') ||
+        (ev.description || '').toLowerCase().includes('(sm)');
+
+      for (const [, p] of playerMap.entries()) {
+        if (p.id === cId && (!p.teamId || p.teamId === m.teamId)) {
+          if (ev.type === 'goal' && !isOwnGoal) p.goals += 1;
+          else if (ev.type === 'yellow_card') p.yellowCards += 1;
+          else if (ev.type === 'red_card') p.redCards += 1;
         }
       }
     }
@@ -142,7 +111,7 @@ function enrichClubPlayersWithStats(players: Player[], matches: Match[]): Player
   return Array.from(playerMap.values());
 }
 
-currentData.players = enrichClubPlayersWithStats(ALL_BONES_PLAYERS, currentData.matches);
+currentData.players = enrichClubPlayersWithStats(ALL_BONES_PLAYERS, currentData.matches, 'bones');
 
 for (const m of currentData.matches) {
   if (m.id === 'nff-9183579') {
@@ -151,7 +120,7 @@ for (const m of currentData.matches) {
     if (m.awayScore === undefined || m.awayScore === null) m.awayScore = 1;
   }
   if (m.events && m.events.length > 0 && m.events.some(e => e.type === 'goal')) {
-    const derived = calculateMatchScore(m.events, m.homeScore, m.awayScore, m.homeTeam, m.awayTeam);
+    const derived = calculateMatchScore(m.events, m.homeScore, m.awayScore, m.homeTeam, m.awayTeam, getClubConfig('bones'));
     m.homeScore = derived.homeScore;
     m.awayScore = derived.awayScore;
   }
@@ -187,7 +156,17 @@ for (const m of currentData.matches) {
     m.playerOfTheMatch = calculateMatchPOTM(m);
   }
 }
-savePersistedData(currentData);
+
+currentData.persons = buildPersonsFromPlayersAndEvents(currentData.players, currentData.matches, 'bones');
+savePersistedData(currentData, 'bones');
+
+// Helper to resolve club ID from request query, params or header
+function resolveClubId(req: express.Request): string {
+  const queryClub = typeof req.query.clubId === 'string' ? req.query.clubId : (typeof req.query.club === 'string' ? req.query.club : undefined);
+  const paramClub = req.params.clubId || req.params.club;
+  const headerClub = req.headers['x-club-id'] as string | undefined;
+  return (queryClub || paramClub || headerClub || 'bones').toLowerCase().trim();
+}
 
 // Function to check if we are currently inside an active match window
 function checkMatchWindow(): { isActive: boolean; activeMatches: Match[]; details: string } {
@@ -543,33 +522,75 @@ setInterval(async () => {
 // API ROUTES
 
 // 1. Full data retrieval
-app.get(['/api/bones/data', '/api/bones/data/'], (req, res) => {
+// 0. Club Registry & Configuration Endpoints
+app.get('/api/clubs', (req, res) => {
+  res.json({
+    success: true,
+    clubs: listClubConfigs(),
+  });
+});
+
+app.get(['/api/club', '/api/club/:clubId'], (req, res) => {
+  const clubId = resolveClubId(req);
+  const config = getClubConfig(clubId);
+  res.json({
+    success: true,
+    club: config,
+  });
+});
+
+app.post('/api/register-club', (req, res) => {
+  const config = req.body as ClubConfig;
+  if (!config || !config.id || !config.name || !config.fiksClubId) {
+    return res.status(400).json({ success: false, error: 'Ugyldig ClubConfig: id, name og fiksClubId er påkrevd.' });
+  }
+  registerClubConfig(config);
+  const clubData = getClubDataState(config.id);
+  res.json({
+    success: true,
+    message: `Klubb ${config.name} (${config.id}) er nå registrert i plattformen!`,
+    club: config,
+    totalTeams: clubData.teams.length,
+  });
+});
+
+// 1. Full data retrieval (generic with ?clubId=..., with alias /api/bones/data)
+app.get(['/api/data', '/api/data/', '/api/bones/data', '/api/bones/data/'], (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  if (currentData.matches && currentData.matches.length > 0) {
-    rebuildScorersAndCardsFromEvents(currentData.matches);
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
+  if (data.matches && data.matches.length > 0) {
+    const config = getClubConfig(clubId);
+    data.topScorers = calculateTopScorers(data.matches, data.players, { clubConfig: config, clubOnly: true });
+    data.cards = calculateCardStatistics(data.matches, data.players, { clubConfig: config, clubOnly: true });
   }
-  res.json(currentData);
+  res.json(data);
 });
 
 // 1a. Lightweight version check endpoint for adaptive polling
-app.get(['/api/bones/data/check', '/api/bones/data/check/'], (req, res) => {
+app.get(['/api/data/check', '/api/data/check/', '/api/bones/data/check', '/api/bones/data/check/'], (req, res) => {
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
   const windowInfo = checkMatchWindow();
   res.json({
     success: true,
-    dataVersion: currentData.dataVersion || 1,
+    clubId,
+    dataVersion: data.dataVersion || 1,
     activeMatchWindow: windowInfo.isActive,
-    hasLiveMatches: currentData.matches.some(m => m.status === 'live'),
-    lastScanned: currentData.scanner.lastScanned,
-    lastRealScraped: currentData.lastRealScraped
+    hasLiveMatches: data.matches.some(m => m.status === 'live'),
+    lastScanned: data.scanner.lastScanned,
+    lastRealScraped: data.lastRealScraped
   });
 });
 
 // 1b. Dedicated filtered matches endpoint
-app.get('/api/bones/matches', (req, res) => {
+app.get(['/api/matches', '/api/bones/matches'], (req, res) => {
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
   const { status, category, teamId, date, limit } = req.query;
-  const filtered = queryMatches(currentData, {
+  const filtered = queryMatches(data, {
     status: (status as any) || 'all',
     category: typeof category === 'string' ? category : undefined,
     teamId: typeof teamId === 'string' ? teamId : undefined,
@@ -579,15 +600,18 @@ app.get('/api/bones/matches', (req, res) => {
 
   res.json({
     success: true,
+    clubId,
     count: filtered.length,
     matches: filtered
   });
 });
 
 // 1c. Matches today endpoint (sorted Live > Upcoming > Finished)
-app.get('/api/bones/matches/today', (req, res) => {
+app.get(['/api/matches/today', '/api/bones/matches/today'], (req, res) => {
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
   const todayStr = new Date().toISOString().split('T')[0];
-  const matchesToday = currentData.matches.filter(m => m.date === todayStr);
+  const matchesToday = data.matches.filter(m => m.date === todayStr);
 
   // Sort order: live (0) > upcoming (1) > finished (2), then by time
   const statusPriority: Record<string, number> = { live: 0, upcoming: 1, finished: 2 };
@@ -600,6 +624,7 @@ app.get('/api/bones/matches/today', (req, res) => {
 
   res.json({
     success: true,
+    clubId,
     date: todayStr,
     count: matchesToday.length,
     matches: matchesToday
@@ -607,24 +632,41 @@ app.get('/api/bones/matches/today', (req, res) => {
 });
 
 // 1d. Live matches endpoint
-app.get('/api/bones/matches/live', (req, res) => {
-  const liveMatches = currentData.matches.filter(m => m.status === 'live');
+app.get(['/api/matches/live', '/api/bones/matches/live'], (req, res) => {
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
+  const liveMatches = data.matches.filter(m => m.status === 'live');
   res.json({
     success: true,
+    clubId,
     count: liveMatches.length,
     matches: liveMatches
   });
 });
 
 // 1e. Single match details endpoint
-app.get('/api/bones/match/:id', (req, res) => {
-  const match = currentData.matches.find(m => m.id === req.params.id);
+app.get(['/api/match/:id', '/api/bones/match/:id'], (req, res) => {
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
+  const match = data.matches.find(m => m.id === req.params.id);
   if (!match) {
     return res.status(404).json({ success: false, error: 'Kamp ble ikke funnet' });
   }
   res.json({
     success: true,
     match
+  });
+});
+
+// 1e-1. Teams endpoint
+app.get(['/api/teams', '/api/bones/teams'], (req, res) => {
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
+  res.json({
+    success: true,
+    clubId,
+    count: data.teams.length,
+    teams: data.teams
   });
 });
 
@@ -774,48 +816,103 @@ app.get('/api/weather', async (req, res) => {
 });
 
 // 1f. Squads and player rosters endpoints
-app.get('/api/bones/squads', (req, res) => {
-  const enrichedSquads = ALL_BONES_SQUADS.map((sq) => ({
-    ...sq,
-    players: enrichPlayersWithMostPlayedPosition(sq.players, currentData.matches || []),
+app.get(['/api/squads', '/api/bones/squads'], (req, res) => {
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
+  if (clubId === 'bones') {
+    const enrichedSquads = ALL_BONES_SQUADS.map((sq) => ({
+      ...sq,
+      players: enrichPlayersWithMostPlayedPosition(sq.players, data.matches || []),
+    }));
+    return res.json({
+      success: true,
+      clubId,
+      count: enrichedSquads.length,
+      squads: enrichedSquads
+    });
+  }
+
+  const squads = data.teams.map((t) => ({
+    teamId: t.id,
+    teamName: t.name,
+    category: t.category,
+    division: t.division,
+    players: data.players?.filter(p => p.teamId === t.id) || []
   }));
 
   res.json({
     success: true,
-    count: enrichedSquads.length,
-    squads: enrichedSquads
+    clubId,
+    count: squads.length,
+    squads
   });
 });
 
-app.get('/api/bones/squads/:teamId', (req, res) => {
-  const squad = getSquadForTeam(req.params.teamId);
-  if (!squad) {
+app.get(['/api/squads/:teamId', '/api/bones/squads/:teamId'], (req, res) => {
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
+  const teamId = req.params.teamId;
+
+  if (clubId === 'bones') {
+    const squad = getSquadForTeam(teamId);
+    if (!squad) {
+      return res.status(404).json({ success: false, error: 'Lag ble ikke funnet' });
+    }
+    const enrichedSquad = {
+      ...squad,
+      players: enrichPlayersWithMostPlayedPosition(squad.players, data.matches || []),
+    };
+    return res.json({
+      success: true,
+      clubId,
+      squad: enrichedSquad
+    });
+  }
+
+  const team = data.teams.find(t => t.id === teamId);
+  if (!team) {
     return res.status(404).json({ success: false, error: 'Lag ble ikke funnet' });
   }
 
-  const enrichedSquad = {
-    ...squad,
-    players: enrichPlayersWithMostPlayedPosition(squad.players, currentData.matches || []),
-  };
-
+  const players = data.players?.filter(p => p.teamId === teamId) || [];
   res.json({
     success: true,
-    squad: enrichedSquad
+    clubId,
+    squad: {
+      teamId: team.id,
+      teamName: team.name,
+      category: team.category,
+      division: team.division,
+      players
+    }
   });
 });
 
-app.post('/api/bones/squads/sync', async (req, res) => {
+app.post(['/api/squads/sync', '/api/bones/squads/sync'], async (req, res) => {
   try {
-    const { fetchNffSquads } = await import('./server/scrapeNffSquads.js');
-    const updatedSquads = await fetchNffSquads();
-    currentData.players = updatedSquads.flatMap(s => s.players);
-    savePersistedData(currentData);
+    const clubId = resolveClubId(req);
+    const data = getClubDataState(clubId);
+    if (clubId === 'bones') {
+      const { fetchNffSquads } = await import('./server/scrapeNffSquads.js');
+      const updatedSquads = await fetchNffSquads();
+      data.players = updatedSquads.flatMap(s => s.players);
+      data.persons = buildPersonsFromPlayersAndEvents(data.players, data.matches, 'bones');
+      savePersistedData(data, 'bones');
+      return res.json({
+        success: true,
+        clubId,
+        message: `Synkroniserte ${updatedSquads.length} lag og ${data.players.length} ekte spillere direkte fra NFF fotball.no`,
+        count: updatedSquads.length,
+        playerCount: data.players.length,
+        squads: updatedSquads
+      });
+    }
+
     res.json({
       success: true,
-      message: `Synkroniserte ${updatedSquads.length} lag og ${currentData.players.length} ekte spillere direkte fra NFF fotball.no`,
-      count: updatedSquads.length,
-      playerCount: currentData.players.length,
-      squads: updatedSquads
+      clubId,
+      message: `Tropper for ${clubId} er oppdatert.`,
+      playerCount: data.players?.length || 0
     });
   } catch (err: any) {
     console.error('Error in squads sync endpoint:', err);
@@ -823,41 +920,60 @@ app.post('/api/bones/squads/sync', async (req, res) => {
   }
 });
 
-app.get('/api/bones/players', (req, res) => {
+app.get(['/api/players', '/api/bones/players'], (req, res) => {
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
   const { teamId, position, search } = req.query;
-  let players = currentData.players || ALL_BONES_PLAYERS;
+  let players = data.players || (clubId === 'bones' ? ALL_BONES_PLAYERS : []);
   if (typeof teamId === 'string' && teamId !== 'all') {
     players = players.filter(p => p.teamId === teamId);
   }
   if (typeof position === 'string' && position !== 'all') {
-    players = players.filter(p => p.position.toLowerCase() === (position as string).toLowerCase());
+    players = players.filter(p => p.position && p.position.toLowerCase() === (position as string).toLowerCase());
   }
   if (typeof search === 'string' && search.trim()) {
     const q = search.toLowerCase();
-    players = players.filter(p => p.name.toLowerCase().includes(q) || p.teamName.toLowerCase().includes(q));
+    players = players.filter(p => p.name.toLowerCase().includes(q) || (p.teamName && p.teamName.toLowerCase().includes(q)));
   }
   res.json({
     success: true,
+    clubId,
     count: players.length,
     players
   });
 });
 
-app.get('/api/bones/players/:idOrName', (req, res) => {
+app.get(['/api/players/:idOrName', '/api/bones/players/:idOrName'], (req, res) => {
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
   const param = decodeURIComponent(req.params.idOrName).toLowerCase();
-  const players = currentData.players || ALL_BONES_PLAYERS;
+  const players = data.players || (clubId === 'bones' ? ALL_BONES_PLAYERS : []);
   const player = players.find(p => p.id.toLowerCase() === param || p.name.toLowerCase() === param);
   if (!player) {
     return res.status(404).json({ success: false, error: 'Spiller ble ikke funnet' });
   }
   res.json({
     success: true,
+    clubId,
     player
   });
 });
 
+// Canonical Persons endpoint (Core Rule 2: Person vs Player)
+app.get(['/api/persons', '/api/bones/persons'], (req, res) => {
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
+  const persons = data.persons || buildPersonsFromPlayersAndEvents(data.players || [], data.matches || [], clubId);
+  res.json({
+    success: true,
+    clubId,
+    count: persons.length,
+    persons
+  });
+});
+
 // 1g. Official NFF Player Stats (Multi-team breakdown, career totals, verified fotball.no data)
-app.get('/api/bones/players/nff-stats', (req, res) => {
+app.get(['/api/players/nff-stats', '/api/bones/players/nff-stats'], (req, res) => {
   const allStats = getAllCachedPlayerStats();
   res.json({
     success: true,
@@ -866,7 +982,7 @@ app.get('/api/bones/players/nff-stats', (req, res) => {
   });
 });
 
-app.get('/api/bones/player/:fiksId/nff-stats', async (req, res) => {
+app.get(['/api/player/:fiksId/nff-stats', '/api/bones/player/:fiksId/nff-stats'], async (req, res) => {
   const fiksId = parseInt(req.params.fiksId, 10);
   if (isNaN(fiksId)) {
     return res.status(400).json({ success: false, error: 'Ugyldig FIKS ID' });
@@ -882,7 +998,7 @@ app.get('/api/bones/player/:fiksId/nff-stats', async (req, res) => {
   });
 });
 
-app.post('/api/bones/player/:fiksId/nff-stats/refresh', async (req, res) => {
+app.post(['/api/player/:fiksId/nff-stats/refresh', '/api/bones/player/:fiksId/nff-stats/refresh'], async (req, res) => {
   const fiksId = parseInt(req.params.fiksId, 10);
   if (isNaN(fiksId)) {
     return res.status(400).json({ success: false, error: 'Ugyldig FIKS ID' });
@@ -898,10 +1014,13 @@ app.post('/api/bones/player/:fiksId/nff-stats/refresh', async (req, res) => {
   });
 });
 
-app.post('/api/bones/players/nff-stats/sync', async (req, res) => {
-  const fiksIds = [...new Set((currentData.players || ALL_BONES_PLAYERS).map(p => p.fiksId).filter(Boolean))] as number[];
+app.post(['/api/players/nff-stats/sync', '/api/bones/players/nff-stats/sync'], async (req, res) => {
+  const clubId = resolveClubId(req);
+  const data = getClubDataState(clubId);
+  const fiksIds = [...new Set((data.players || ALL_BONES_PLAYERS).map(p => p.fiksId).filter(Boolean))] as number[];
   res.json({
     success: true,
+    clubId,
     message: `Startet bakgrunnssynkronisering av offisiell NFF-statistikk for ${fiksIds.length} spillere`,
     total: fiksIds.length
   });
@@ -911,12 +1030,15 @@ app.post('/api/bones/players/nff-stats/sync', async (req, res) => {
 });
 
 // 1h. Player Identity Architecture Diagnostics (Strict read-only analysis)
-app.get('/api/bones/identity/diagnostics', (req, res) => {
+app.get(['/api/identity/diagnostics', '/api/bones/identity/diagnostics'], (req, res) => {
   try {
+    const clubId = resolveClubId(req);
+    const data = getClubDataState(clubId);
     const cachedOfficial = getAllCachedPlayerStats();
-    const diagnostics = runPlayerIdentityDiagnostics(currentData, [], cachedOfficial);
+    const diagnostics = runPlayerIdentityDiagnostics(data, [], cachedOfficial);
     res.json({
       success: true,
+      clubId,
       timestamp: new Date().toISOString(),
       diagnostics
     });
@@ -925,7 +1047,7 @@ app.get('/api/bones/identity/diagnostics', (req, res) => {
   }
 });
 
-app.get('/api/bones/matches/:id/lineup', async (req, res) => {
+app.get(['/api/matches/:id/lineup', '/api/bones/matches/:id/lineup'], async (req, res) => {
   const match = currentData.matches.find(m => m.id === req.params.id || m.id === `nff-${req.params.id}`);
   if (!match) {
     return res.status(404).json({ success: false, error: 'Kamp ble ikke funnet' });
@@ -960,7 +1082,7 @@ app.get('/api/bones/matches/:id/lineup', async (req, res) => {
 });
 
 // Dedicated endpoint to sync official kamptropper from fotball.no for a match
-app.post('/api/bones/match/:matchId/sync-lineup', async (req, res) => {
+app.post(['/api/match/:matchId/sync-lineup', '/api/bones/match/:matchId/sync-lineup'], async (req, res) => {
   const { matchId } = req.params;
   const match = currentData.matches.find(m => m.id === matchId || m.id === `nff-${matchId}`);
   if (!match) {
@@ -1119,7 +1241,7 @@ app.post(['/api/bones/match/:matchId/report', '/api/lagleder/report'], async (re
 });
 
 // 4b. Banens Beste (Player of the Match) voting and jury rating endpoint
-app.post('/api/bones/match/:matchId/vote-potm', (req, res) => {
+app.post(['/api/match/:matchId/vote-potm', '/api/bones/match/:matchId/vote-potm'], (req, res) => {
   const { matchId } = req.params;
   const { playerName, team, juryPlayer, juryNotes } = req.body;
 
@@ -1162,7 +1284,7 @@ app.post('/api/bones/match/:matchId/vote-potm', (req, res) => {
 
 
 // 5. Trigger scraping of events for a specific match from NFF
-app.post('/api/bones/match/:matchId/events', async (req, res) => {
+app.post(['/api/match/:matchId/events', '/api/bones/match/:matchId/events'], async (req, res) => {
   const { matchId } = req.params;
   const match = currentData.matches.find(m => m.id === matchId);
   if (!match) {
@@ -1199,7 +1321,7 @@ app.post('/api/bones/match/:matchId/events', async (req, res) => {
 });
 
 // 5b. Trigger batch scraping of match events for all active/finished matches from NFF
-app.post('/api/bones/matches/scrape-all-events', async (req, res) => {
+app.post(['/api/matches/scrape-all-events', '/api/bones/matches/scrape-all-events'], async (req, res) => {
   try {
     addScanLog('info', 'NFF Skanner', 'Starter hendelsesskanning for alle kamper fra fotball.no...');
 
@@ -1287,24 +1409,34 @@ app.post('/api/bones/sync-real-players', (req, res) => {
   }
 });
 
-// 6. Trigger on-demand real scrape from fotball.no and bonesil.no
-app.post('/api/bones/scrape-real', async (req, res) => {
-  console.log('[API] Manual real scrape requested by user...');
-  await syncRealData();
-  res.json({
-    success: true,
-    message: 'Fersk scraping fra NFF fotball.no (16 lag) og bonesil.no fullført og lagret!',
-    data: currentData
-  });
-});
+// 6. Trigger on-demand real scrape from fotball.no and club website
+app.post(['/api/scan', '/api/scrape', '/api/bones/scrape-real', '/api/bones/scan'], async (req, res) => {
+  const clubId = resolveClubId(req);
+  console.log(`[API] Manual scrape requested for club: ${clubId}...`);
+  if (clubId === 'bones') {
+    await syncRealData();
+    return res.json({
+      success: true,
+      clubId,
+      message: 'Fersk scraping fra NFF fotball.no (16 lag) og bonesil.no fullført og lagret!',
+      data: currentData
+    });
+  }
 
-// 7. Trigger manual live scan
-app.post('/api/bones/scan', async (req, res) => {
-  await runScannerCycle(true);
+  const config = getClubConfig(clubId);
+  const scraped = await scrapeClub(config);
+  const data = getClubDataState(clubId);
+  data.tables = scraped.tables;
+  data.matches = scraped.matches;
+  data.lastRealScraped = new Date().toLocaleString('no-NO');
+  data.isRealData = true;
+  data.persons = buildPersonsFromPlayersAndEvents(data.players || [], data.matches || [], clubId);
+  savePersistedData(data, clubId);
   res.json({
     success: true,
-    message: 'Skanning fullført! Oppdaterte data fra NFF ble kontrollert.',
-    data: currentData
+    clubId,
+    message: `Fersk scraping for ${config.name} fullført og lagret!`,
+    data
   });
 });
 

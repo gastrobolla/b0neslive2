@@ -6,6 +6,7 @@ import {
   resolvePlayerIdentity,
   sanitizePlayerNameSlug,
 } from './playerResolver.js';
+import { ClubConfig, getClubConfig, isClubTeam } from '../config/clubConfig.js';
 
 /**
  * Normalizes an arbitrary text string to a safe, URL-friendly slug.
@@ -102,7 +103,8 @@ export function calculateMatchScore(
   fallbackHome?: number | null,
   fallbackAway?: number | null,
   homeTeamName?: string,
-  awayTeamName?: string
+  awayTeamName?: string,
+  clubConfig?: ClubConfig
 ): { homeScore: number; awayScore: number } {
   if (!events || events.length === 0) {
     return {
@@ -124,6 +126,7 @@ export function calculateMatchScore(
 
   const hSlug = homeTeamName ? sanitizeSlug(homeTeamName) : '';
   const aSlug = awayTeamName ? sanitizeSlug(awayTeamName) : '';
+  const activeClub = clubConfig || getClubConfig();
 
   for (const ev of goalEvents) {
     const isOwnGoal = isOwnGoalEvent(ev);
@@ -137,17 +140,17 @@ export function calculateMatchScore(
     } else if (aSlug && (evTeamSlug === aSlug || evTeamSlug.includes(aSlug) || aSlug.includes(evTeamSlug))) {
       isHomeAttributed = false;
     } else {
-      // Fallback heuristics: check if ev.team contains 'bønes' or opponent clues
-      const isBonesEv = evTeamSlug.includes('bones') || (ev.team && ev.team.toLowerCase().includes('bønes'));
-      const isHomeBones = hSlug.includes('bones') || (homeTeamName && homeTeamName.toLowerCase().includes('bønes'));
+      // Fallback heuristics: check if ev.team belongs to active club or opponent
+      const isClubEv = isClubTeam(ev.team, activeClub) || evTeamSlug.includes(activeClub.shortName.toLowerCase());
+      const isHomeClub = isClubTeam(homeTeamName, activeClub) || hSlug.includes(activeClub.shortName.toLowerCase());
 
-      if (isBonesEv && isHomeBones) {
+      if (isClubEv && isHomeClub) {
         isHomeAttributed = true;
-      } else if (isBonesEv && !isHomeBones) {
+      } else if (isClubEv && !isHomeClub) {
         isHomeAttributed = false;
-      } else if (!isBonesEv && isHomeBones) {
+      } else if (!isClubEv && isHomeClub) {
         isHomeAttributed = false;
-      } else if (!isBonesEv && !isHomeBones) {
+      } else if (!isClubEv && !isHomeClub) {
         isHomeAttributed = true;
       } else {
         isHomeAttributed = true;
@@ -184,11 +187,15 @@ export function calculateTopScorers(
     season?: 'all' | 'Vår' | 'Høst';
     teamId?: string;
     bonesOnly?: boolean;
+    clubOnly?: boolean;
+    clubConfig?: ClubConfig;
+    clubId?: string;
   }
 ): TopScorer[] {
   const seasonFilter = options?.season || 'all';
   const teamFilter = options?.teamId || 'all';
-  const bonesOnly = options?.bonesOnly !== false; // default true
+  const activeClub = options?.clubConfig || getClubConfig(options?.clubId);
+  const onlyClub = options?.clubOnly !== undefined ? options.clubOnly : (options?.bonesOnly !== false); // default true
 
   // Fast player lookup by FIKS ID and by name
   const playerByFiks = new Map<number, Player>();
@@ -214,6 +221,7 @@ export function calculateTopScorers(
       penalties: number;
       matchesSet: Set<string>;
       isBonesPlayer: boolean;
+      isClubPlayer: boolean;
     }
   >();
 
@@ -241,19 +249,19 @@ export function calculateTopScorers(
         continue;
       }
 
-      // Check Bønes player condition
-      const isBonesMatch =
-        match.teamName.toLowerCase().includes('bønes') ||
-        match.homeTeam.toLowerCase().includes('bønes') ||
-        match.awayTeam.toLowerCase().includes('bønes');
+      // Check club player condition using dynamic ClubConfig
+      const isClubMatch =
+        isClubTeam(match.teamName, activeClub) ||
+        isClubTeam(match.homeTeam, activeClub) ||
+        isClubTeam(match.awayTeam, activeClub);
 
-      const isBonesEvent =
-        (ev.team && ev.team.toLowerCase().includes('bønes')) ||
-        (match.homeTeam.toLowerCase().includes('bønes') && ev.team === match.homeTeam) ||
-        (match.awayTeam.toLowerCase().includes('bønes') && ev.team === match.awayTeam) ||
-        (!ev.team && isBonesMatch);
+      const isClubEvent =
+        (ev.team && isClubTeam(ev.team, activeClub)) ||
+        (isClubTeam(match.homeTeam, activeClub) && ev.team === match.homeTeam) ||
+        (isClubTeam(match.awayTeam, activeClub) && ev.team === match.awayTeam) ||
+        (!ev.team && isClubMatch);
 
-      if (bonesOnly && !isBonesEvent) continue;
+      if (onlyClub && !isClubEvent) continue;
 
       // Ambiguity Guardrail: Skip ambiguous events so goals are never misattributed
       if (ev.ambiguous) continue;
@@ -275,6 +283,7 @@ export function calculateTopScorers(
           lineupPlayers: lineupList,
           squadPlayers: players,
           allClubPlayers: players,
+          clubConfig: activeClub,
         }
       );
 
@@ -294,11 +303,12 @@ export function calculateTopScorers(
           id: canonicalId,
           name: res.displayName || playerName,
           teamId: match.teamId || 'menn-1',
-          teamName: match.teamName || 'Bønes IL',
+          teamName: match.teamName || activeClub.name,
           goals: 0,
           penalties: 0,
           matchesSet: new Set<string>(),
-          isBonesPlayer: isBonesEvent,
+          isBonesPlayer: isClubEvent,
+          isClubPlayer: isClubEvent,
         };
         scorersMap.set(identityKey, entry);
       }
@@ -324,6 +334,7 @@ export function calculateTopScorers(
       penalties: s.penalties,
       goalsPerMatch,
       isBonesPlayer: s.isBonesPlayer,
+      isClubPlayer: s.isClubPlayer,
     };
   });
 
@@ -341,11 +352,15 @@ export function calculateCardStatistics(
     season?: 'all' | 'Vår' | 'Høst';
     teamId?: string;
     bonesOnly?: boolean;
+    clubOnly?: boolean;
+    clubConfig?: ClubConfig;
+    clubId?: string;
   }
 ): CardStatistic[] {
   const seasonFilter = options?.season || 'all';
   const teamFilter = options?.teamId || 'all';
-  const bonesOnly = options?.bonesOnly !== false;
+  const activeClub = options?.clubConfig || getClubConfig(options?.clubId);
+  const onlyClub = options?.clubOnly !== undefined ? options.clubOnly : (options?.bonesOnly !== false);
 
   const playerByName = new Map<string, Player>();
   if (players) {
@@ -367,6 +382,7 @@ export function calculateCardStatistics(
       redCards: number;
       matchesSet: Set<string>;
       isBonesPlayer: boolean;
+      isClubPlayer: boolean;
     }
   >();
 
@@ -390,18 +406,18 @@ export function calculateCardStatistics(
         continue;
       }
 
-      const isBonesMatch =
-        match.teamName.toLowerCase().includes('bønes') ||
-        match.homeTeam.toLowerCase().includes('bønes') ||
-        match.awayTeam.toLowerCase().includes('bønes');
+      const isClubMatch =
+        isClubTeam(match.teamName, activeClub) ||
+        isClubTeam(match.homeTeam, activeClub) ||
+        isClubTeam(match.awayTeam, activeClub);
 
-      const isBonesEvent =
-        (ev.team && ev.team.toLowerCase().includes('bønes')) ||
-        (match.homeTeam.toLowerCase().includes('bønes') && ev.team === match.homeTeam) ||
-        (match.awayTeam.toLowerCase().includes('bønes') && ev.team === match.awayTeam) ||
-        (!ev.team && isBonesMatch);
+      const isClubEvent =
+        (ev.team && isClubTeam(ev.team, activeClub)) ||
+        (isClubTeam(match.homeTeam, activeClub) && ev.team === match.homeTeam) ||
+        (isClubTeam(match.awayTeam, activeClub) && ev.team === match.awayTeam) ||
+        (!ev.team && isClubMatch);
 
-      if (bonesOnly && !isBonesEvent) continue;
+      if (onlyClub && !isClubEvent) continue;
 
       // Ambiguity Guardrail: Skip ambiguous events so cards are never misattributed
       if (ev.ambiguous) continue;
@@ -423,6 +439,7 @@ export function calculateCardStatistics(
           lineupPlayers: lineupList,
           squadPlayers: players,
           allClubPlayers: players,
+          clubConfig: activeClub,
         }
       );
 
@@ -441,11 +458,12 @@ export function calculateCardStatistics(
           id: canonicalId,
           name: res.displayName || playerName,
           teamId: match.teamId || 'menn-1',
-          teamName: match.teamName || 'Bønes IL',
+          teamName: match.teamName || activeClub.name,
           yellowCards: 0,
           redCards: 0,
           matchesSet: new Set<string>(),
-          isBonesPlayer: isBonesEvent,
+          isBonesPlayer: isClubEvent,
+          isClubPlayer: isClubEvent,
         };
         cardsMap.set(identityKey, entry);
       }
@@ -482,6 +500,7 @@ export function calculateCardStatistics(
       status,
       matches: matchesCount,
       isBonesPlayer: c.isBonesPlayer,
+      isClubPlayer: c.isClubPlayer,
     };
   });
 

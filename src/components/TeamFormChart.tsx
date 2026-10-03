@@ -1,18 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  ComposedChart,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  ReferenceLine,
-  Cell
-} from 'recharts';
 import * as d3 from 'd3';
 import { TeamInfo, Match } from '../types.js';
 import {
@@ -65,6 +51,7 @@ export const TeamFormChart: React.FC<TeamFormChartProps> = ({
 }) => {
   const [chartType, setChartType] = useState<'points' | 'goals'>('points');
   const [activeHoverMatch, setActiveHoverMatch] = useState<FormMatchItem | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
 
   // Extract and process last 5 matches for this team
   const formItems = useMemo<FormMatchItem[]>(() => {
@@ -279,6 +266,118 @@ export const TeamFormChart: React.FC<TeamFormChartProps> = ({
     }
   }, [stats.totalPoints, stats.maxPoints]);
 
+  // SVG Chart Geometry with D3
+  const chartWidth = 600;
+  const chartHeight = 200;
+  const margin = { top: 22, right: 35, bottom: 32, left: 35 };
+  const innerWidth = chartWidth - margin.left - margin.right;
+  const innerHeight = chartHeight - margin.top - margin.bottom;
+
+  // D3 Scales for Points Mode
+  const { pointsAreaPath, pointsLinePath, pointsDots } = useMemo(() => {
+    if (formItems.length === 0) return { pointsAreaPath: '', pointsLinePath: '', pointsDots: [] };
+
+    const n = formItems.length;
+    const getX = (idx: number) => {
+      if (n === 1) return margin.left + innerWidth / 2;
+      return margin.left + (idx / (n - 1)) * innerWidth;
+    };
+
+    const yScale = d3.scaleLinear().domain([0, 15]).range([chartHeight - margin.bottom, margin.top]);
+
+    const areaGenerator = d3
+      .area<FormMatchItem>()
+      .x((_, idx) => getX(idx))
+      .y0(chartHeight - margin.bottom)
+      .y1((d) => yScale(d.cumulativePoints))
+      .curve(d3.curveMonotoneX);
+
+    const lineGenerator = d3
+      .line<FormMatchItem>()
+      .x((_, idx) => getX(idx))
+      .y((d) => yScale(d.cumulativePoints))
+      .curve(d3.curveMonotoneX);
+
+    const dots = formItems.map((item, idx) => ({
+      item,
+      x: getX(idx),
+      y: yScale(item.cumulativePoints),
+    }));
+
+    return {
+      pointsAreaPath: areaGenerator(formItems) || '',
+      pointsLinePath: lineGenerator(formItems) || '',
+      pointsDots: dots,
+    };
+  }, [formItems, innerWidth, innerHeight, margin.left, margin.top, margin.bottom, chartHeight]);
+
+  // D3 Scales for Goals Mode
+  const { goalBars, goalDiffPath, goalDiffDots, yTicksGoals, yScaleGoalsZero } = useMemo(() => {
+    if (formItems.length === 0) {
+      return {
+        goalBars: [],
+        goalDiffPath: '',
+        goalDiffDots: [],
+        yTicksGoals: [0, 2, 4],
+        yScaleGoalsZero: chartHeight - margin.bottom,
+      };
+    }
+
+    const maxScore = Math.max(4, ...formItems.map((d) => Math.max(d.bonesScore, d.oppScore, d.goalDiff)));
+    const minDiff = Math.min(0, ...formItems.map((d) => d.goalDiff));
+
+    const yScale = d3
+      .scaleLinear()
+      .domain([minDiff < 0 ? minDiff - 1 : 0, maxScore + 1])
+      .range([chartHeight - margin.bottom, margin.top]);
+
+    const n = formItems.length;
+    const slotWidth = innerWidth / n;
+    const barWidth = Math.min(18, (slotWidth - 20) / 2);
+    const zeroY = yScale(0);
+
+    const bars = formItems.map((item, idx) => {
+      const centerX = margin.left + idx * slotWidth + slotWidth / 2;
+      const bonesBarX = centerX - barWidth - 2;
+      const oppBarX = centerX + 2;
+
+      const bonesY = yScale(Math.max(0, item.bonesScore));
+      const bonesH = Math.max(2, Math.abs(zeroY - bonesY));
+
+      const oppY = yScale(Math.max(0, item.oppScore));
+      const oppH = Math.max(2, Math.abs(zeroY - oppY));
+
+      return {
+        item,
+        centerX,
+        bonesBar: { x: bonesBarX, y: bonesY, width: barWidth, height: bonesH },
+        oppBar: { x: oppBarX, y: oppY, width: barWidth, height: oppH },
+      };
+    });
+
+    const diffLineGen = d3
+      .line<typeof bars[0]>()
+      .x((d) => d.centerX)
+      .y((d) => yScale(d.item.goalDiff))
+      .curve(d3.curveMonotoneX);
+
+    const diffDots = bars.map((b) => ({
+      item: b.item,
+      x: b.centerX,
+      y: yScale(b.item.goalDiff),
+    }));
+
+    const ticks = yScale.ticks(5).map((t) => ({ val: t, y: yScale(t) }));
+
+    return {
+      goalBars: bars,
+      goalDiffPath: diffLineGen(bars) || '',
+      goalDiffDots: diffDots,
+      yTicksGoals: ticks,
+      yScaleGoalsZero: zeroY,
+    };
+  }, [formItems, innerWidth, innerHeight, margin.left, margin.top, margin.bottom, chartHeight]);
+
   if (formItems.length === 0) {
     return (
       <div className={`bg-white rounded-xl border border-slate-200 p-6 text-center ${className}`}>
@@ -291,109 +390,10 @@ export const TeamFormChart: React.FC<TeamFormChartProps> = ({
     );
   }
 
-  // Custom Dot for AreaChart
-  const renderCustomDot = (props: any) => {
-    const { cx, cy, payload } = props;
-    const item = payload as FormMatchItem;
-    if (!item) return null;
-
-    let fill = '#059669'; // win
-    let letter = 'S';
-    if (item.result === 'D') {
-      fill = '#d97706';
-      letter = 'U';
-    } else if (item.result === 'L') {
-      fill = '#dc2626';
-      letter = 'T';
+  const handleDotClick = (m: Match) => {
+    if (onSelectMatch) {
+      onSelectMatch(m);
     }
-
-    const isHovered = activeHoverMatch?.match.id === item.match.id;
-
-    return (
-      <g
-        key={`dot-${item.matchIndex}`}
-        className="cursor-pointer transition-transform duration-150"
-        onClick={() => onSelectMatch?.(item.match)}
-      >
-        {/* Outer glowing halo on hover */}
-        {isHovered && (
-          <circle cx={cx} cy={cy} r={16} fill={fill} fillOpacity={0.25} className="animate-pulse" />
-        )}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={isHovered ? 11 : 9}
-          fill={fill}
-          stroke="#ffffff"
-          strokeWidth={2.5}
-        />
-        <text
-          x={cx}
-          y={cy + 3.5}
-          textAnchor="middle"
-          fill="#ffffff"
-          fontSize={10}
-          fontWeight="bold"
-          fontFamily="system-ui, sans-serif"
-          pointerEvents="none"
-        >
-          {letter}
-        </text>
-      </g>
-    );
-  };
-
-  // Custom Tooltip component for Recharts
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (!active || !payload || !payload.length) return null;
-    const item: FormMatchItem = payload[0].payload;
-    if (!item) return null;
-
-    const isWin = item.result === 'W';
-    const isDraw = item.result === 'D';
-
-    return (
-      <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-slate-700/80 text-xs min-w-[210px] pointer-events-none">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-2">
-          <span className="font-bold text-slate-300">
-            {item.matchLabel} • {item.dateStr}
-          </span>
-          <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-              isWin
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                : isDraw
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-            }`}
-          >
-            {item.resultText} (+{item.points}p)
-          </span>
-        </div>
-
-        <div className="space-y-1">
-          <div className="flex items-center justify-between font-bold text-sm">
-            <span className="text-blue-300">Bønes</span>
-            <span className="font-mono text-white bg-slate-800 px-2 py-0.5 rounded">
-              {item.bonesScore} - {item.oppScore}
-            </span>
-            <span className="text-slate-300 truncate max-w-[90px] text-right">{item.opponent}</span>
-          </div>
-
-          <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1">
-            <span>Arena: {item.isHome ? 'Hjemmebanen' : 'Bortebane'}</span>
-            <span className="truncate max-w-[100px]">{item.venue}</span>
-          </div>
-
-          <div className="text-[11px] text-slate-400 flex items-center justify-between border-t border-slate-800 pt-1.5 mt-1 font-mono">
-            <span>Akkumulerte formpoeng:</span>
-            <span className="font-bold text-amber-400">
-              {item.cumulativePoints} / {item.matchIndex * 3}p
-            </span>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -466,7 +466,7 @@ export const TeamFormChart: React.FC<TeamFormChartProps> = ({
       </div>
 
       {/* Main Chart Canvas */}
-      <div className="p-4 sm:p-5 bg-gradient-to-b from-slate-50/50 to-white">
+      <div className="p-4 sm:p-5 bg-gradient-to-b from-slate-50/50 to-white relative">
         <div className="flex items-center justify-between text-xs text-slate-500 mb-2 px-1">
           <div className="flex items-center gap-3">
             {chartType === 'points' ? (
@@ -504,131 +504,351 @@ export const TeamFormChart: React.FC<TeamFormChartProps> = ({
           </span>
         </div>
 
-        {/* Chart Box */}
-        <div className="h-[210px] w-full min-w-0">
-          <ResponsiveContainer width="100%" height="100%">
+        {/* Pure SVG Chart Box (Completely resilient, no Recharts / React 19 hook issues) */}
+        <div className="w-full relative min-h-[210px] select-none">
+          <svg
+            viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+            className="w-full h-[210px] overflow-visible"
+            onMouseLeave={() => {
+              setActiveHoverMatch(null);
+              setTooltipPos(null);
+            }}
+          >
+            <defs>
+              <linearGradient id={`formGradient-${team.id}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#165094" stopOpacity="0.4" />
+                <stop offset="95%" stopColor="#165094" stopOpacity="0.0" />
+              </linearGradient>
+            </defs>
+
+            {/* Grid & Axis Lines */}
             {chartType === 'points' ? (
-              <AreaChart
-                data={formItems}
-                margin={{ top: 18, right: 16, left: -20, bottom: 0 }}
-                onMouseMove={(state: any) => {
-                  if (state && state.activePayload && state.activePayload.length) {
-                    setActiveHoverMatch(state.activePayload[0].payload);
-                  }
-                }}
-                onMouseLeave={() => setActiveHoverMatch(null)}
-              >
-                <defs>
-                  <linearGradient id={`formGradient-${team.id}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#165094" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#165094" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.8} />
-                <XAxis
-                  dataKey="matchLabel"
-                  tickLine={false}
-                  axisLine={{ stroke: '#cbd5e1' }}
-                  tick={{ fontSize: 11, fontWeight: 600, fill: '#475569' }}
-                  tickFormatter={(val, idx) => {
-                    const item = formItems[idx];
-                    return item ? `${val} (${item.dateStr})` : val;
-                  }}
-                />
-                <YAxis
-                  domain={[0, 15]}
-                  ticks={[0, 3, 6, 9, 12, 15]}
-                  tickLine={false}
-                  axisLine={{ stroke: '#cbd5e1' }}
-                  tick={{ fontSize: 10, fill: '#64748b' }}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <ReferenceLine
-                  y={15}
-                  stroke="#10b981"
-                  strokeDasharray="3 3"
-                  strokeOpacity={0.5}
-                  label={{ value: 'Maks 15p', position: 'insideTopRight', fill: '#059669', fontSize: 10 }}
-                />
-                <ReferenceLine
-                  y={7.5}
-                  stroke="#94a3b8"
-                  strokeDasharray="2 2"
-                  strokeOpacity={0.4}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="cumulativePoints"
-                  stroke="#165094"
-                  strokeWidth={3}
-                  fillOpacity={1}
-                  fill={`url(#formGradient-${team.id})`}
-                  dot={renderCustomDot}
-                  activeDot={{ r: 12, fill: '#0B2545', stroke: '#ffffff', strokeWidth: 3 }}
-                />
-              </AreaChart>
-            ) : (
-              <ComposedChart
-                data={formItems}
-                margin={{ top: 15, right: 16, left: -20, bottom: 0 }}
-                onMouseMove={(state: any) => {
-                  if (state && state.activePayload && state.activePayload.length) {
-                    setActiveHoverMatch(state.activePayload[0].payload);
-                  }
-                }}
-                onMouseLeave={() => setActiveHoverMatch(null)}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.8} />
-                <XAxis
-                  dataKey="matchLabel"
-                  tickLine={false}
-                  axisLine={{ stroke: '#cbd5e1' }}
-                  tick={{ fontSize: 11, fontWeight: 600, fill: '#475569' }}
-                  tickFormatter={(val, idx) => {
-                    const item = formItems[idx];
-                    return item ? `${val} (${item.dateStr})` : val;
-                  }}
-                />
-                <YAxis
-                  allowDecimals={false}
-                  tickLine={false}
-                  axisLine={{ stroke: '#cbd5e1' }}
-                  tick={{ fontSize: 10, fill: '#64748b' }}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <ReferenceLine y={0} stroke="#94a3b8" />
-                <Bar
-                  dataKey="bonesScore"
-                  name="Bønes mål"
-                  fill="#165094"
-                  radius={[4, 4, 0, 0]}
-                  barSize={18}
-                >
-                  {formItems.map((entry, index) => (
-                    <Cell
-                      key={`cell-bones-${index}`}
-                      fill={entry.result === 'W' ? '#059669' : '#165094'}
+              <>
+                {/* Horizontal Grid lines at 0, 3, 6, 9, 12, 15 */}
+                {[0, 3, 6, 9, 12, 15].map((yVal) => {
+                  const yPos = chartHeight - margin.bottom - (yVal / 15) * innerHeight;
+                  const isMax = yVal === 15;
+                  const isHalf = yVal === 6; // approximate middle line
+                  return (
+                    <g key={`y-${yVal}`}>
+                      <line
+                        x1={margin.left}
+                        x2={chartWidth - margin.right}
+                        y1={yPos}
+                        y2={yPos}
+                        stroke={isMax ? '#10b981' : '#e2e8f0'}
+                        strokeDasharray={isMax ? '3 3' : '3 3'}
+                        strokeOpacity={isMax ? 0.7 : 0.8}
+                        strokeWidth={1}
+                      />
+                      <text
+                        x={margin.left - 8}
+                        y={yPos + 3.5}
+                        textAnchor="end"
+                        fontSize="10"
+                        fill="#64748b"
+                        fontFamily="system-ui, sans-serif"
+                      >
+                        {yVal}
+                      </text>
+                      {isMax && (
+                        <text
+                          x={chartWidth - margin.right}
+                          y={yPos - 5}
+                          textAnchor="end"
+                          fontSize="10"
+                          fontWeight="bold"
+                          fill="#059669"
+                          fontFamily="system-ui, sans-serif"
+                        >
+                          Maks 15p
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
+
+                {/* X Axis ticks */}
+                {pointsDots.map(({ item, x }) => (
+                  <g key={`x-${item.matchIndex}`}>
+                    <line
+                      x1={x}
+                      x2={x}
+                      y1={chartHeight - margin.bottom}
+                      y2={chartHeight - margin.bottom + 4}
+                      stroke="#cbd5e1"
+                      strokeWidth={1}
                     />
-                  ))}
-                </Bar>
-                <Bar
-                  dataKey="oppScore"
-                  name="Innsluppet"
-                  fill="#f43f5e"
-                  radius={[4, 4, 0, 0]}
-                  barSize={18}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="goalDiff"
-                  name="Målforskjell"
-                  stroke="#d97706"
-                  strokeWidth={2.5}
-                  dot={{ r: 4, fill: '#d97706', stroke: '#fff', strokeWidth: 2 }}
-                />
-              </ComposedChart>
+                    <text
+                      x={x}
+                      y={chartHeight - margin.bottom + 16}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fontWeight="600"
+                      fill="#475569"
+                      fontFamily="system-ui, sans-serif"
+                    >
+                      {item.matchLabel} ({item.dateStr})
+                    </text>
+                  </g>
+                ))}
+
+                {/* Area under curve */}
+                {pointsAreaPath && (
+                  <path
+                    d={pointsAreaPath}
+                    fill={`url(#formGradient-${team.id})`}
+                    stroke="none"
+                  />
+                )}
+
+                {/* Main Curve Line */}
+                {pointsLinePath && (
+                  <path
+                    d={pointsLinePath}
+                    fill="none"
+                    stroke="#165094"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                )}
+
+                {/* Interactive Points / Dots */}
+                {pointsDots.map(({ item, x, y }) => {
+                  const isHovered = activeHoverMatch?.match.id === item.match.id;
+                  let fill = '#059669'; // win
+                  let letter = 'S';
+                  if (item.result === 'D') {
+                    fill = '#d97706';
+                    letter = 'U';
+                  } else if (item.result === 'L') {
+                    fill = '#dc2626';
+                    letter = 'T';
+                  }
+
+                  return (
+                    <g
+                      key={`dot-${item.matchIndex}`}
+                      className="cursor-pointer"
+                      onClick={() => handleDotClick(item.match)}
+                      onMouseEnter={(e) => {
+                        setActiveHoverMatch(item);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
+                      }}
+                      onMouseLeave={() => {
+                        setActiveHoverMatch(null);
+                        setTooltipPos(null);
+                      }}
+                    >
+                      {/* Outer pulse when hovered */}
+                      {isHovered && (
+                        <circle
+                          cx={x}
+                          y={y}
+                          r={18}
+                          fill={fill}
+                          fillOpacity={0.25}
+                          className="animate-pulse"
+                        />
+                      )}
+                      <circle
+                        cx={x}
+                        cy={y}
+                        r={isHovered ? 12 : 9.5}
+                        fill={fill}
+                        stroke="#ffffff"
+                        strokeWidth={2.5}
+                        className="transition-all duration-150"
+                      />
+                      <text
+                        x={x}
+                        y={y + 3.5}
+                        textAnchor="middle"
+                        fill="#ffffff"
+                        fontSize={isHovered ? 11 : 9.5}
+                        fontWeight="bold"
+                        fontFamily="system-ui, sans-serif"
+                        pointerEvents="none"
+                      >
+                        {letter}
+                      </text>
+                    </g>
+                  );
+                })}
+              </>
+            ) : (
+              <>
+                {/* Goals Mode Grid */}
+                {yTicksGoals.map((tick, idx) => (
+                  <g key={`gtick-${idx}`}>
+                    <line
+                      x1={margin.left}
+                      x2={chartWidth - margin.right}
+                      y1={tick.y}
+                      y2={tick.y}
+                      stroke={tick.val === 0 ? '#94a3b8' : '#e2e8f0'}
+                      strokeDasharray={tick.val === 0 ? undefined : '3 3'}
+                      strokeWidth={tick.val === 0 ? 1.5 : 1}
+                      strokeOpacity={0.8}
+                    />
+                    <text
+                      x={margin.left - 8}
+                      y={tick.y + 3.5}
+                      textAnchor="end"
+                      fontSize="10"
+                      fill="#64748b"
+                      fontFamily="system-ui, sans-serif"
+                    >
+                      {tick.val}
+                    </text>
+                  </g>
+                ))}
+
+                {/* Bars for Each Match */}
+                {goalBars.map(({ item, centerX, bonesBar, oppBar }) => {
+                  const isHovered = activeHoverMatch?.match.id === item.match.id;
+
+                  return (
+                    <g
+                      key={`gbars-${item.matchIndex}`}
+                      className="cursor-pointer"
+                      onClick={() => handleDotClick(item.match)}
+                      onMouseEnter={(e) => {
+                        setActiveHoverMatch(item);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
+                      }}
+                      onMouseLeave={() => {
+                        setActiveHoverMatch(null);
+                        setTooltipPos(null);
+                      }}
+                    >
+                      {/* Highlight backdrop */}
+                      {isHovered && (
+                        <rect
+                          x={centerX - 24}
+                          y={margin.top}
+                          width={48}
+                          height={innerHeight}
+                          fill="#3b82f6"
+                          fillOpacity={0.06}
+                          rx={6}
+                        />
+                      )}
+
+                      {/* Bones Goals Bar */}
+                      <rect
+                        x={bonesBar.x}
+                        y={bonesBar.y}
+                        width={bonesBar.width}
+                        height={bonesBar.height}
+                        rx={3}
+                        fill={item.result === 'W' ? '#059669' : '#165094'}
+                        className="transition-all duration-150"
+                      />
+
+                      {/* Opponent Goals Bar */}
+                      <rect
+                        x={oppBar.x}
+                        y={oppBar.y}
+                        width={oppBar.width}
+                        height={oppBar.height}
+                        rx={3}
+                        fill="#f43f5e"
+                        className="transition-all duration-150"
+                      />
+
+                      {/* X Axis Label */}
+                      <text
+                        x={centerX}
+                        y={chartHeight - margin.bottom + 16}
+                        textAnchor="middle"
+                        fontSize="11"
+                        fontWeight="600"
+                        fill="#475569"
+                        fontFamily="system-ui, sans-serif"
+                      >
+                        {item.matchLabel} ({item.dateStr})
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Goal Difference Line */}
+                {goalDiffPath && (
+                  <path
+                    d={goalDiffPath}
+                    fill="none"
+                    stroke="#d97706"
+                    strokeWidth="2.5"
+                    strokeDasharray="4 2"
+                  />
+                )}
+
+                {/* Goal Difference Dots */}
+                {goalDiffDots.map(({ item, x, y }) => (
+                  <circle
+                    key={`gddot-${item.matchIndex}`}
+                    cx={x}
+                    cy={y}
+                    r={4}
+                    fill="#d97706"
+                    stroke="#ffffff"
+                    strokeWidth={2}
+                    pointerEvents="none"
+                  />
+                ))}
+              </>
             )}
-          </ResponsiveContainer>
+          </svg>
+
+          {/* Interactive Floating Tooltip */}
+          {activeHoverMatch && (
+            <div className="absolute top-2 right-4 z-20 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-xl shadow-xl border border-slate-700/80 text-xs min-w-[210px] pointer-events-none transition-all duration-150">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-2">
+                <span className="font-bold text-slate-300">
+                  {activeHoverMatch.matchLabel} • {activeHoverMatch.dateStr}
+                </span>
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                    activeHoverMatch.result === 'W'
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                      : activeHoverMatch.result === 'D'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                  }`}
+                >
+                  {activeHoverMatch.resultText} (+{activeHoverMatch.points}p)
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between font-bold text-sm">
+                  <span className="text-blue-300">Bønes</span>
+                  <span className="font-mono text-white bg-slate-800 px-2 py-0.5 rounded">
+                    {activeHoverMatch.bonesScore} - {activeHoverMatch.oppScore}
+                  </span>
+                  <span className="text-slate-300 truncate max-w-[90px] text-right">
+                    {activeHoverMatch.opponent}
+                  </span>
+                </div>
+
+                <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1">
+                  <span>Arena: {activeHoverMatch.isHome ? 'Hjemmebane' : 'Bortebane'}</span>
+                  <span className="truncate max-w-[100px]">{activeHoverMatch.venue}</span>
+                </div>
+
+                <div className="text-[11px] text-slate-400 flex items-center justify-between border-t border-slate-800 pt-1.5 mt-1 font-mono">
+                  <span>Akkumulerte formpoeng:</span>
+                  <span className="font-bold text-amber-400">
+                    {activeHoverMatch.cumulativePoints} / {activeHoverMatch.matchIndex * 3}p
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -650,7 +870,7 @@ export const TeamFormChart: React.FC<TeamFormChartProps> = ({
             return (
               <div
                 key={item.match.id}
-                onClick={() => onSelectMatch?.(item.match)}
+                onClick={() => handleDotClick(item.match)}
                 onMouseEnter={() => setActiveHoverMatch(item)}
                 onMouseLeave={() => setActiveHoverMatch(null)}
                 className={`p-2.5 rounded-lg border transition-all cursor-pointer flex flex-col justify-between ${
@@ -756,3 +976,4 @@ export const TeamFormChart: React.FC<TeamFormChartProps> = ({
     </div>
   );
 };
+

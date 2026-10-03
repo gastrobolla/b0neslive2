@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Match, MatchEvent, DivisionTable, TeamInfo } from '../types.js';
 import {
   Calendar,
@@ -17,7 +17,13 @@ import {
   Share2,
   ExternalLink,
   Copy,
-  BarChart2
+  BarChart2,
+  Search,
+  X,
+  RotateCcw,
+  SlidersHorizontal,
+  Trophy,
+  Percent
 } from 'lucide-react';
 import { MatchShareModal, copyToClipboard, getMatchShareUrl } from './MatchShareModal.js';
 import { MatchDetailModal } from './MatchDetailModal.js';
@@ -27,6 +33,29 @@ import { TeamCalendarExportButton } from './TeamCalendarExportButton.js';
 import { LaglederModal } from './LaglederModal.js';
 import { PlayerOfTheMatchModal } from './PlayerOfTheMatchModal.js';
 import { MatchStatsAnalyticsView } from './MatchStatsAnalyticsView.js';
+
+function normalizeDateStr(dateStr?: string): string {
+  if (!dateStr) return '';
+  const trimmed = dateStr.trim();
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  // DD.MM.YYYY
+  const dotParts = trimmed.split('.');
+  if (dotParts.length === 3) {
+    const day = dotParts[0].padStart(2, '0');
+    const month = dotParts[1].padStart(2, '0');
+    let year = dotParts[2];
+    if (year.length === 2) year = `20${year}`;
+    return `${year}-${month}-${day}`;
+  }
+  // DD.MM (assume 2026)
+  if (dotParts.length === 2) {
+    const day = dotParts[0].padStart(2, '0');
+    const month = dotParts[1].padStart(2, '0');
+    return `2026-${month}-${day}`;
+  }
+  return trimmed;
+}
 
 interface MatchesViewProps {
   matches: Match[];
@@ -57,6 +86,11 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
   const [isScrapingAll, setIsScrapingAll] = useState(false);
   const [scrapeSuccessMsg, setScrapeSuccessMsg] = useState<string | null>(null);
   const [localMatches, setLocalMatches] = useState<Match[]>(matches);
+
+  // Search by opponent and date range filter states
+  const [searchOpponent, setSearchOpponent] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Share and Detail modal state
   const [shareModalMatch, setShareModalMatch] = useState<Match | null>(null);
@@ -103,42 +137,110 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
     }
   }, [localMatches]);
 
+  // Quick preset helper for dates
+  const setQuickDatePreset = (preset: 'next7' | 'next30' | 'spring' | 'autumn' | 'all') => {
+    if (preset === 'all') {
+      setStartDate('');
+      setEndDate('');
+      return;
+    }
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    if (preset === 'next7') {
+      const d7 = new Date(today);
+      d7.setDate(d7.getDate() + 7);
+      setStartDate(todayStr);
+      setEndDate(d7.toISOString().split('T')[0]);
+    } else if (preset === 'next30') {
+      const d30 = new Date(today);
+      d30.setDate(d30.getDate() + 30);
+      setStartDate(todayStr);
+      setEndDate(d30.toISOString().split('T')[0]);
+    } else if (preset === 'spring') {
+      setStartDate('2026-03-01');
+      setEndDate('2026-06-30');
+    } else if (preset === 'autumn') {
+      setStartDate('2026-08-01');
+      setEndDate('2026-11-30');
+    }
+  };
+
+  const handleResetFilters = () => {
+    setSearchOpponent('');
+    setStartDate('');
+    setEndDate('');
+    setOnlyHomeMatches(false);
+    setSeasonFilter('all');
+  };
+
   // Filter and sort matches: closest in time first for upcoming, most recent first for finished
-  const filteredMatches = localMatches
-    .filter((m) => {
-      if (selectedTeamId !== 'all' && m.teamId !== selectedTeamId) {
-        return false;
-      }
-      if (tab === 'upcoming' && m.status === 'finished') {
-        return false;
-      }
-      if (tab === 'finished' && m.status !== 'finished') {
-        return false;
-      }
-      if (onlyHomeMatches && !m.isHome) {
-        return false;
-      }
-      if (seasonFilter === 'host') {
-        const isAutumn = (m.division && m.division.toLowerCase().includes('høst')) || m.season === 'Høst 2026';
-        if (!isAutumn) return false;
-      }
-      if (seasonFilter === 'var') {
-        const isSpring = (m.division && m.division.toLowerCase().includes('vår')) || m.season === 'Vår 2026';
-        if (!isSpring) return false;
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      const aKey = (a.date || '') + (a.time || '');
-      const bKey = (b.date || '') + (b.time || '');
-      if (tab === 'upcoming') {
+  const filteredMatches = useMemo(() => {
+    return localMatches
+      .filter((m) => {
+        if (selectedTeamId !== 'all' && m.teamId !== selectedTeamId) {
+          return false;
+        }
+        if (tab === 'upcoming' && m.status === 'finished') {
+          return false;
+        }
+        if (tab === 'finished' && m.status !== 'finished') {
+          return false;
+        }
+        if (onlyHomeMatches && !m.isHome) {
+          return false;
+        }
+        if (seasonFilter === 'host') {
+          const isAutumn = (m.division && m.division.toLowerCase().includes('høst')) || m.season === 'Høst 2026';
+          if (!isAutumn) return false;
+        }
+        if (seasonFilter === 'var') {
+          const isSpring = (m.division && m.division.toLowerCase().includes('vår')) || m.season === 'Vår 2026';
+          if (!isSpring) return false;
+        }
+
+        // Search by opponent name (case-insensitive substring match)
+        if (searchOpponent.trim()) {
+          const query = searchOpponent.trim().toLowerCase();
+          const isBonesHome = m.homeTeam?.toLowerCase().includes('bønes');
+          const opponent = (isBonesHome ? m.awayTeam : m.homeTeam) || '';
+          const homeName = m.homeTeam || '';
+          const awayName = m.awayTeam || '';
+          const oppNameField = m.opponentName || '';
+          const venueName = m.venue || '';
+
+          const matchesSearch =
+            opponent.toLowerCase().includes(query) ||
+            homeName.toLowerCase().includes(query) ||
+            awayName.toLowerCase().includes(query) ||
+            oppNameField.toLowerCase().includes(query) ||
+            venueName.toLowerCase().includes(query);
+
+          if (!matchesSearch) return false;
+        }
+
+        // Date range filter
+        const mDate = normalizeDateStr(m.date);
+        if (startDate && mDate) {
+          if (mDate < startDate) return false;
+        }
+        if (endDate && mDate) {
+          if (mDate > endDate) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        const aKey = (a.date || '') + (a.time || '');
+        const bKey = (b.date || '') + (b.time || '');
+        if (tab === 'upcoming') {
+          return aKey.localeCompare(bKey);
+        }
+        if (tab === 'finished') {
+          return bKey.localeCompare(aKey);
+        }
         return aKey.localeCompare(bKey);
-      }
-      if (tab === 'finished') {
-        return bKey.localeCompare(aKey);
-      }
-      return aKey.localeCompare(bKey);
-    });
+      });
+  }, [localMatches, selectedTeamId, tab, onlyHomeMatches, seasonFilter, searchOpponent, startDate, endDate]);
 
   const totalHomeUpcoming = localMatches.filter(m => m.isHome && m.status !== 'finished').length;
 
@@ -356,7 +458,227 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
 
       </div>
 
-      {/* Match Content: Either Recharts Match Analytics or Match Cards List */}
+      {/* Search & Date Range Filter Section */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+        <div className="flex flex-col lg:flex-row gap-3">
+          {/* Opponent Search Input */}
+          <div className="relative flex-1">
+            <label htmlFor="search-opponent-input" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+              Søk etter motstander
+            </label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                id="search-opponent-input"
+                type="text"
+                value={searchOpponent}
+                onChange={(e) => setSearchOpponent(e.target.value)}
+                placeholder="Skriv motstander (f.eks. Askøy, Baune, Fana, Stord, Gneist)..."
+                className="w-full pl-9 pr-9 py-2 text-xs rounded-lg border border-slate-200 focus:border-[#165094] focus:ring-2 focus:ring-[#165094]/20 outline-none transition-all placeholder:text-slate-400 font-medium text-slate-800"
+              />
+              {searchOpponent && (
+                <button
+                  type="button"
+                  onClick={() => setSearchOpponent('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-md transition-colors cursor-pointer"
+                  title="Tøm søk"
+                  aria-label="Tøm søk"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Date Range: Fra dato & Til dato */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2.5">
+            <div className="flex-1 sm:flex-initial">
+              <label htmlFor="filter-start-date" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Fra dato
+              </label>
+              <div className="relative">
+                <input
+                  id="filter-start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full sm:w-36 px-2.5 py-2 text-xs rounded-lg border border-slate-200 focus:border-[#165094] focus:ring-2 focus:ring-[#165094]/20 outline-none text-slate-800 font-medium"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 sm:flex-initial">
+              <label htmlFor="filter-end-date" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Til dato
+              </label>
+              <div className="relative">
+                <input
+                  id="filter-end-date"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full sm:w-36 px-2.5 py-2 text-xs rounded-lg border border-slate-200 focus:border-[#165094] focus:ring-2 focus:ring-[#165094]/20 outline-none text-slate-800 font-medium"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Date presets & Quick Actions */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-semibold text-slate-400 mr-1 flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-slate-400" />
+              <span>Dato-snarveier:</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setQuickDatePreset('all')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all border cursor-pointer ${
+                !startDate && !endDate
+                  ? 'bg-slate-800 text-white border-slate-800 shadow-2xs'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              Alle datoer
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickDatePreset('next7')}
+              className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 transition-all cursor-pointer"
+            >
+              Neste 7 dager
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickDatePreset('next30')}
+              className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 transition-all cursor-pointer"
+            >
+              Neste 30 dager
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickDatePreset('spring')}
+              className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 transition-all cursor-pointer"
+            >
+              🌸 Vår 2026
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickDatePreset('autumn')}
+              className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 transition-all cursor-pointer"
+            >
+              🍂 Høst 2026
+            </button>
+          </div>
+
+          {/* Active Filter Clear & Result Count */}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+              Viser {filteredMatches.length} av {localMatches.length} kamper
+            </span>
+            {(searchOpponent || startDate || endDate) && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 transition-colors cursor-pointer"
+                title="Nullstill søk og datofilter"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Nullstill filtre</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Active Filter Badges */}
+        {(searchOpponent || startDate || endDate) && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
+            <span className="text-slate-400 font-semibold">Aktive filtre:</span>
+            {searchOpponent && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-[#165094] border border-blue-200 font-semibold">
+                <span>Motstander: "{searchOpponent}"</span>
+                <button
+                  type="button"
+                  onClick={() => setSearchOpponent('')}
+                  className="hover:text-blue-900 cursor-pointer"
+                  aria-label="Fjern motstandersøk"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {(startDate || endDate) && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-[#165094] border border-blue-200 font-semibold">
+                <Calendar className="w-3 h-3" />
+                <span>
+                  {startDate && endDate
+                    ? `${startDate} til ${endDate}`
+                    : startDate
+                    ? `Fra ${startDate}`
+                    : `Til ${endDate}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStartDate('');
+                    setEndDate('');
+                  }}
+                  className="hover:text-blue-900 cursor-pointer"
+                  aria-label="Fjern datofilter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Upcoming Win Probability & Form Overview Strip */}
+      {tab === 'upcoming' && filteredMatches.length > 0 && (
+        <div className="bg-gradient-to-r from-[#0B2545] via-[#165094] to-indigo-900 rounded-xl p-3 sm:p-4 text-white shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-amber-300 shrink-0">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="font-bold text-xs uppercase tracking-wider text-blue-200">
+                    Vinnersjanse & Formindikator
+                  </span>
+                  <span className="bg-amber-400 text-slate-950 text-[10px] font-extrabold px-1.5 py-0.2 rounded">
+                    FORM & H2H
+                  </span>
+                </div>
+                <p className="text-xs text-blue-100/90 mt-0.5">
+                  Beregnet sannsynlighet for hver enkelt kamp basert på siste 5 formkamper, historisk innbyrdes oppgjør (H2H) og tabellposisjon.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto text-[11px] font-mono font-bold bg-white/10 px-3 py-1.5 rounded-lg border border-white/10 shrink-0">
+              <span className="flex items-center gap-1 text-emerald-300">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                <span>Bønes favoritt</span>
+              </span>
+              <span className="text-white/40">•</span>
+              <span className="flex items-center gap-1 text-slate-200">
+                <span className="w-2 h-2 rounded-full bg-slate-300 inline-block" />
+                <span>Uavgjort</span>
+              </span>
+              <span className="text-white/40">•</span>
+              <span className="flex items-center gap-1 text-rose-300">
+                <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />
+                <span>Motstander</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Match Content: Either Match Stats Analytics or Match Cards List */}
       {tab === 'stats' ? (
         <MatchStatsAnalyticsView
           matches={localMatches}
@@ -372,8 +694,22 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
           {filteredMatches.length === 0 ? (
             <div className="col-span-full bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500">
               <Calendar className="w-10 h-10 mx-auto text-slate-400 mb-2 opacity-60" />
-              <p className="font-semibold">Ingen kamper funnet med gjeldende filter.</p>
-              <p className="text-xs text-slate-400 mt-1">Prøv å velge "Alle lag" eller nullstill hjemmekamp-filteret.</p>
+              <p className="font-semibold">Ingen kamper funnet med gjeldende søk eller filter.</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {searchOpponent || startDate || endDate
+                  ? `Søket etter "${searchOpponent || ''}" ${startDate || endDate ? `i valgt tidsrom` : ''} ga 0 treff.`
+                  : 'Prøv å velge "Alle lag" eller nullstill hjemmekamp-filteret.'}
+              </p>
+              {(searchOpponent || startDate || endDate) && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#165094] text-white text-xs font-bold rounded-lg shadow-xs hover:bg-[#0F3A6D] transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Tilbakestill søk og filter</span>
+                </button>
+              )}
             </div>
           ) : (
             filteredMatches.map((match) => (
@@ -398,6 +734,9 @@ export const MatchesView: React.FC<MatchesViewProps> = ({
                   setPotmMatch(m);
                   setIsPotmOpen(true);
                 }}
+                allMatches={localMatches}
+                tables={tables}
+                showWinProbability={true}
               />
             ))
           )}
